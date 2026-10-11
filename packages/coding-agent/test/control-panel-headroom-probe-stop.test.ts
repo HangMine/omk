@@ -36,6 +36,19 @@ function isAlive(pid: number): boolean {
 	}
 }
 
+/**
+ * execFile settles an aborted call as soon as it sends the kill signal, before the child has exited and
+ * been reaped, so the pid can still answer `kill(pid, 0)` for a moment.
+ */
+async function waitUntilGone(pid: number, timeoutMs: number): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (!isAlive(pid)) return true;
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	return !isAlive(pid);
+}
+
 async function waitForFile(path: string, timeoutMs: number): Promise<string> {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -77,7 +90,7 @@ describe.skipIf(process.platform === "win32")("InteractiveMode.stop() and a hung
 
 		await expect(probe).resolves.toBeNull();
 		expect(Date.now() - stoppedAt).toBeLessThan(500);
-		expect(isAlive(pid)).toBe(false);
+		await expect(waitUntilGone(pid, 1_000)).resolves.toBe(true);
 		expect(formatHeadroomStatusLabel()).not.toMatch(/^headroom:/);
 	});
 
