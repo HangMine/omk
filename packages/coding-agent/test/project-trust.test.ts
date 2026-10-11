@@ -2,16 +2,29 @@
  * Spec 053 R4-R9: project trust gate for a cloned repository's code (packages, extensions,
  * npmCommand, shellPath, shellCommandPrefix).
  */
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+	chmodSync,
+	mkdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	statSync,
+	symlinkSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyProjectTrustGate } from "../src/cli/project-trust-gate.ts";
+import { applyCommandProjectTrustGate, applyProjectTrustGate } from "../src/cli/project-trust-gate.ts";
 import { DefaultPackageManager } from "../src/core/package-manager.ts";
 import {
+	captureStartupProjectTrust,
 	decideProjectTrust,
 	formatEnvTrustNotice,
 	inspectProjectCode,
+	MAX_EXTENSION_ENTRIES,
 	projectTrustStorePath,
 	recordProjectTrustDecision,
 	TRUST_PROJECT_ENV,
@@ -51,8 +64,16 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.restoreAllMocks();
+	captureStartupProjectTrust(root, {}); // clear any startup trust a test captured
 	rmSync(root, { recursive: true, force: true });
 });
+
+function git(cwd: string, ...args: string[]): void {
+	execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@local", "-c", "commit.gpgsign=false", ...args], {
+		cwd,
+		stdio: "ignore",
+	});
+}
 
 describe("decideProjectTrust", () => {
 	it("does not involve the gate when the project loads no code", () => {
@@ -154,17 +175,15 @@ describe("decideProjectTrust", () => {
 		expect(inspectProjectCode(project, {})!.fingerprint).toBe(before.fingerprint);
 	});
 
-	it(`opens the gate in every mode with ${TRUST_PROJECT_ENV}=1, and only with the value 1`, () => {
-		for (const mode of ["headless", "interactive"] as const) {
-			const outcome = decideProjectTrust({
-				cwd: project,
-				projectSettings: { npmCommand: ["sh"] },
-				mode,
-				env: { [TRUST_PROJECT_ENV]: "1" },
-				home,
-			});
-			expect(outcome).toMatchObject({ kind: "trusted", via: "env" });
-		}
+	it(`opens non-interactive runs with ${TRUST_PROJECT_ENV}=1, and only with the value 1`, () => {
+		const outcome = decideProjectTrust({
+			cwd: project,
+			projectSettings: { npmCommand: ["sh"] },
+			mode: "headless",
+			env: { [TRUST_PROJECT_ENV]: "1" },
+			home,
+		});
+		expect(outcome).toMatchObject({ kind: "trusted", via: "env" });
 		const notOne = decideProjectTrust({
 			cwd: project,
 			projectSettings: { npmCommand: ["sh"] },
@@ -173,6 +192,18 @@ describe("decideProjectTrust", () => {
 			home,
 		});
 		expect(notOne.kind).toBe("withheld");
+	});
+
+	it(`ignores ${TRUST_PROJECT_ENV}=1 in interactive omk: it asks, or follows the stored answer (PR #124 M3, 048 R7)`, () => {
+		const settings: Settings = { npmCommand: ["sh"] };
+		const env = { [TRUST_PROJECT_ENV]: "1" };
+		const first = decideProjectTrust({ cwd: project, projectSettings: settings, mode: "interactive", env, home });
+		expect(first).toMatchObject({ kind: "ask", changed: false });
+		if (first.kind !== "ask") throw new Error("expected ask");
+		recordProjectTrustDecision(first.surface, "denied", home);
+		expect(
+			decideProjectTrust({ cwd: project, projectSettings: settings, mode: "interactive", env, home }),
+		).toMatchObject({ kind: "withheld", reason: "denied" });
 	});
 
 	it("asks once interactively, then follows the stored answer", () => {
@@ -234,6 +265,77 @@ describe("decideProjectTrust", () => {
 		recordProjectTrustDecision(surface, "trusted", home);
 		const store = JSON.parse(readFileSync(projectTrustStorePath(home), "utf8"));
 		expect(store.projects[project]).toMatchObject({ decision: "trusted", fingerprint: surface.fingerprint });
+	});
+
+	it.skipIf(process.platform === "win32")(
+		"writes the store as 0600 even over a world-readable file (PR #124 m1)",
+		() => {
+			mkdirSync(join(home, ".omk"), { recursive: true });
+			writeFileSync(projectTrustStorePath(home), '{"version":1,"projects":{}}\n');
+			chmodSync(projectTrustStorePath(home), 0o644);
+			recordProjectTrustDecision(inspectProjectCode(project, { packages: ["npm:a"] })!, "trusted", home);
+			expect(statSync(projectTrustStorePath(home)).mode & 0o777).toBe(0o600);
+		},
+	);
+
+	it("merges entries from separate writers and breaks a stale lock (PR #124 m1)", () => {
+		const other = join(root, "other-repo");
+		mkdirSync(other, { recursive: true });
+		recordProjectTrustDecision(inspectProjectCode(project, { packages: ["npm:a"] })!, "trusted", home);
+		const lock = `${projectTrustStorePath(home)}.lock`;
+		mkdirSync(lock);
+		const old = new Date(Date.now() - 60_000);
+		utimesSync(lock, old, old);
+		recordProjectTrustDecision(inspectProjectCode(other, { packages: ["npm:b"] })!, "denied", home);
+		const store = JSON.parse(readFileSync(projectTrustStorePath(home), "utf8"));
+		expect(Object.keys(store.projects).sort()).toEqual([project, other].sort());
+		expect(() => statSync(lock)).toThrow();
+	});
+});
+
+describe("project code fingerprint (PR #124 m2)", () => {
+	it("hashes the contents of the package.json manifests the extension loader reads", () => {
+		mkdirSync(join(project, ".omk", "extensions", "tool"), { recursive: true });
+		writeFileSync(join(project, ".omk", "extensions", "tool", "package.json"), '{"omk":{"extensions":["./a.ts"]}}');
+		writeFileSync(join(project, ".omk", "extensions", "package.json"), '{"omk":{"extensions":["./tool/a.ts"]}}');
+		const before = inspectProjectCode(project, {})!;
+		writeFileSync(
+			join(project, ".omk", "extensions", "tool", "package.json"),
+			'{"omk":{"extensions":["../../x.ts"]}}',
+		);
+		const nested = inspectProjectCode(project, {})!;
+		expect(nested.fingerprint).not.toBe(before.fingerprint);
+		writeFileSync(join(project, ".omk", "extensions", "package.json"), '{"omk":{"extensions":["../../y.ts"]}}');
+		expect(inspectProjectCode(project, {})!.fingerprint).not.toBe(nested.fingerprint);
+	});
+
+	it.skipIf(process.platform === "win32")("follows symlinked directories like the loader, without looping", () => {
+		const outside = join(root, "outside-ext");
+		mkdirSync(outside, { recursive: true });
+		writeFileSync(join(outside, "index.ts"), "export default function () {}\n");
+		mkdirSync(join(project, ".omk", "extensions"), { recursive: true });
+		symlinkSync(outside, join(project, ".omk", "extensions", "linked"), "dir");
+		symlinkSync(join(project, ".omk", "extensions"), join(outside, "loop"), "dir");
+		const surface = inspectProjectCode(project, {})!;
+		expect(surface.extensionEntries).toContain("linked/index.ts");
+		const before = surface.fingerprint;
+		writeFileSync(join(outside, "second.ts"), "export const x = 1;\n");
+		expect(inspectProjectCode(project, {})!.fingerprint).not.toBe(before);
+	});
+
+	it(`keeps a project with more than ${MAX_EXTENSION_ENTRIES} extension files closed, env and store included`, () => {
+		const dir = join(project, ".omk", "extensions", "many");
+		mkdirSync(dir, { recursive: true });
+		for (let i = 0; i <= MAX_EXTENSION_ENTRIES; i++) writeFileSync(join(dir, `f${i}.ts`), "");
+		const surface = inspectProjectCode(project, {})!;
+		expect(surface.overCap).toBe(true);
+		recordProjectTrustDecision(surface, "trusted", home);
+		for (const env of [{}, { [TRUST_PROJECT_ENV]: "1" }]) {
+			expect(decideProjectTrust({ cwd: project, projectSettings: {}, mode: "headless", env, home })).toMatchObject({
+				kind: "withheld",
+				reason: "too-large",
+			});
+		}
 	});
 });
 
@@ -383,6 +485,75 @@ describe("applyProjectTrustGate", () => {
 	});
 });
 
+describe(`${TRUST_PROJECT_ENV} read once at startup (PR #124 M2)`, () => {
+	let saved: string | undefined;
+	beforeEach(() => {
+		saved = process.env[TRUST_PROJECT_ENV];
+		delete process.env[TRUST_PROJECT_ENV];
+	});
+	afterEach(() => {
+		if (saved === undefined) delete process.env[TRUST_PROJECT_ENV];
+		else process.env[TRUST_PROJECT_ENV] = saved;
+	});
+
+	it('removes "1" from the environment so child processes do not inherit it', () => {
+		const env: NodeJS.ProcessEnv = { [TRUST_PROJECT_ENV]: "1", OTHER: "x" };
+		captureStartupProjectTrust(project, env);
+		expect(env).toEqual({ OTHER: "x" });
+	});
+
+	it('keeps "0" in the environment (safe to inherit)', () => {
+		const env: NodeJS.ProcessEnv = { [TRUST_PROJECT_ENV]: "0" };
+		captureStartupProjectTrust(project, env);
+		expect(env[TRUST_PROJECT_ENV]).toBe("0");
+	});
+
+	it("opens only the startup project; a second runtime in another directory stays closed", async () => {
+		writeProjectSettings({ packages: ["npm:pkg"] });
+		const sibling = join(root, "sibling");
+		mkdirSync(join(sibling, ".omk"), { recursive: true });
+		writeFileSync(join(sibling, ".omk", "settings.json"), JSON.stringify({ packages: ["npm:pkg"] }));
+		captureStartupProjectTrust(project, { [TRUST_PROJECT_ENV]: "1" });
+
+		const startup = SettingsManager.create(project, agentDir);
+		const lines: string[] = [];
+		const gate = (cwd: string, settingsManager: SettingsManager) =>
+			applyProjectTrustGate({
+				cwd,
+				settingsManager,
+				mode: "headless",
+				home,
+				writeStderr: (line) => lines.push(line),
+				announced: new Set(),
+			});
+		expect(await gate(project, startup)).toEqual([]);
+		expect(startup.isProjectCodeWithheld()).toBe(false);
+		expect(lines.join("")).toBe(`${formatEnvTrustNotice(project)}\n`);
+
+		const second = SettingsManager.create(sibling, agentDir);
+		const diagnostics = await gate(sibling, second);
+		expect(second.isProjectCodeWithheld()).toBe(true);
+		expect(diagnostics[0]?.message).toContain(realpathSync(sibling));
+	});
+
+	it('does not honour a "1" that appears in process.env after startup', () => {
+		captureStartupProjectTrust(project, {});
+		process.env[TRUST_PROJECT_ENV] = "1";
+		expect(
+			decideProjectTrust({ cwd: project, projectSettings: { packages: ["npm:pkg"] }, mode: "headless", home }),
+		).toMatchObject({ kind: "withheld", reason: "headless" });
+	});
+
+	it("the command gate never asks and prints the warning on stderr", async () => {
+		writeProjectSettings({ npmCommand: ["evil"] });
+		const settings = SettingsManager.create(project, agentDir);
+		const lines: string[] = [];
+		await applyCommandProjectTrustGate(project, settings, (line) => lines.push(line));
+		expect(settings.isProjectCodeWithheld()).toBe(true);
+		expect(lines.join("")).toContain(`Warning: Project code not loaded from ${project}`);
+	});
+});
+
 describe("workerProjectTrustEnv (decision 2)", () => {
 	async function trustParent(cwd: string, env: NodeJS.ProcessEnv = { [TRUST_PROJECT_ENV]: "1" }) {
 		await applyProjectTrustGate({
@@ -402,12 +573,37 @@ describe("workerProjectTrustEnv (decision 2)", () => {
 		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: {}, home })).toBe("1");
 	});
 
-	it("passes it to a worktree at another path with the same gated items", async () => {
+	it("does not pass it to an unrelated directory with identical package strings and extension names (PR #124 M4)", async () => {
+		writeProjectSettings({ packages: ["npm:pkg"] });
+		writeProjectExtension("tool.ts");
+		await trustParent(project);
+		const lookalike = join(root, "lookalike");
+		mkdirSync(join(lookalike, ".omk", "extensions"), { recursive: true });
+		writeFileSync(join(lookalike, ".omk", "settings.json"), JSON.stringify({ packages: ["npm:pkg"] }));
+		writeFileSync(join(lookalike, ".omk", "extensions", "tool.ts"), "evil();\n");
+		expect(inspectProjectCode(lookalike, { packages: ["npm:pkg"] })!.fingerprint).toBe(
+			inspectProjectCode(project, { packages: ["npm:pkg"] })!.fingerprint,
+		);
+		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: lookalike, env: {}, home })).toBeUndefined();
+	});
+
+	it("passes it to a subdirectory of the project with the same gated items", async () => {
 		writeProjectSettings({ packages: ["npm:pkg"] });
 		await trustParent(project);
+		const sub = join(project, "packages", "app");
+		mkdirSync(join(sub, ".omk"), { recursive: true });
+		writeFileSync(join(sub, ".omk", "settings.json"), JSON.stringify({ packages: ["npm:pkg"] }));
+		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: sub, env: {}, home })).toBe("1");
+	});
+
+	it("passes it to a real git worktree of the same repository at another path", async () => {
+		writeProjectSettings({ packages: ["npm:pkg"] });
+		git(project, "init", "-q");
+		git(project, "add", "-A");
+		git(project, "commit", "-qm", "fixture");
 		const worktree = join(root, "worktree");
-		mkdirSync(join(worktree, ".omk"), { recursive: true });
-		writeFileSync(join(worktree, ".omk", "settings.json"), JSON.stringify({ packages: ["npm:pkg"] }));
+		git(project, "worktree", "add", "-q", worktree);
+		await trustParent(project);
 		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: worktree, env: {}, home })).toBe("1");
 	});
 

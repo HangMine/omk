@@ -7,6 +7,7 @@ import {
 	decideProjectTrust,
 	describeProjectCodeSurface,
 	formatEnvTrustNotice,
+	MAX_EXTENSION_ENTRIES,
 	type ProjectCodeSurface,
 	type ProjectTrustAnswer,
 	type ProjectTrustMode,
@@ -49,6 +50,19 @@ function withheldDiagnostic(surface: ProjectCodeSurface, why: string): AgentSess
 	};
 }
 
+function withheldReason(reason: "headless" | "denied" | "env-off" | "too-large", home: string | undefined): string {
+	switch (reason) {
+		case "headless":
+			return `untrusted project in a non-interactive run; trust it once in interactive omk or set ${TRUST_PROJECT_ENV}=1`;
+		case "env-off":
+			return `${TRUST_PROJECT_ENV}=0 keeps project code off`;
+		case "too-large":
+			return `more than ${MAX_EXTENSION_ENTRIES} files under .omk/extensions/, too many to fingerprint, so it is never trusted`;
+		default:
+			return `you declined to trust this project; remove its entry from ${projectTrustStorePath(home)} to be asked again`;
+	}
+}
+
 /** Decide, ask if needed, and close the gate on `settingsManager` unless the project is trusted. */
 export async function applyProjectTrustGate(
 	options: ProjectTrustGateOptions,
@@ -75,13 +89,7 @@ export async function applyProjectTrustGate(
 	}
 	if (outcome.kind === "withheld") {
 		options.settingsManager.withholdProjectCode();
-		const why =
-			outcome.reason === "headless"
-				? `untrusted project in a non-interactive run; trust it once in interactive omk or set ${TRUST_PROJECT_ENV}=1`
-				: outcome.reason === "env-off"
-					? `${TRUST_PROJECT_ENV}=0 keeps project code off`
-					: `you declined to trust this project; remove its entry from ${projectTrustStorePath(home)} to be asked again`;
-		return [withheldDiagnostic(outcome.surface, why)];
+		return [withheldDiagnostic(outcome.surface, withheldReason(outcome.reason, home))];
 	}
 	const answer = options.prompt ? await options.prompt(outcome.surface, outcome.changed) : "dismiss";
 	if (answer === "trust") {
@@ -95,4 +103,18 @@ export async function applyProjectTrustGate(
 		return [withheldDiagnostic(outcome.surface, "you declined to trust this project")];
 	}
 	return [withheldDiagnostic(outcome.surface, "trust not decided yet; restart OMK in this project to answer")];
+}
+
+/**
+ * Spec 053 R10: `omk install|update|remove|list`, `omk config` and `omk package doctor` never ask.
+ * They follow a stored answer, or `OMK_TRUST_PROJECT=1` as a non-interactive run, and print why
+ * the project's code settings (`npmCommand`, ...) are ignored on stderr (stdout may be JSON).
+ */
+export async function applyCommandProjectTrustGate(
+	cwd: string,
+	settingsManager: SettingsManager,
+	writeStderr: (line: string) => void = (line) => process.stderr.write(line),
+): Promise<void> {
+	const diagnostics = await applyProjectTrustGate({ cwd, settingsManager, mode: "headless", writeStderr });
+	for (const diagnostic of diagnostics) writeStderr(`Warning: ${diagnostic.message}\n`);
 }

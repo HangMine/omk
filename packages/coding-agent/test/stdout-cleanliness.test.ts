@@ -38,6 +38,8 @@ async function runCli(
 		[
 			'console.log("changed 1 package in 471ms");',
 			'console.log("found 0 vulnerabilities");',
+			// Spec 053 (PR #124 M2): shows whether OMK_TRUST_PROJECT=1 leaked into this child process.
+			'console.log("trust-env=" + (process.env.OMK_TRUST_PROJECT ?? "unset"));',
 			"process.exit(0);",
 		].join("\n"),
 		"utf-8",
@@ -123,5 +125,13 @@ describe("stdout cleanliness in non-interactive modes", () => {
 			.split("\n")
 			.filter((line) => line.startsWith("omk: OMK_TRUST_PROJECT=1 trusts project code in "));
 		expect(notices).toHaveLength(1);
+	});
+
+	it("does not pass OMK_TRUST_PROJECT=1 on to child processes such as the project's npm (PR #124 M2)", async () => {
+		const result = await runCli(["-p", "--help"]);
+
+		expect(result.stderr).toContain("changed 1 package in 471ms");
+		expect(result.stderr).toContain("trust-env=unset");
+		expect(result.stderr).not.toContain("trust-env=1");
 	});
 });
