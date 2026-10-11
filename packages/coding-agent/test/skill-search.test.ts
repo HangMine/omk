@@ -1,10 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { fingerprintSkills } from "../src/core/skill-index-store.ts";
 import {
 	SKILL_CANDIDATE_K,
 	SKILL_CANDIDATES_CUSTOM_TYPE,
+	SKILL_INDEX_ALGORITHM_VERSION,
 	SKILL_INDEX_FILE,
 	SkillSearchSession,
 	shortHash,
@@ -135,6 +137,42 @@ describe("SkillSearchSession (spec 050 R2–R5)", () => {
 		const index = readLog(logDir).filter((record) => record.type === "index");
 		expect(index.map((record) => record.cacheHit)).toEqual([false, true, false, false]);
 		expect(index[0]).toMatchObject({ skills: 34, docsUsed: 34, truncated: false });
+	});
+
+	it("rebuilds a cache written by another index algorithm version", () => {
+		const root = tempDir();
+		const logDir = tempDir();
+		const skills = writeSkills(root, [...NAMED, ...filler(30)]);
+		const indexPath = join(root, "agent", "cache", SKILL_INDEX_FILE);
+		session(root, skills, logDir).search("sql", 3);
+		const written = JSON.parse(readFileSync(indexPath, "utf8"));
+		expect(written.fingerprint).toBe(fingerprintSkills(skills, SKILL_INDEX_ALGORITHM_VERSION));
+		expect(fingerprintSkills(skills, SKILL_INDEX_ALGORITHM_VERSION + 1)).not.toBe(written.fingerprint);
+		// Same SKILL.md files, an older algorithm: the entry text may differ, so it is a miss.
+		const old = { ...written, fingerprint: fingerprintSkills(skills, SKILL_INDEX_ALGORITHM_VERSION - 1) };
+		writeFileSync(indexPath, JSON.stringify(old));
+		session(root, skills, logDir).search("sql", 3);
+		const index = readLog(logDir).filter((record) => record.type === "index");
+		expect(index.map((record) => record.cacheHit)).toEqual([false, false]);
+	});
+
+	it("removes stale .tmp files next to the index and keeps fresh ones", () => {
+		const root = tempDir();
+		const skills = writeSkills(root, [...NAMED, ...filler(30)]);
+		const cacheDir = join(root, "agent", "cache");
+		mkdirSync(cacheDir, { recursive: true });
+		const stale = join(cacheDir, `${SKILL_INDEX_FILE}.111.tmp`);
+		const fresh = join(cacheDir, `${SKILL_INDEX_FILE}.222.tmp`);
+		const unrelated = join(cacheDir, "other.111.tmp");
+		for (const file of [stale, fresh, unrelated]) writeFileSync(file, "{}");
+		const old = new Date(Date.now() - 10 * 60_000);
+		utimesSync(stale, old, old);
+		utimesSync(unrelated, old, old);
+		session(root, skills).search("sql", 3);
+		expect(existsSync(stale)).toBe(false);
+		expect(existsSync(fresh)).toBe(true);
+		expect(existsSync(unrelated)).toBe(true);
+		expect(existsSync(join(cacheDir, SKILL_INDEX_FILE))).toBe(true);
 	});
 
 	it("offers each skill once per session and nothing below the score floor (AC 6)", () => {

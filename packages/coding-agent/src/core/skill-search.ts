@@ -4,21 +4,29 @@
  * Imported only on the first `skill_search` call or the first candidate computation of a skill-search
  * session (never on the startup path, AC 3). The index is the list of model-invocable skills
  * (name, short description, location) and is cached at `<agentDir>/cache/skill-index-v1.json`, keyed by a
- * fingerprint of each SKILL.md's path, size, mtime and inode. Ranking is `searchCorpus` (BM25) over
+ * fingerprint of the index algorithm version and each SKILL.md's path, size, mtime and inode
+ * (`skill-index-store.ts`). Ranking is `searchCorpus` (BM25) over
  * `name + " " + description`.
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { retrievalTokens, searchCorpus } from "../metacognition/retrieval.ts";
 import { escapeXml } from "./context-budget-system-prompt-items.ts";
 import type { CustomMessage } from "./messages.ts";
 import { appendRunLog } from "./run-log.ts";
+import {
+	fingerprintSkills,
+	type IndexDoc,
+	readIndexFile,
+	SKILL_INDEX_FILE,
+	writeIndexFile,
+} from "./skill-index-store.ts";
 import type { Skill } from "./skills.ts";
 import { compactSkillDescription } from "./skills-prompt.ts";
 import type { SkillSearchToolDetails } from "./tools/skill-search-tool.ts";
 
-export const SKILL_INDEX_FILE = "skill-index-v1.json";
+export { SKILL_INDEX_ALGORITHM_VERSION, SKILL_INDEX_FILE } from "./skill-index-store.ts";
+
 export const SKILL_CANDIDATES_CUSTOM_TYPE = "skill-candidates";
 /** `searchCorpus` corpus cap. */
 export const SKILL_INDEX_MAX_DOCS = 5000;
@@ -31,19 +39,6 @@ export const SKILL_CANDIDATE_K = 3;
 export const SKILL_CANDIDATE_MIN_SCORE = 2;
 const MAX_QUERY_CHARS = 4096;
 const MATCH_COUNT_CAP = 64;
-
-interface IndexDoc {
-	readonly name: string;
-	readonly description: string;
-	readonly location: string;
-}
-
-interface IndexFile {
-	readonly version: 1;
-	readonly fingerprint: string;
-	readonly truncated: boolean;
-	readonly docs: readonly IndexDoc[];
-}
 
 export interface SkillHit extends IndexDoc {
 	readonly score: number;
@@ -206,50 +201,6 @@ export function renderCandidates(hits: readonly IndexDoc[]): string {
 		]),
 		"</skill_candidates>",
 	].join("\n");
-}
-
-/** Path, size, mtime and inode of every SKILL.md, plus name and description (they can come from elsewhere). */
-function fingerprintSkills(skills: readonly Skill[]): string {
-	const hash = createHash("sha256");
-	for (const skill of skills) {
-		let meta = "missing";
-		try {
-			const stat = statSync(skill.filePath);
-			meta = `${stat.size}:${stat.mtimeMs}:${stat.ino}`;
-		} catch {}
-		hash.update(`${skill.filePath}\0${meta}\0${skill.name}\0${skill.description}\n`);
-	}
-	return hash.digest("hex");
-}
-
-function readIndexFile(path: string): IndexFile | undefined {
-	try {
-		const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<IndexFile>;
-		if (parsed.version !== 1 || typeof parsed.fingerprint !== "string" || !Array.isArray(parsed.docs))
-			return undefined;
-		const docs = parsed.docs.filter(
-			(doc): doc is IndexDoc =>
-				typeof doc?.name === "string" && typeof doc.description === "string" && typeof doc.location === "string",
-		);
-		if (docs.length !== parsed.docs.length) return undefined;
-		return { version: 1, fingerprint: parsed.fingerprint, truncated: parsed.truncated === true, docs };
-	} catch {
-		return undefined;
-	}
-}
-
-/** Atomic (tmp + rename); a failed write only costs the next session a rebuild. Returns bytes written. */
-function writeIndexFile(path: string, file: IndexFile): number {
-	try {
-		const text = JSON.stringify(file);
-		mkdirSync(dirname(path), { recursive: true });
-		const tmp = `${path}.${process.pid}.tmp`;
-		writeFileSync(tmp, text);
-		renameSync(tmp, path);
-		return Buffer.byteLength(text);
-	} catch {
-		return 0;
-	}
 }
 
 export function shortHash(value: string): string {
