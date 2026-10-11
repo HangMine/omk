@@ -241,7 +241,7 @@ export function renderPromptSkillsMessage(
 ): string {
 	const lines = [
 		"<prompt_skills>",
-		"Skills for this prompt. They take precedence over the <active_skills> and <available_skills> choices in the system prompt, which were made for the first prompt of this session. Apply only when relevant and read full instructions before use.",
+		"Skills for this prompt. Only the most recent <prompt_skills> applies; earlier ones are superseded. They take precedence over the <active_skills> and <available_skills> choices in the system prompt, which were made for the first prompt of this session. Apply only when relevant and read full instructions before use.",
 	];
 	if (active) {
 		lines.push(`<active_skills source="${escapeXml(source ?? "prompt")}">`);

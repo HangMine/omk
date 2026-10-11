@@ -88,9 +88,9 @@ description: "스킬이 많을 때 system prompt에서 스킬 목록을 빼고, 
 R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모두 지금 사용자 프롬프트마다 system을 바꾸는 곳이다(spec 051).
 
 - **첫 프롬프트는 오늘과 같다.** 첫 사용자 프롬프트에서는 xAI/Devin harness 선택, `contextBudget` 선택, 명시 `!skill`·`/skill:` 선택을 지금처럼 system(`<active_skills>`, budget 스킬 부분)에 넣는다. 그 system을 **세션 동안 고정**한다. 그래서 `-p` 단일 프롬프트 실행의 요청은 main과 바이트 단위로 같다(AC 11).
-- **두 번째 프롬프트부터는 끝 메시지로.** 다시 고른 스킬(이름. 위치를 넣는 규칙은 지금 `<active_skills>`와 같다)은 system에 넣지 않는다. 대신 사용자 메시지 바로 뒤에 붙는 custom 메시지로 넣는다. 위치는 `_pendingNextTurnMessages`를 넣는 곳(`agent-session.ts:2606`) 옆이다. 메시지에는 "이 프롬프트에 적용되는 스킬"이라고 적어서, 고정된 system의 첫 선택보다 우선함을 밝힌다.
+- **두 번째 프롬프트부터는 끝 메시지로.** 다시 고른 스킬(이름. 위치를 넣는 규칙은 지금 `<active_skills>`와 같다)은 system에 넣지 않는다. 대신 사용자 메시지 바로 뒤에 붙는 custom 메시지로 넣는다. 위치는 `_pendingNextTurnMessages`를 넣는 곳(`agent-session.ts:2606`) 옆이다. 메시지에는 "이 프롬프트에 적용되는 스킬"이라고 적어서, 고정된 system의 첫 선택보다 우선함을 밝힌다. 이 메시지는 세션 기록에 쌓이므로 가장 최근의 `<prompt_skills>`만 적용한다고 함께 적는다.
   - xAI/Devin harness: 고르는 규칙(`selectHarnessSkills`, 최대 3개)은 바꾸지 않는다.
-  - `contextBudget`: system의 스킬 부분은 첫 프롬프트 때의 선택과 순서로 고정한다. 질의 관련 상위 스킬은 끝 메시지로 붙인다. 컨텍스트 파일 처리는 그대로다. 050이 활성인 세션에서는 첫 프롬프트부터 렌더러에 스킬을 넘기지 않는다(`includeSkills: false`). 이 경우는 050이 활성이라 AC 11 대상이 아니다(AC 11은 050 비활성 조건).
+  - `contextBudget`: system의 스킬 부분은 첫 프롬프트 때의 선택과 순서로 고정한다. 질의 관련 상위 스킬은 끝 메시지로 붙인다. budget 질의 전체(스킬과 컨텍스트 파일)를 첫 프롬프트 기준으로 고정한다. 두 번째 프롬프트부터 관련된 컨텍스트 파일은 다시 고르지 않는다(알려진 한계, 기본 꺼짐 설정). 050이 활성인 세션에서는 첫 프롬프트부터 렌더러에 스킬을 넘기지 않는다(`includeSkills: false`). 이 경우는 050이 활성이라 AC 11 대상이 아니다(AC 11은 050 비활성 조건).
   - 명시 `!skill`·`/skill:`: 사용자 입력이다. 두 번째 프롬프트부터는 끝 메시지로 넣는다.
 - **모듈 크기**: `agent-session.ts`는 module-size 여유가 약 3줄(4212/4215)이다. 그래서 "첫 프롬프트인지", 고르기, 메시지 렌더는 작은 helper `core/prompt-skill-message.ts`에 두고, `agent-session.ts`에는 호출 한두 줄만 넣는다.
 - **TB 영향**: TB는 `-p` 단일 프롬프트라 R6이 요청을 바꾸지 않는다. 공동 A/B 조건(번들 6개)도 그대로다(AC 5, 11).
@@ -145,6 +145,10 @@ R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모�
 - **판정은 AC로 한다.** 토큰(AC 1), 시작과 RSS(AC 3, Perf Engineer), worker(AC 4), 바이트 고정과 회귀(AC 2, 5, 9, 10, 11)다. 측정은 BASELINE.md와 같은 방법으로 mock에서 한다.
 - **TB 공동 A/B와의 관계**: 고정점 `d69af96`은 바뀌지 않는다. `-p`와 번들 6개 조건의 요청이 main과 같다는 것을 AC 5와 AC 11로 보증한다.
 - 스킬이 많은 조건의 점수 A/B, 그리고 BM25 대 학습형 선택 비교는 필요해지면 그때 따로 정한다. 근거로는 `skill-select.jsonl`의 `read.suggested` 비율을 쓸 수 있다.
+
+## 알려진 한계
+
+- `PromptSkillFreeze`는 세션 파일에 저장하지 않는다. 그래서 `--resume` 뒤 첫 프롬프트에서 선택을 다시 고정한다. resume 뒤에는 어차피 프롬프트 캐시가 차가워서 손해가 없다.
 
 ## Non-goals
 
