@@ -70,10 +70,15 @@ export class SkillSearchGate {
 		return [...tools, this.tool];
 	}
 
-	/** R3 task start: one candidate message, or none (off, worker, or nothing above the floor). */
+	/** R3 task start: one candidate message, or none (off, worker, nothing above the floor, or any failure). */
 	async candidates(query: string, env: NodeJS.ProcessEnv = process.env): Promise<CustomMessage | undefined> {
 		if (!this.activation.active || !skillSearchSuggestOn(env)) return undefined;
-		return (await this.search()).suggest(query);
+		try {
+			return (await this.search()).suggest(query);
+		} catch {
+			// Candidates are optional: a failed index build or search never breaks the prompt.
+			return undefined;
+		}
 	}
 
 	/** R8 `session` record, once, after the first system prompt is set. Hashes only; nothing without a log dir. */

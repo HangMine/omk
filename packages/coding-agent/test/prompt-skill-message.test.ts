@@ -260,4 +260,21 @@ describe("PromptSkillFreeze skill-search setup (spec 050 R1/R2, #122 review)", (
 			expect(warnings[0]).toContain("skill_search");
 		}
 	});
+
+	it("still answers the prompt when computing candidates fails", async () => {
+		const agentDir = mkdtempSync(join(tmpdir(), "omk-prompt-skills-"));
+		dirs.push(agentDir);
+		let reads = 0;
+		const skills = () => {
+			reads++;
+			if (reads > 1) throw new Error("skill list unavailable");
+			return many;
+		};
+		const freeze = new PromptSkillFreeze();
+		freeze.skillSearch.setup({ skills, hasReadTool: true, env: ON, agentDir });
+		expect(freeze.skillSearch.active).toBe(true);
+		const turn = await freeze.turn(input({ env: ON }));
+		expect(turn.messages).toEqual([]);
+		expect(reads).toBeGreaterThan(1);
+	});
 });
