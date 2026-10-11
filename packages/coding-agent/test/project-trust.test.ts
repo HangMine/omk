@@ -570,7 +570,7 @@ describe("workerProjectTrustEnv (decision 2)", () => {
 	it("passes OMK_TRUST_PROJECT=1 when the parent is trusted and the worker cwd has the same hash", async () => {
 		writeProjectSettings({ packages: ["npm:pkg"] });
 		await trustParent(project);
-		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: {}, home })).toBe("1");
+		expect(await workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: {}, home })).toBe("1");
 	});
 
 	it("does not pass it to an unrelated directory with identical package strings and extension names (PR #124 M4)", async () => {
@@ -584,7 +584,7 @@ describe("workerProjectTrustEnv (decision 2)", () => {
 		expect(inspectProjectCode(lookalike, { packages: ["npm:pkg"] })!.fingerprint).toBe(
 			inspectProjectCode(project, { packages: ["npm:pkg"] })!.fingerprint,
 		);
-		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: lookalike, env: {}, home })).toBeUndefined();
+		expect(await workerProjectTrustEnv({ parentCwd: project, workerCwd: lookalike, env: {}, home })).toBeUndefined();
 	});
 
 	it("passes it to a subdirectory of the project with the same gated items", async () => {
@@ -593,7 +593,7 @@ describe("workerProjectTrustEnv (decision 2)", () => {
 		const sub = join(project, "packages", "app");
 		mkdirSync(join(sub, ".omk"), { recursive: true });
 		writeFileSync(join(sub, ".omk", "settings.json"), JSON.stringify({ packages: ["npm:pkg"] }));
-		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: sub, env: {}, home })).toBe("1");
+		expect(await workerProjectTrustEnv({ parentCwd: project, workerCwd: sub, env: {}, home })).toBe("1");
 	});
 
 	it("passes it to a real git worktree of the same repository at another path", async () => {
@@ -604,7 +604,7 @@ describe("workerProjectTrustEnv (decision 2)", () => {
 		const worktree = join(root, "worktree");
 		git(project, "worktree", "add", "-q", worktree);
 		await trustParent(project);
-		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: worktree, env: {}, home })).toBe("1");
+		expect(await workerProjectTrustEnv({ parentCwd: project, workerCwd: worktree, env: {}, home })).toBe("1");
 	});
 
 	it("does not pass it when the worker cwd's hash differs", async () => {
@@ -613,18 +613,23 @@ describe("workerProjectTrustEnv (decision 2)", () => {
 		const other = join(root, "other");
 		mkdirSync(join(other, ".omk"), { recursive: true });
 		writeFileSync(join(other, ".omk", "settings.json"), JSON.stringify({ packages: ["npm:evil"] }));
-		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: other, env: {}, home })).toBeUndefined();
+		expect(await workerProjectTrustEnv({ parentCwd: project, workerCwd: other, env: {}, home })).toBeUndefined();
 	});
 
 	it("does not pass it when the parent is not trusted", async () => {
 		writeProjectSettings({ packages: ["npm:untrusted-parent"] });
 		await trustParent(project, {});
-		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: {}, home })).toBeUndefined();
+		expect(await workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: {}, home })).toBeUndefined();
 	});
 
-	it("passes OMK_TRUST_PROJECT=0 down unchanged", () => {
+	it("passes OMK_TRUST_PROJECT=0 down unchanged", async () => {
 		expect(
-			workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: { [TRUST_PROJECT_ENV]: "0" }, home }),
+			await workerProjectTrustEnv({
+				parentCwd: project,
+				workerCwd: project,
+				env: { [TRUST_PROJECT_ENV]: "0" },
+				home,
+			}),
 		).toBe("0");
 	});
 });
