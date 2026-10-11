@@ -7,6 +7,7 @@
  * prompt on, the system prompt is rebuilt from the frozen choice and the prompt's own choice is sent as
  * one custom message after the user message, so the cacheable system prefix stays stable.
  */
+
 import { createHash } from "node:crypto";
 import { type ActiveSkillState, addActiveSkills } from "./active-skill-state.ts";
 import { scoreSkillRelevance } from "./context-budget-relevance.ts";
@@ -15,6 +16,7 @@ import { devinHarnessAutoApplyEnabled, isDevinProvider, selectDevinHarnessSkills
 import { grokHarnessAutoApplyEnabled, isGrokOAuthProvider, selectGrokHarnessSkills } from "./grok-harness.ts";
 import type { CustomMessage } from "./messages.ts";
 import { appendRunLog } from "./run-log.ts";
+import { SkillSearchGate } from "./skill-search-gate.ts";
 import type { Skill } from "./skills.ts";
 import { compactSkillDescription } from "./skills-prompt.ts";
 import type { BuildSystemPromptOptions } from "./system-prompt.ts";
@@ -62,18 +64,32 @@ type HarnessSource = "grok-harness" | "devin-harness";
  * One per session: the first `turn()` freezes the skill choice that later system prompts are built from.
  * When the session rebuilds its base system prompt (tool, model or settings change, `/reload`) or the
  * operator's default active skills change, the system prompt changes anyway, so the next prompt's choice is
- * frozen again instead of sent as a message.
+ * frozen again instead of sent as a message. A skill-search session (spec 050 AC 2) keeps its choice across a
+ * base rebuild, so a `/reload` with the same resources rebuilds the same system prompt.
  */
 export class PromptSkillFreeze {
 	private frozen: FrozenChoice | undefined;
+	/** Spec 050 skill-search decision, fixed tool and candidates for this session. */
+	readonly skillSearch = new SkillSearchGate();
 
-	turn(input: PromptSkillTurnInput): PromptSkillTurn {
+	/** R3 task start: the R6 plan plus, in an active session, one candidate message (not in workers, R7). */
+	async turn(input: PromptSkillTurnInput): Promise<PromptSkillTurn> {
+		const plan = this.planTurn(input);
+		const candidates = await this.skillSearch.candidates(input.budgetQuery, input.env);
+		return candidates ? { ...plan, messages: [...plan.messages, candidates] } : plan;
+	}
+
+	private planTurn(input: PromptSkillTurnInput): PromptSkillTurn {
 		const env = input.env ?? process.env;
 		const harness = selectProviderHarnessSkills(input, env);
 		const current = harness ? addActiveSkills(input.selection, harness.names, harness.source) : input.selection;
+		const keep =
+			this.frozen !== undefined &&
+			(this.frozen.base === input.base || this.skillSearch.active) &&
+			sameNames(this.frozen.defaults, input.defaults);
 		const frozen: FrozenChoice =
-			this.frozen?.base === input.base && sameNames(this.frozen.defaults, input.defaults)
-				? this.frozen
+			keep && this.frozen
+				? { ...this.frozen, base: input.base }
 				: {
 						base: input.base,
 						defaults: input.defaults,
@@ -81,7 +97,7 @@ export class PromptSkillFreeze {
 						source: current.source,
 						budgetQuery: input.budgetQuery,
 					};
-		const first = frozen !== this.frozen;
+		const first = !keep;
 		this.frozen = frozen;
 		const options: BuildSystemPromptOptions = {
 			...input.base,
@@ -91,9 +107,11 @@ export class PromptSkillFreeze {
 		};
 		if (first) return { options, messages: [] };
 		const activeChanged = !sameChoice(frozen, current);
-		const relevant = budgetSkillsVisible(input.base)
-			? relevantSkills(input.skills, input.budgetQuery, current.names)
-			: [];
+		// In skill-search mode the budget renders no skill list, so there is nothing to supersede (R6).
+		const relevant =
+			budgetSkillsVisible(input.base) && !this.skillSearch.active
+				? relevantSkills(input.skills, input.budgetQuery, current.names)
+				: [];
 		if (!activeChanged && relevant.length === 0) return { options, messages: [] };
 		const active = activeChanged ? resolveSkills(input.skills, current.names) : undefined;
 		if (active) logMove(harness?.source ?? "explicit", active, env);
