@@ -43,9 +43,14 @@ function readProjectSettingsFile(cwd: string): Settings {
  * a symlink into the project resolves inside it), or lies in a worktree registered by the
  * project's own repository.
  */
-async function belongsToProject(projectKey: string, workerKey: string, git: GitRunner): Promise<boolean> {
+async function belongsToProject(
+	projectKey: string,
+	workerKey: string,
+	git: GitRunner,
+	signal: AbortSignal | undefined,
+): Promise<boolean> {
 	if (workerKey === projectKey || workerKey.startsWith(`${projectKey}${path.sep}`)) return true;
-	return isInRegisteredWorktree(projectKey, workerKey, git);
+	return isInRegisteredWorktree(projectKey, workerKey, git, signal);
 }
 
 export interface WorkerProjectTrustOptions {
@@ -53,6 +58,8 @@ export interface WorkerProjectTrustOptions {
 	readonly workerCwd: string;
 	readonly env?: NodeJS.ProcessEnv;
 	readonly home?: string;
+	/** Aborts the git check (no trust); pass the spawn's signal so an abort is not delayed by git. */
+	readonly signal?: AbortSignal;
 	/** @internal Tests only: replaces the git runner. */
 	readonly git?: GitRunner;
 }
@@ -63,8 +70,8 @@ export interface WorkerProjectTrustOptions {
  * "1" only when this process trusted the parent's project, the worker cwd belongs to it
  * (same path, a subdirectory, or a worktree registered by the project's repository, the
  * project being that repository's top level), and the worker cwd's gated items hash the same;
- * otherwise undefined. Async so the git check never blocks the event loop; git answers are
- * cached per process.
+ * otherwise undefined. Async so the git check never blocks the event loop; positive git answers
+ * are cached per process. Breaking for callers of the #124 version: this now returns a Promise.
  */
 export async function workerProjectTrustEnv(options: WorkerProjectTrustOptions): Promise<"1" | "0" | undefined> {
 	if ((options.env ?? process.env)[TRUST_PROJECT_ENV] === "0") return "0";
@@ -74,5 +81,6 @@ export async function workerProjectTrustEnv(options: WorkerProjectTrustOptions):
 	const worker = inspectProjectCode(options.workerCwd, readProjectSettingsFile(options.workerCwd));
 	if (!worker || worker.overCap || worker.fingerprint !== parentFingerprint) return undefined;
 	// Hash first (cheap, no process), then the path / git check.
-	return (await belongsToProject(projectKey, worker.projectKey, options.git ?? runGit)) ? "1" : undefined;
+	const belongs = await belongsToProject(projectKey, worker.projectKey, options.git ?? runGit, options.signal);
+	return belongs ? "1" : undefined;
 }
