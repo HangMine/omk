@@ -116,7 +116,7 @@ When the native `xai` Grok harness is enabled, OMK may additionally mark up to t
 
 ### Per-prompt selections keep the system prompt stable
 
-The skill choice of a session's first prompt (harness picks, `!skill:` selections, and the context-budget ranking) is written into the system prompt and then kept for the session, so the provider's prompt cache keeps its prefix. A later prompt whose choice differs gets it as a hidden message after the user message (`<prompt_skills>`), which takes precedence over the system prompt's choice. A rebuilt base prompt (tool, model or settings change, `/reload`) or a change to `defaultActiveSkills` freezes the next prompt's choice again.
+The skill choice of a session's first prompt (harness picks, `!skill:` selections, and the context-budget ranking) is written into the system prompt and then kept for the session, so the provider's prompt cache keeps its prefix. A later prompt whose choice differs gets it as a hidden message after the user message (`<prompt_skills>`), which takes precedence over the system prompt's choice. Only the most recent `<prompt_skills>` message applies. With context budgeting on, the whole budget query (skills and context files) stays frozen to the first prompt, so context files are not re-ranked for later prompts (a known limit; budgeting is off by default). The frozen choice is not saved with the session: after `--resume` the first prompt freezes it again. A rebuilt base prompt (tool, model or settings change, `/reload`) or a change to `defaultActiveSkills` freezes the next prompt's choice again.
 
 ### Skill search (`OMK_SKILL_SEARCH`)
 
