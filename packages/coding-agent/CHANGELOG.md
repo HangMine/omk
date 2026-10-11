@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `llm-call.jsonl` run log, diagnostic only: with `OMK_RUN_LOG_DIR` set, every provider request appends one line with the provider, model id, reasoning effort, input/output/cache-read/cache-write tokens, stop reason, duration, the gap since the previous call ended, the message count and sha256 hashes of the system prompt and tool list. Aborted and failed calls get a line too. Lines hold numbers, ids, hashes and enum names only. Off unless `OMK_RUN_LOG_DIR` is set; unset, nothing is wrapped, hashed or written, and request bytes are unchanged either way.
+
 ### Changed
 
 - The skill catalog cache now also covers the one-`SKILL.md`-per-skill paths that auto-discovery produces, so a start no longer reads, parses and hashes every `SKILL.md` again. Each file is checked with one `stat` (size, mtime, ctime, inode); an edited, removed or added skill is picked up on the next start. File entries are capped at 4,096 separately from the 64 directory entries, least recently used first out. The loaded skills and the request are unchanged.

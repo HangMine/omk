@@ -6,6 +6,7 @@ import {
 	snapshotModelContract,
 } from "omk-agent-core";
 import { type SimpleStreamOptions, streamSimple } from "omk-ai";
+import { createLlmCallRunLogStreamFn } from "./llm-call-run-log.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
 import { createResponseReasoningCapStreamFn, resolveResponseReasoningCapConfig } from "./response-reasoning-cap.ts";
@@ -24,9 +25,13 @@ interface SdkProviderRuntime {
 /**
  * Shared by the main agent and first-party summary calls using agent.streamFn.
  * Spec 033: wrapped with the opt-in per-response reasoning cap (`OMK_RESPONSE_REASONING_CAP=1`).
+ * Spec 059: below the cap, one `llm-call.jsonl` line per provider request when `OMK_RUN_LOG_DIR` is set.
  */
 export function createSdkProviderStream(runtime: SdkProviderRuntime): StreamFn {
-	return createResponseReasoningCapStreamFn(createProviderStream(runtime), resolveResponseReasoningCapConfig());
+	return createResponseReasoningCapStreamFn(
+		createLlmCallRunLogStreamFn(createProviderStream(runtime)),
+		resolveResponseReasoningCapConfig(),
+	);
 }
 
 function createProviderStream(runtime: SdkProviderRuntime): StreamFn {
