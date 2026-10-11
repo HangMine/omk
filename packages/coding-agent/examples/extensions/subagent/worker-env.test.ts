@@ -45,4 +45,10 @@ describe("subagentWorkerEnv", () => {
 		subagentWorkerEnv(parent);
 		expect(parent).toEqual({ OMK_TIME_BUDGET_SEC: "900" });
 	});
+
+	it("drops an inherited OMK_TRUST_PROJECT=1 and sets only the value it is given (spec 053)", () => {
+		expect(subagentWorkerEnv({ OMK_TRUST_PROJECT: "1" }).OMK_TRUST_PROJECT).toBeUndefined();
+		expect(subagentWorkerEnv({ OMK_TRUST_PROJECT: "1" }, "1").OMK_TRUST_PROJECT).toBe("1");
+		expect(subagentWorkerEnv({}, "0").OMK_TRUST_PROJECT).toBe("0");
+	});
 });

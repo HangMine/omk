@@ -21,7 +21,10 @@ function createTempDir(): string {
 	return dir;
 }
 
-async function runCli(args: string[]): Promise<{ stdout: string; stderr: string; code: number | null }> {
+async function runCli(
+	args: string[],
+	trustEnv: Record<string, string> = { OMK_TRUST_PROJECT: "1" },
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	const tempRoot = createTempDir();
 	const agentDir = join(tempRoot, "agent");
 	const projectDir = join(tempRoot, "project");
@@ -35,6 +38,8 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 		[
 			'console.log("changed 1 package in 471ms");',
 			'console.log("found 0 vulnerabilities");',
+			// Spec 053 (PR #124 M2): shows whether OMK_TRUST_PROJECT=1 leaked into this child process.
+			'console.log("trust-env=" + (process.env.OMK_TRUST_PROJECT ?? "unset"));',
 			"process.exit(0);",
 		].join("\n"),
 		"utf-8",
@@ -59,6 +64,9 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 			env: {
 				...process.env,
 				[ENV_AGENT_DIR]: agentDir,
+				// The project's npmCommand/packages are gated (spec 053); this test opts in to see their output routed.
+				OMK_TRUST_PROJECT: "",
+				...trustEnv,
 				TSX_TSCONFIG_PATH: resolve(__dirname, "../../../tsconfig.json"),
 			},
 			stdio: ["ignore", "pipe", "pipe"],
@@ -98,5 +106,32 @@ describe("stdout cleanliness in non-interactive modes", () => {
 		expect(result.stderr).toContain("changed 1 package in 471ms");
 		expect(result.stderr).toContain("found 0 vulnerabilities");
 		expect(result.stderr).toContain("Usage:");
+	});
+
+	it("does not run an untrusted project's npmCommand or install its packages (spec 053)", async () => {
+		const result = await runCli(["-p", "--help"], {});
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toBe("");
+		expect(result.stderr).not.toContain("changed 1 package in 471ms");
+		expect(result.stderr).toContain("Usage:");
+	});
+
+	it("prints the OMK_TRUST_PROJECT=1 notice once on stderr, never on stdout (spec 053)", async () => {
+		const result = await runCli(["-p", "--help"]);
+
+		expect(result.stdout).toBe("");
+		const notices = result.stderr
+			.split("\n")
+			.filter((line) => line.startsWith("omk: OMK_TRUST_PROJECT=1 trusts project code in "));
+		expect(notices).toHaveLength(1);
+	});
+
+	it("does not pass OMK_TRUST_PROJECT=1 on to child processes such as the project's npm (PR #124 M2)", async () => {
+		const result = await runCli(["-p", "--help"]);
+
+		expect(result.stderr).toContain("changed 1 package in 471ms");
+		expect(result.stderr).toContain("trust-env=unset");
+		expect(result.stderr).not.toContain("trust-env=1");
 	});
 });

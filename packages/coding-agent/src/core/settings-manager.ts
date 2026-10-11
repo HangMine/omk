@@ -7,6 +7,7 @@ import { normalizePath, resolvePath } from "../utils/paths.ts";
 import type { NotificationSettings } from "./completion-sound.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-idle-timeout.ts";
 import type { ResourceGovernorSettings } from "./resource-governor-settings.ts";
+import { deepMergeSettings, mergeLayeredSettings } from "./settings-merge.ts";
 
 const MAX_DEFAULT_ACTIVE_SKILLS = 64;
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -212,37 +213,6 @@ export interface Settings {
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
 }
 
-/** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
-function deepMergeSettings(base: Settings, overrides: Settings): Settings {
-	const result: Settings = { ...base };
-
-	for (const key of Object.keys(overrides) as (keyof Settings)[]) {
-		const overrideValue = overrides[key];
-		const baseValue = base[key];
-
-		if (overrideValue === undefined) {
-			continue;
-		}
-
-		// For nested objects, merge recursively
-		if (
-			typeof overrideValue === "object" &&
-			overrideValue !== null &&
-			!Array.isArray(overrideValue) &&
-			typeof baseValue === "object" &&
-			baseValue !== null &&
-			!Array.isArray(baseValue)
-		) {
-			(result as Record<string, unknown>)[key] = { ...baseValue, ...overrideValue };
-		} else {
-			// For primitives and arrays, override value wins
-			(result as Record<string, unknown>)[key] = overrideValue;
-		}
-	}
-
-	return result;
-}
-
 function parseTimeoutSetting(value: unknown, settingName: string): number | undefined {
 	const timeoutMs = parseHttpIdleTimeoutMs(value);
 	if (timeoutMs !== undefined) {
@@ -364,6 +334,7 @@ export class SettingsManager {
 	private projectSettingsLoadError: Error | null = null; // Track if project settings file had parse errors
 	private writeQueue: Promise<void> = Promise.resolve();
 	private errors: SettingsError[];
+	private projectCodeWithheld = false; // spec 053: project trust gate closed
 
 	private constructor(
 		storage: SettingsStorage,
@@ -379,7 +350,7 @@ export class SettingsManager {
 		this.globalSettingsLoadError = globalLoadError;
 		this.projectSettingsLoadError = projectLoadError;
 		this.errors = [...initialErrors];
-		this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
+		this.settings = mergeLayeredSettings(this.globalSettings, this.projectSettings, this.projectCodeWithheld);
 	}
 
 	/** Create a SettingsManager that loads from files */
@@ -547,7 +518,21 @@ export class SettingsManager {
 			this.recordError("project", projectLoad.error);
 		}
 
-		this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
+		this.settings = mergeLayeredSettings(this.globalSettings, this.projectSettings, this.projectCodeWithheld);
+	}
+
+	/**
+	 * Close the project trust gate for this manager (spec 053): project packages, extensions,
+	 * npmCommand, shellPath, and shellCommandPrefix stop taking effect. The project file is not
+	 * modified, and other project keys still apply. Survives reload().
+	 */
+	withholdProjectCode(): void {
+		this.projectCodeWithheld = true;
+		this.settings = mergeLayeredSettings(this.globalSettings, this.projectSettings, true);
+	}
+
+	isProjectCodeWithheld(): boolean {
+		return this.projectCodeWithheld;
 	}
 
 	/** Apply additional overrides on top of current settings */
@@ -642,7 +627,7 @@ export class SettingsManager {
 	}
 
 	private save(): void {
-		this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
+		this.settings = mergeLayeredSettings(this.globalSettings, this.projectSettings, this.projectCodeWithheld);
 
 		if (this.globalSettingsLoadError) {
 			return;
@@ -659,7 +644,7 @@ export class SettingsManager {
 
 	private saveProjectSettings(settings: Settings): void {
 		this.projectSettings = structuredClone(settings);
-		this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
+		this.settings = mergeLayeredSettings(this.globalSettings, this.projectSettings, this.projectCodeWithheld);
 
 		if (this.projectSettingsLoadError) {
 			return;

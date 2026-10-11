@@ -8,7 +8,10 @@
  * they are not passed down. Workers keep `OMK_RUN_LOG_DIR` and are marked
  * `OMK_RUN_LOG_ROLE=worker` (spec 042) so their lines can be told apart from
  * the lead's. The deliverable guard (spec 034) watches the lead's outputs only,
- * so workers always get it off. Workers inherit `OMK_SKILL_SEARCH` but never
+ * so workers always get it off. The project trust env (spec 053) is not inherited:
+ * the caller passes `OMK_TRUST_PROJECT` only when the parent trusted its project and
+ * the worker cwd's gated items hash the same (`workerProjectTrustEnv`), or "0" when
+ * the parent runs with it forced off. Workers inherit `OMK_SKILL_SEARCH` but never
  * get automatic skill candidate messages (spec 050 R7).
  */
 const LEAD_ONLY_VARS = [
@@ -18,9 +21,11 @@ const LEAD_ONLY_VARS = [
 	"OMK_FINISH_CHECK_REVERIFY",
 ];
 
-export function subagentWorkerEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function subagentWorkerEnv(parent: NodeJS.ProcessEnv, projectTrust?: "1" | "0"): NodeJS.ProcessEnv {
 	const env: NodeJS.ProcessEnv = { ...parent };
 	for (const name of LEAD_ONLY_VARS) delete env[name];
+	delete env.OMK_TRUST_PROJECT;
+	if (projectTrust) env.OMK_TRUST_PROJECT = projectTrust;
 	const optIn = parent.OMK_FINISH_CHECK_WORKERS?.trim();
 	env.OMK_FINISH_CHECK = optIn ? optIn : "0";
 	env.OMK_DELIVERABLE_GUARD = "0";
