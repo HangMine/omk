@@ -100,6 +100,8 @@ interface RunOptions {
 	readonly search?: boolean;
 	readonly reload?: boolean;
 	readonly extensions?: ExtensionFactory[];
+	/** `setActiveToolsByName` before the first prompt (an allowlist or extension narrowing the tools). */
+	readonly activeTools?: string[];
 }
 
 async function run(
@@ -142,6 +144,7 @@ async function run(
 			: []),
 		fauxAssistantMessage("done with a"),
 	]);
+	if (options.activeTools) harness.session.setActiveToolsByName(options.activeTools);
 	await harness.session.prompt(TASK_A);
 	if (options.reload) await harness.session.reload();
 	harness.appendResponses([fauxAssistantMessage("done with b")]);
@@ -321,5 +324,19 @@ describe("a foreign tool named skill_search (#122 review)", () => {
 		expect(on.calls.flatMap((call) => call.userTexts).join("\n")).not.toContain("<skill_candidates>");
 		expect(view(on)).toEqual(view(off));
 		expect(readAll(on.logDir)).toContain('"inactiveReason":"name_conflict"');
+	});
+});
+
+describe("skill_search left out of the active tools (058 follow-up)", () => {
+	it("turns the session off: <available_skills> stays, no candidate message, tool_inactive in the log", async () => {
+		const skills = syntheticSkills(tempDir());
+		const on = await run({ env: { OMK_SKILL_SELECT: "metacon" }, skills, activeTools: ["read"] });
+		for (const call of on.calls) {
+			expect(call.toolNames).not.toContain(SKILL_SEARCH_TOOL_NAME);
+			expect(call.systemText).toContain("<available_skills>");
+			expect(call.systemText).not.toContain(SKILL_SEARCH_PROMPT_LINE.trim());
+		}
+		expect(on.calls.flatMap((call) => call.userTexts).join("\n")).not.toContain("<skill_candidates>");
+		expect(readAll(on.logDir)).toContain('"inactiveReason":"tool_inactive"');
 	});
 });

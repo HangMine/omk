@@ -90,22 +90,39 @@ export class SkillSearchGate {
 		}
 	}
 
-	/** R8 `session` record, once, after the first system prompt is set. Hashes only; nothing without a log dir. */
+	/**
+	 * R2, whenever the system prompt is rebuilt for an active tool set: if an allowlist, loadout or
+	 * `setActiveTools` leaves `skill_search` out, the session turns off (`tool_inactive`) and stays off, so no
+	 * candidate message ever points at a tool the model cannot call and the prompt keeps `<available_skills>`.
+	 */
+	syncActiveTools(activeNames: readonly string[]): void {
+		if (!this.activation.active || activeNames.includes(SKILL_SEARCH_TOOL_NAME)) return;
+		this.activation = { active: false, inactiveReason: "tool_inactive", mode: "off" };
+	}
+
+	/**
+	 * R8 `session` record, once, after the first system prompt is set. Hashes only; nothing without a log dir.
+	 * Never throws: a failed `prompt-hash` import, hash or write only drops the record, flag on or off.
+	 */
 	async logSession(context: Pick<Context, "systemPrompt" | "tools">): Promise<void> {
 		const env = this.options?.env ?? process.env;
 		if (this.sessionLogged || !env[RUN_LOG_DIR_ENV]?.trim()) return;
 		this.sessionLogged = true;
-		const { systemHash, toolsHash } = await import("omk-ai/prompt-hash");
-		const record = {
-			type: "session",
-			active: this.activation.active,
-			inactiveReason: this.activation.inactiveReason,
-			mode: this.activation.mode,
-			...(this.activation.invalidMode ? { invalidMode: true } : {}),
-			systemHash: systemHash(context),
-			toolsHash: toolsHash(context),
-		};
-		appendRunLog("skill-select", record, { env });
+		try {
+			const { systemHash, toolsHash } = await import("omk-ai/prompt-hash");
+			const record = {
+				type: "session",
+				active: this.activation.active,
+				inactiveReason: this.activation.inactiveReason,
+				mode: this.activation.mode,
+				...(this.activation.invalidMode ? { invalidMode: true } : {}),
+				systemHash: systemHash(context),
+				toolsHash: toolsHash(context),
+			};
+			appendRunLog("skill-select", record, { env });
+		} catch {
+			// The run log is diagnostics only; it never fails the prompt.
+		}
 	}
 
 	/** First search or candidate computation imports the index module (never on the startup path, R5). */
