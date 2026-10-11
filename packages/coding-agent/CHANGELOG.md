@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- The optional Gondolin example now rejects malformed nested RSA digest structures before VM startup using a reviewed, fail-closed runtime guard for CVE-2026-85393. Normal certificate and signature handling remains supported. The upstream audit warning remains visible until an official patch is available; see [Gondolin signature security](docs/gondolin-security.md).
 - Subagent tool-result details contain plain data; process settlement promises stay with the lane owner. Shared heavy-process capacity follows the current admission decision or configured normal cap, and checkpoint briefs retain both their goals and closing criteria.
 - Top-level Grok/Devin harness sessions can use their workspace and the subagent tool while preserving blocked paths and project trust. Subagent nesting defaults to one child level.
 - Orchestration scope matching normalizes case, separators and traversal, conservatively checks wildcard overlaps, and rejects escaping lane and evidence paths.

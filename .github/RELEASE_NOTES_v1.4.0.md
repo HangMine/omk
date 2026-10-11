@@ -1,7 +1,7 @@
-# OMK v1.4.0 — release candidate
+# OMK v1.4.0
 
-This candidate integrates the outstanding OMK changes onto the current monorepo.
-All seven public packages are intended to move together to 1.4.0. This is a minor
+This release integrates the outstanding OMK changes onto the current monorepo.
+All seven public packages move together to 1.4.0. This is a minor
 release under the project's version policy because worker extension loading and
 session write/edit boundaries change their defaults.
 
@@ -37,17 +37,30 @@ session write/edit boundaries change their defaults.
 - Updated the official `shell-quote` dependency override to 1.11.0, fixing
   [GHSA-pqg4-j6r4-53mv](https://github.com/ljharb/shell-quote/security/advisories/GHSA-pqg4-j6r4-53mv).
 
-## Release status
+## Gondolin security mitigation
 
-Prepared source is not a published release. Main merge, the release tag, npm
-publication and GitHub Release are held until the production dependency audit
-passes and the final candidate's required CI succeeds.
+The optional Gondolin example adds the missing nested RSA `DigestAlgorithm`
+element-count check for
+[GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv), matching
+the fix proposed in upstream PR #1152. It guards the exact Forge instance used
+by Gondolin before VM startup and fails closed if the reviewed dependency or
+validator changes. Existing certificate and signature behavior is preserved.
 
-The production audit still reports the Gondolin example's `node-forge` dependency
-for [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv).
-There is no official patched version at preparation time. The advisory reaches
-Gondolin's certificate verification path. No audit threshold, dependency scope,
-security check or sandbox requirement has been relaxed to suppress this finding.
+Synthetic regression fixtures demonstrate that the unguarded Gondolin cached
+leaf verification accepts malformed nested structures and the guarded path
+rejects them. Normal certificates, default RSA CA parameters, SHA signatures
+and RSA-PSS pass. No external service or real credentials were used.
+
+No official patched Forge release exists at preparation time. The registry
+package still reports this advisory in `npm audit`; its High findings and
+nonzero exit are preserved. This scoped runtime mitigation does not patch
+separately launched Gondolin or other applications. It requires maintenance
+when upgrading the dependency. See
+[Gondolin signature security](../packages/coding-agent/docs/gondolin-security.md).
+No audit threshold, ignored advisory, dependency classification, security check
+or sandbox requirement was relaxed.
+
+## Release verification
 
 The existing tag workflow is the release path: npm publication through the
 `npm-publish` environment, standalone binaries, attestations and GitHub Release.
