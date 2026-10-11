@@ -88,7 +88,7 @@ description: "스킬이 많을 때 system prompt에서 스킬 목록을 빼고, 
 R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모두 지금 사용자 프롬프트마다 system을 바꾸는 곳이다(spec 051).
 
 - **첫 프롬프트는 오늘과 같다.** 첫 사용자 프롬프트에서는 xAI/Devin harness 선택, `contextBudget` 선택, 명시 `!skill`·`/skill:` 선택을 지금처럼 system(`<active_skills>`, budget 스킬 부분)에 넣는다. 그 system을 **세션 동안 고정**한다. 그래서 `-p` 단일 프롬프트 실행의 요청은 main과 바이트 단위로 같다(AC 11).
-- **두 번째 프롬프트부터는 끝 메시지로.** 다시 고른 스킬(이름. 위치를 넣는 규칙은 지금 `<active_skills>`와 같다)은 system에 넣지 않는다. 대신 사용자 메시지 바로 뒤에 붙는 custom 메시지로 넣는다. 위치는 `_pendingNextTurnMessages`를 넣는 곳(`agent-session.ts:2606`) 옆이다. 메시지에는 "이 프롬프트에 적용되는 스킬"이라고 적어서, 고정된 system의 첫 선택보다 우선함을 밝힌다.
+- **두 번째 프롬프트부터는 끝 메시지로.** 다시 고른 스킬(이름. 위치를 넣는 규칙은 지금 `<active_skills>`와 같다)은 system에 넣지 않는다. 대신 사용자 메시지 바로 뒤에 붙는 custom 메시지로 넣는다. 위치는 `_pendingNextTurnMessages`를 넣는 곳(`agent-session.ts:2606`) 옆이다. 메시지에는 "이 프롬프트에 적용되는 스킬"이라고 적어서, 고정된 system의 첫 선택보다 우선함을 밝힌다. 이 메시지는 세션 기록에 쌓이므로 가장 최근의 `<prompt_skills>`만 적용한다고 함께 적는다.
   - xAI/Devin harness: 고르는 규칙(`selectHarnessSkills`, 최대 3개)은 바꾸지 않는다.
   - `contextBudget`: system의 스킬 부분은 첫 프롬프트 때의 선택과 순서로 고정한다. 질의 관련 상위 스킬은 끝 메시지로 붙인다. 컨텍스트 파일 처리는 그대로다. 050이 활성인 세션에서는 첫 프롬프트부터 렌더러에 스킬을 넘기지 않는다(`includeSkills: false`). 이 경우는 050이 활성이라 AC 11 대상이 아니다(AC 11은 050 비활성 조건).
   - 명시 `!skill`·`/skill:`: 사용자 입력이다. 두 번째 프롬프트부터는 끝 메시지로 넣는다.
