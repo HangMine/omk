@@ -153,7 +153,7 @@ R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모�
 - 스킬 본문을 system이나 후보 메시지에 넣는 것.
 - 실제 스킬 디렉터리 정리나 수정.
 - reasoning effort(037).
-- 같은 종류의 다른 캐시 문제는 메모만 남기고 범위 밖이다. 자정을 넘기면 system의 `Current date`가 바뀌는 것(`system-prompt.ts:223`), `agent-session.ts:2658`의 cache-boundary 판정을 `startsWith`로 바꾸는 것, xAI `x-grok-conv-id` 헤더는 Staff Engineer의 별도 PR이다(spec 051).
+- 같은 종류의 다른 캐시 문제는 메모만 남기고 범위 밖이다. 자정을 넘기면 system의 `Current date`가 바뀌는 것(`system-prompt.ts:223`)과 xAI `x-grok-conv-id` 헤더는 Staff Engineer의 별도 PR이다(spec 051). `agent-session.ts`의 cache-boundary 판정을 `startsWith`로 바꾸는 것은 #120으로 main에 머지됐다.
 
 ## 정해진 질문 (Tech Lead, 2026-10-11)
 
@@ -173,7 +173,7 @@ R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모�
 - `packages/coding-agent/src/core/system-prompt.ts`, `skills-prompt.ts`: 활성 세션에서 목록 대신 고정 안내 한 줄
 - `packages/coding-agent/src/core/prompt-skill-message.ts`: R6 helper(harness와 `contextBudget`이 고른 스킬을 끝 메시지로 렌더, task 시작 후보 메시지 연결). `agent-session.ts` module-size 여유가 3줄이라 로직은 여기에 둔다
 - `packages/coding-agent/src/core/agent-session.ts`: helper 호출 한두 줄만
-- `packages/coding-agent/src/core/system-prompt.ts`: `<active_skills>`는 operator 기본값만, budget 스킬 부분은 세션 시작 순서로 고정
+- R6은 `system-prompt.ts`를 바꾸지 않는다. 첫 프롬프트의 선택(`<active_skills>`, budget 질의)을 helper가 고정해 그대로 넘긴다
 - `packages/coding-agent/test/suite/prompt-cache-stability.test.ts`(#117): `it.fails`를 `it`으로 바꾸고 harness 예외 제거(AC 9, 10)
 - `packages/coding-agent/src/core/extensions/builtin/todo-checklist.ts`: 활성 todo가 바뀔 때 후보 줄 (049가 있을 때)
 - `packages/coding-agent/examples/extensions/subagent/worker-env.ts`: `OMK_SKILL_SEARCH`는 그대로 물려주고 `OMK_SKILL_SEARCH_SUGGEST=0`을 더한다(R7의 자동 후보 끄기. 034의 `OMK_DELIVERABLE_GUARD=0`과 같은 방식)
