@@ -5,7 +5,13 @@ import { appendFileDurablySync } from "../durable-file-io.ts";
 import { canonicalJson } from "../run-journal.ts";
 import type { SessionOwnerLease } from "../session-owner-lease.ts";
 import { parseRunEvent, projectRun, type RunEvent, type RunProjection } from "./events.ts";
-import { digestBytes, digestObject, readRegularFile, VerifiedRunError } from "./storage.ts";
+import {
+	digestBytes,
+	digestObject,
+	readRegularFile,
+	VerifiedRunConcurrentChangeError,
+	VerifiedRunError,
+} from "./storage.ts";
 
 export interface RunJournalRecord {
 	readonly version: 2;
@@ -22,11 +28,31 @@ export interface JournalSnapshot {
 }
 export const journalPath = (runPath: string): string => join(runPath, "journal.v2.jsonl");
 
+const JOURNAL_MAX_BYTES = 8388608;
+/** Re-reads after the first attempt; only a live writer appending mid-read is retried (spec 056). */
+export const JOURNAL_READ_RETRIES = 3;
+const pause = new Int32Array(new SharedArrayBuffer(4));
+
+/** Reads journal bytes, retrying only a concurrent change; a fourth change or any other error surfaces unchanged. */
+export function readJournalBytes(
+	path: string,
+	read: (path: string, maxBytes: number) => Buffer = readRegularFile,
+): { readonly bytes: Buffer; readonly attempts: number } {
+	for (let attempt = 1; ; attempt++) {
+		try {
+			return { bytes: read(path, JOURNAL_MAX_BYTES), attempts: attempt };
+		} catch (error) {
+			if (!(error instanceof VerifiedRunConcurrentChangeError) || attempt > JOURNAL_READ_RETRIES) throw error;
+			Atomics.wait(pause, 0, 0, attempt * 2);
+		}
+	}
+}
+
 /** Read-only: no implicit recovery, tail truncation, mode changes, or model calls. */
 export function readRunJournal(runPath: string): JournalSnapshot | null {
 	const path = journalPath(runPath);
 	if (!existsSync(path)) return null;
-	const bytes = readRegularFile(path, 8388608);
+	const { bytes } = readJournalBytes(path);
 	if (!bytes.length || bytes.at(-1) !== 10) throw new VerifiedRunError("journal_truncated");
 	const lines = new TextDecoder("utf-8", { fatal: true }).decode(bytes).slice(0, -1).split("\n");
 	const records: RunJournalRecord[] = [];

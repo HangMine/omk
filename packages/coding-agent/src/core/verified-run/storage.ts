@@ -13,6 +13,13 @@ export class VerifiedRunError extends Error {
 	}
 }
 
+/** A file changed while it was being read (size, ctime or length moved). Same public code as before. */
+export class VerifiedRunConcurrentChangeError extends VerifiedRunError {
+	constructor() {
+		super("integrity");
+	}
+}
+
 export const digestBytes = (bytes: Uint8Array | string): string => createHash("sha256").update(bytes).digest("hex");
 export const digestObject = (value: unknown): string => digestBytes(canonicalJson(value));
 
@@ -25,7 +32,7 @@ export function readRegularFile(path: string, maxBytes: number): Buffer {
 		const bytes = readFileSync(fd);
 		const after = fstatSync(fd, { bigint: true });
 		if (before.size !== after.size || before.ctimeNs !== after.ctimeNs || BigInt(bytes.length) !== before.size) {
-			throw new VerifiedRunError("integrity");
+			throw new VerifiedRunConcurrentChangeError();
 		}
 		return bytes;
 	} finally {
