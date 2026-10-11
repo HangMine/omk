@@ -80,6 +80,8 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `OMK_PACKAGE_DIR` | Override the package directory, useful for Nix/Guix store paths |
 | `OMK_OFFLINE` | Disable startup network operations, including update checks and install/update telemetry |
 | `OMK_SKIP_VERSION_CHECK` | Disable the latest-version request |
+| `OMK_TRUST_PROJECT` | Project trust gate for a cloned project's code ([Project trust](packages.md#project-trust)). `1` trusts the project OMK started in, only for non-interactive runs (`-p`, `--mode json`, `--mode rpc`, workers, CI, `omk install`/`update`/`list`/`config`, `omk package doctor`), and prints one stderr line naming it. It is read once at startup and removed from OMK's environment, so the `bash` tool and other child processes do not inherit it. Interactive `omk` ignores `1` and asks. `0` keeps project code off in every mode, over a stored answer, and is inherited. Any other value is ignored |
+| `OMK_TRUST_PROJECT_MCP` | `1` trusts a project's `.omk/mcp.json` servers without asking; separate from `OMK_TRUST_PROJECT`. See [MCP](mcp.md) |
 | `OMK_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `OMK_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
 | `PI_DISABLE_INPUT_REDACTION` | Stop masking credentials on the way to the model and the session. Persistence and report boundaries still mask |

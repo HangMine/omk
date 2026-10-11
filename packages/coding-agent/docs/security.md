@@ -89,6 +89,20 @@ OMK does not sandbox extension JavaScript separately. Extension code, extension 
 
 AgentSession's built-in local bash sandbox wraps only built-in local bash child processes. It does not contain extension callbacks, custom tools, OMK file tools, or the OMK process. For broader isolation, run the whole process inside a container or VM, or route every relevant tool through an isolated backend. See [Containerization](containerization.md).
 
+### 4.1 Cloned projects and install scripts
+
+A repository's `.omk/` can name code for OMK to load: `packages` and `extensions` in `.omk/settings.json`, files in `.omk/extensions/`, and the `npmCommand`, `shellPath` and `shellCommandPrefix` settings. OMK withholds all of these until you trust the project ([Project trust](packages.md#project-trust)):
+
+- Interactive `omk` asks once per project and stores the answer in `~/.omk/project-trust.json` (owner-only), tied to a hash of the gated settings values, the relative paths of the files under `.omk/extensions/`, and the contents of the `package.json` manifests the extension loader reads there. A changed hash asks again. Editing the contents of an existing extension file does not change the hash.
+- `-p`, json, rpc, workers and the package commands never ask. They follow a stored answer, or `OMK_TRUST_PROJECT=1`.
+- `OMK_TRUST_PROJECT=1` is read once when OMK starts, applies only to the directory OMK started in, applies only to non-interactive runs, and is removed from OMK's environment so the `bash` tool and other child processes do not inherit it. A model cannot widen it by running `cd elsewhere && omk -p`. Interactive `omk` ignores it and asks.
+- `OMK_TRUST_PROJECT=0` keeps project code off everywhere and is inherited by child processes.
+- The subagent extension passes `OMK_TRUST_PROJECT=1` to a worker only when the parent trusted its project, the worker's directory is that project, a directory inside it, or a git worktree of the same repository, and the worker's directory hashes the same.
+- The trust file lives under the home directory, not under the agent dir (`OMK_CODING_AGENT_DIR`), next to the MCP trust store (`~/.omk/mcp-trust.json`). One answer then covers every agent dir you run with, and the file is outside every repository, so a project cannot write its own trust.
+- Project paths are compared after resolving symlinks, as exact strings. Case-insensitive file systems (default macOS and Windows) are not handled specially and have not been verified: the same directory opened with different letter case may be asked about again.
+
+Package lifecycle scripts (`preinstall`, `install`, `postinstall`) are skipped for every managed install unless you pass `--allow-scripts` to an explicit `omk install` or `omk update` ([Install scripts](packages.md#install-scripts)).
+
 ## 5. Security Checklist for Users
 
 Before installing or upgrading an extension, verify:
@@ -99,6 +113,7 @@ Before installing or upgrading an extension, verify:
 - [ ] The extension's network behavior is justified by its functionality.
 - [ ] You have a backup of `~/.omk/agent/` (especially `auth.json` and sessions).
 - [ ] You have considered running the extension in a sandboxed environment.
+- [ ] Before trusting a cloned project, you have read its `.omk/settings.json` and `.omk/extensions/`.
 
 ## 6. Security Checklist for Extension Developers
 

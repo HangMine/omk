@@ -1,7 +1,9 @@
 import chalk from "chalk";
 import { Markdown, type MarkdownTheme } from "omk-tui";
 import { selectConfig } from "./cli/config-selector.ts";
+import { getPackageCommandUsage, printPackageCommandHelp } from "./cli/package-command-help.ts";
 import { CONFIG_COMMAND, type PackageCommand, resolvePackageCommand } from "./cli/package-commands.ts";
+import { applyCommandProjectTrustGate } from "./cli/project-trust-gate.ts";
 import {
 	APP_NAME,
 	detectInstallMethod,
@@ -13,6 +15,11 @@ import {
 	type SelfUpdateCommand,
 	VERSION,
 } from "./config.ts";
+import {
+	ALLOW_SCRIPTS_FLAG,
+	formatAllowScriptsHint,
+	looksLikeSkippedInstallScript,
+} from "./core/package-install-args.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { spawnProcess } from "./utils/child-process.ts";
@@ -49,6 +56,7 @@ interface PackageCommandOptions {
 	updateTarget?: UpdateTarget;
 	local: boolean;
 	force: boolean;
+	allowScripts: boolean;
 	help: boolean;
 	invalidOption?: string;
 	invalidArgument?: string;
@@ -66,85 +74,6 @@ function reportSettingsErrors(settingsManager: SettingsManager, context: string)
 	}
 }
 
-function getPackageCommandUsage(command: PackageCommand): string {
-	switch (command) {
-		case "install":
-			return `${APP_NAME} install <source> [-l]`;
-		case "remove":
-			return `${APP_NAME} remove <source> [-l]`;
-		case "update":
-			return `${APP_NAME} update [source|self|omk] [--self] [--extensions] [--extension <source>] [--force]`;
-		case "list":
-			return `${APP_NAME} list`;
-	}
-}
-
-function printPackageCommandHelp(command: PackageCommand): void {
-	switch (command) {
-		case "install":
-			console.log(`${chalk.bold("Usage:")}
-  ${getPackageCommandUsage("install")}
-
-Install a package and add it to settings.
-
-Options:
-  -l, --local    Install project-locally (.omk/settings.json)
-
-Examples:
-  ${APP_NAME} install npm:@foo/bar
-  ${APP_NAME} install git:github.com/user/repo
-  ${APP_NAME} install git:git@github.com:user/repo
-  ${APP_NAME} install https://github.com/user/repo
-  ${APP_NAME} install ssh://git@github.com/user/repo
-  ${APP_NAME} install ./local/path
-`);
-			return;
-
-		case "remove":
-			console.log(`${chalk.bold("Usage:")}
-  ${getPackageCommandUsage("remove")}
-
-Remove a package and its source from settings.
-Alias: ${APP_NAME} uninstall <source> [-l]
-
-Options:
-  -l, --local    Remove from project settings (.omk/settings.json)
-
-Examples:
-  ${APP_NAME} remove npm:@foo/bar
-  ${APP_NAME} uninstall npm:@foo/bar
-`);
-			return;
-
-		case "update":
-			console.log(`${chalk.bold("Usage:")}
-  ${getPackageCommandUsage("update")}
-
-Update OMK and installed packages.
-
-Options:
-  --self                  Update OMK only
-  --extensions            Update installed packages only
-  --extension <source>    Update one package only
-  --force                 Reinstall OMK even if the current version is latest
-
-Short forms:
-  ${APP_NAME} update                Update OMK and all extensions
-  ${APP_NAME} update <source>       Update one package
-  ${APP_NAME} update omk            Update OMK only (self works as alias to omk)
-`);
-			return;
-
-		case "list":
-			console.log(`${chalk.bold("Usage:")}
-  ${getPackageCommandUsage("list")}
-
-List installed packages from user and project settings.
-`);
-			return;
-	}
-}
-
 function parsePackageCommand(args: string[]): PackageCommandOptions | undefined {
 	const [rawCommand, ...rest] = args;
 	const command = resolvePackageCommand(rawCommand);
@@ -154,6 +83,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 
 	let local = false;
 	let force = false;
+	let allowScripts = false;
 	let help = false;
 	let invalidOption: string | undefined;
 	let invalidArgument: string | undefined;
@@ -195,6 +125,12 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			} else {
 				invalidOption = invalidOption ?? arg;
 			}
+			continue;
+		}
+
+		if (arg === ALLOW_SCRIPTS_FLAG) {
+			if (command === "install" || command === "update") allowScripts = true;
+			else invalidOption = invalidOption ?? arg;
 			continue;
 		}
 
@@ -276,6 +212,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 		updateTarget,
 		local,
 		force,
+		allowScripts,
 		help,
 		invalidOption,
 		invalidArgument,
@@ -394,6 +331,8 @@ export async function handleConfigCommand(args: string[]): Promise<boolean> {
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	reportSettingsErrors(settingsManager, "config command");
+	// Spec 053 R10: never asks; an untrusted project's packages/npmCommand stay off, with a stderr warning.
+	await applyCommandProjectTrustGate(cwd, settingsManager);
 	const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
 	const resolvedPaths = await packageManager.resolve();
 
@@ -458,9 +397,17 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	reportSettingsErrors(settingsManager, "package command");
+	// Spec 053 R10: an untrusted project's packages/npmCommand must not run here; stored trust or
+	// OMK_TRUST_PROJECT=1 (non-interactive) opens it. Never asks; the warning goes to stderr.
+	await applyCommandProjectTrustGate(cwd, settingsManager);
 	const selfUpdateNpmCommand = settingsManager.getGlobalSettings().npmCommand;
 
-	const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
+	const packageManager = new DefaultPackageManager({
+		cwd,
+		agentDir,
+		settingsManager,
+		allowScripts: options.allowScripts,
+	});
 
 	packageManager.setProgressCallback((event) => {
 		if (event.type === "start") {
@@ -580,6 +527,14 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : "Unknown package command error";
 		console.error(chalk.red(`Error: ${message}`));
+		// Only a failure that looks like a skipped install script earns the --allow-scripts hint.
+		if (
+			!options.allowScripts &&
+			(options.command === "install" || options.command === "update") &&
+			looksLikeSkippedInstallScript(message)
+		) {
+			console.error(chalk.dim(formatAllowScriptsHint(source, options.command)));
+		}
 		process.exitCode = 1;
 		return true;
 	}
