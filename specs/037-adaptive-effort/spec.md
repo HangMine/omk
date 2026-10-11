@@ -23,7 +23,7 @@ description: "Keep the configured reasoning effort while the agent plans, debugs
 | Classifier parity | Bench Analyst's `phase_r8_v3.decide` (sha256 `d0dcbf7856c5…`, lib `phase_r8_v2.py` `9353de25b324…`) | 310/310 fixture samples match | Any mismatch fails CI | `npx vitest run test/phase-classifier.test.ts` | `test/fixtures/phase-classifier-r8.json` |
 | Prompt cache | R8: 90.2% cache read; 16.1% of consecutive call pairs read < 50% of the previous prompt; gaps > 5 min only 0.5% (Bench Analyst, R8) | With the flag on, `systemHash`/`toolsHash` are constant for the whole session and the model never changes | Any hash change across turns fails CI | `npx vitest run test/suite/adaptive-effort-cache.test.ts` | that file + `llm-call.jsonl` cacheRead/cacheWrite around each switch |
 | Off cost (Perf) | main, same box | Paired 20-pair run, `paired_verdict.py --block startup_ms=5 --block idle_rss_mib=5` gives OK | BLOCK on a clear regression only (CI lower bound > 0 and median ≥ the value) | `/workspace/omk-bench-analyst/paired_verdict.py` (sha256 `07afdce05289…`) | Perf Engineer's TSV |
-| Benchmark | A arm (R8 conditions, everything `xhigh`) on the same pin | Staged A/B (see Measurement): pass rate non-inferior (`≥ A − 1` on common tasks) and paired median cost lower (95% CI strictly below 0) | Pass rate below `A − 1` | Staged A/B below | run ledger under `/workspace/omk-eval-*` |
+| Benchmark | A arm (R8 conditions, everything `xhigh`) on the same pin | Staged A/B (see Measurement): pass rate non-inferior (`≥ A − 1` on common tasks) and the median of per-run paired differences in `cost_in_usd_ticks` below 0 (bootstrap 95% CI strictly below 0) | Pass rate below `A − 1` | Staged A/B below | run ledger under `/workspace/omk-eval-*` |
 
 ## Problem
 
@@ -51,12 +51,17 @@ Where 033 wraps the stream:
 ### 1. Activation and insertion point
 
 - Off unless `OMK_ADAPTIVE_EFFORT=1` (exactly `1`; anything else, including unset, is off). Read once when the stream function is built.
-- **Insertion point: `core/sdk-provider-stream.ts:29`, outermost.** The composed stream is `adaptive(cap(provider))`:
+- **Insertion point: `core/sdk-provider-stream.ts` `createSdkProviderStream`, outermost.** After 059 (#128) lands, that function already returns `cap(llmCallLog(provider))`; 037 wraps it, so the composed stream is `adaptive(cap(llmCallLog(provider)))`:
 
   ```ts
-  const capped = createResponseReasoningCapStreamFn(createProviderStream(runtime), resolveResponseReasoningCapConfig());
+  const capped = createResponseReasoningCapStreamFn(
+  	createLlmCallRunLogStreamFn(createProviderStream(runtime)),
+  	resolveResponseReasoningCapConfig(),
+  );
   return process.env.OMK_ADAPTIVE_EFFORT === "1" ? createLazyAdaptiveEffortStreamFn(capped) : capped;
   ```
+
+  The 059 log is innermost, so each provider request (including a 033 retry) is logged with the effort it was actually sent with, after 037 and the cap have chosen it.
 
   `createLazyAdaptiveEffortStreamFn` is a few lines in `sdk-provider-stream.ts`: on its first call it does `await import("./adaptive-effort.ts")` and keeps the wrapper. With the flag off nothing is imported, the returned function is the same `capped` object as today, and request bytes match main.
 - **Composition with 033.** The adaptive wrapper decides the effort and passes it as `options.reasoning` to the cap wrapper. The cap therefore applies to the effort actually sent: it measures that attempt and, on overrun, retries one step below *that* effort. A 033 retry happens inside one outer call, so it is not a classification and does not move 037's state.
@@ -78,7 +83,7 @@ Each outer call resolves one phase from two inputs:
 
 Resolution, in order:
 
-1. Todo kind is `plan` → `plan`, source `todo`. `plan` only ever comes from the todo kind; the tool classifier cannot produce `plan`.
+1. Todo kind is `plan` → `plan`, source `todo`. `plan` only ever comes from the todo kind; the tool classifier cannot produce `plan`. The todo kind is one input to the phase, not the trigger for an effort change: effort changes are driven by the resolved phase through the hysteresis and cap in section 4 (Decision 3).
 2. Tool signal defined → that phase, source `tool` (the tool signal wins over a disagreeing todo kind).
 3. Todo kind defined → that kind, source `todo`.
 4. Otherwise keep the previous phase and its source; at the start of a run, no phase (low group).
@@ -128,8 +133,8 @@ decidePhase(input: { command: string; failed: boolean; prevPhase: Phase | undefi
 - **Low group sends `high`.** Target = `high`, or the ceiling if the ceiling is below `high`. If the model does not support the target, the next supported level below it is used. The low-group level is therefore the same whether the ceiling is `max` or `xhigh`, and it equals arm C's level, so Stage 1 (A vs C) results apply to B's low group directly.
 - **Clamped.** When the target's provider value equals the ceiling's provider value (ceiling `high` or below; grok-4.5 at `max`, which sends `"high"`), or the model supports no level at or below the target (reasoning undefined/off), nothing different is sent: `options` is passed unchanged and the call is logged `lowerClamped: true`. A clamped call is not a switch.
 - **Examples.** grok-4.7, ceiling `xhigh` (the bench): A all `xhigh`; B high group `xhigh`, low group `high`; C all `high`. Ceiling `max` on a model that maps `max` separately (for example a Claude model with `{"xhigh":"xhigh","max":"max"}`): A all `max`; B high group `max`, low group `high`; C all `high`.
-- **Hysteresis.** The group changes only when the new group holds for **2 consecutive classifications** (outer calls). Effort changes only on a group change.
-- **Cap.** At most **4 switches per run** (process). The run starts in low, so after the 4th switch it is back in low and stays there.
+- **Hysteresis.** The group changes only when the new group holds for **2 consecutive classifications** (outer calls, resolved phase from the todo kind and the tool classifier, section 2). Effort changes only on a group change. This replaces the earlier "change effort only when the todo changes" rule (Decision 3).
+- **Cap.** At most **4 switches per run** (process). The run starts in low, so after the 4th switch it is back in low and stays there. The cache cost of these switches is checked with Requirement 7 (`cacheRead`); see Decision 3 for the fallback.
 
 ### 5. Prompt cache rules (Tech Lead, required)
 
@@ -144,7 +149,7 @@ decidePhase(input: { command: string; failed: boolean; prevPhase: Phase | undefi
 With the flag on, 037 fills the fields 059 reserves as `null` and adds its effort fields, through a setter in 059's record module (with the flag off the setter is never called, `phase`/`phaseSource` stay `null` and the other fields are absent):
 
 - `phase`: `Phase | null`; `phaseSource`: `"todo" | "tool" | null`
-- `effort` (059's existing field) is the level actually sent, so 037 adds no separate `effortSent`
+- `effort` (059's existing field) is the level passed to the provider stream after 037 and the 033 cap chose it (059 sits innermost), and `effortSent` (059) is its provider wire value (for example `max` → `"xhigh"` on grok-4.7); 037 adds neither
 - `effortGroup`: `"low" | "high"`
 - `effortSwitch`: `{ from, to, n }` on the call where the group changed, else `null`
 - `lowerClamped`: boolean (section 4); there is no `raiseClamped`, since 037 never raises
@@ -203,7 +208,7 @@ biome, module-size, import-cycles, `tsgo --noEmit`, and the touched vitest files
 
 ### Requirement 7 - Cache read across effort changes on a Claude model (Priority: P0, 인호 / Tech Lead)
 
-Anthropic invalidates the message-level cache when thinking settings change; system and tools cache survive. Using 059's `llm-call.jsonl` from a Claude-model run with `OMK_ADAPTIVE_EFFORT=1` (a short live session, or the Claude arm if one is run), report for every `effortSwitch` the cache-read ratio `cacheRead / (input + cacheRead + cacheWrite)` of the call right after the change versus the call right before, with `cacheWrite` shown separately, the number of switches, and `gapMs` (to separate TTL expiry from the effort change). The same report is made for the xAI arm. This is a reported measurement, not a pass/fail gate; a drop is expected on Claude and bounded by the 4-switch cap.
+Anthropic invalidates the message-level cache when thinking settings change; system and tools cache survive. Using 059's `llm-call.jsonl` from a Claude-model run with `OMK_ADAPTIVE_EFFORT=1` (a short live session, or the Claude arm if one is run), report for every `effortSwitch` the cache-read ratio `cacheRead / (input + cacheRead + cacheWrite)` of the call right after the change versus the call right before, with `cacheWrite` shown separately, the number of switches, and `gapMs` (to separate TTL expiry from the effort change). The same report is made for the xAI arm. This is a reported measurement, not a pass/fail gate; a drop is expected on Claude and bounded by the 4-switch cap. If the drop is noticeable, Decision 3's fallback (todo-only switching) applies. **The real Claude run costs credits and does not run until 인호 approves it**; a local mock run cannot replace it, because the cache behavior is the provider's.
 
 ## Measurement (staged A/B, pending credits and approval)
 
@@ -217,7 +222,7 @@ Bench Analyst R8 v3 rerun (2026-10-11, v3 classifier, 11,251 tool calls): low gr
 
 **Stage 1: A vs C** (runs after the joint A/B credits exist and 인호 approves the spend):
 - Pass rate, non-inferiority: C ≥ A − 1 on common tasks (the earlier A/B rule `B ≥ A − 1`).
-- Cost: paired difference of per-run median cost; C wins only if the 95% CI is strictly below 0.
+- Cost: the median of per-run paired differences in `cost_in_usd_ticks` (d = C − A, paired by task × repetition), with a bootstrap 95% CI from Bench Analyst's `/workspace/omk-bench-analyst/paired_verdict.py` (sha256 `07afdce05289…`: 10,000 resamples, fixed seed `20261011`, the team rule). C wins on cost only if the CI is strictly below 0.
 - Time is reported only.
 
 **Stage 2** depends on Stage 1:
@@ -227,7 +232,7 @@ Bench Analyst R8 v3 rerun (2026-10-11, v3 classifier, 11,251 tool calls): low gr
 
 **Common to all stages**:
 - Frozen before running (Bench Analyst, per the constitution): pin SHA, tasks and controls, 3 runs/task/arm, win rule and uncertainty statement. Pairing is by task × repetition. Runs with ≥ 1 switch are a secondary view only.
-- Cost source: xAI `cost_in_usd_ticks` from the adapter's `omk_usage_raw.jsonl`. `usage.cost.billed` is not on main (only on `ab/leak-fixes` `53924015ba`); if it lands before the run, use it. Cache read and cache write are shown separately. Claude `cacheWrite` is priced only when running Claude.
+- Cost source: xAI `cost_in_usd_ticks` from the adapter's `omk_usage_raw.jsonl` (joined to `llm-call.jsonl` per call where needed). `costTotal` (`usage.cost.total`, logged by 059) undercounts xAI because it leaves out reasoning tokens, exactly the tokens 037 changes, so it is reported only and never used for a verdict. A call whose usage never arrived (`usageMissing: true` in 059, e.g. a cap abort) is counted with a lower and an upper bound, not as 0. `usage.cost.billed` is not on main (only on `ab/leak-fixes` `53924015ba`); if it lands before the run and matches the ticks, it may be shown alongside them. Cache read and cache write are shown separately. Claude `cacheWrite` is priced only when running Claude.
 - Cache report: per switch, cache-read ratio of the call before vs after (Requirement 7), against the R8 reference (16.1% of consecutive pairs read < 50% of the previous prompt).
 - Report: pass count per task per arm; switches per run (median, p90, share at the cap); share of `lowerClamped` calls; time and cost per run.
 - Until then the effect is unverified and the flag stays off (also in 1.5.0).
@@ -251,6 +256,7 @@ Bench Analyst R8 v3 rerun (2026-10-11, v3 classifier, 11,251 tool calls): low gr
 
 1. **Direction reversed: lower the low group instead of raising the high group** (Tech Lead, 2026-10-11 15:18 KST). The bench base is `xhigh`, the top grok-4.7 wire level, so the earlier "raise the high group one level" design was a no-op (every raise clamped). This reverses the earlier "037 v1 does not change the default effort" decision. Refined later the same day (Tech Lead): the configured effort is the ceiling and is never exceeded; the low group is fixed to `high` (or the ceiling if lower, or the next supported level below), not "one level below"; the A/B is staged (A vs C first). Flag off still changes nothing.
 2. **Bench's phase script stays out of the repo.** Only the masked JSON fixture is committed. `phase_r8_v3.py` sha256 `d0dcbf7856c52f781742b903095aea47e06872f6da69fd17a662dd9af29012a5` (lib `phase_r8_v2.py` `9353de25b32401a32c87331d4a3b19911b8f753d8c06ab7e6560367964378a2e`). A rule change updates the TypeScript rules, the fixture and these sha256 values in the same PR.
+3. **Effort switches on the resolved phase (tool classifier + todo kind), not only on todo changes** (Tech Lead, 2026-10-11, PR #129 review). This replaces Tech Lead's earlier rule "change effort only when the todo changes". Rule: the group changes after 2 consecutive classifications in the new group, at most 4 switches per run (section 4). Reason: todo-only switching would never act in runs that use no todos (in R8, 142/265 runs never called `update_todo`), and Bench Analyst's R8 v3 analysis and the A/B design are based on this rule. The prompt-cache cost of switching is checked with Requirement 7's `cacheRead`; if on a Claude model `cacheRead` drops noticeably because of the switches, 037 falls back to todo-only switching.
 
 ## Expected Files
 
@@ -261,7 +267,9 @@ This PR:
 Implementation PR:
 - `packages/coding-agent/src/core/phase-classifier.ts`: pure classifier and phase resolution
 - `packages/coding-agent/src/core/adaptive-effort.ts`: `StreamFn` wrapper, hysteresis and cap state, `activeTodoKind()` read, 059 field setter
-- `packages/coding-agent/src/core/sdk-provider-stream.ts`: flag check and lazy wrapper (outermost, around the 033 cap)
+- `packages/coding-agent/src/core/sdk-provider-stream.ts`: flag check and lazy wrapper (outermost, around `cap(llmCallLog(provider))`)
+- `packages/coding-agent/src/core/llm-call-run-log.ts`: setter that fills `phase`/`phaseSource` (and 037's effort fields) for the current call; never called with the flag off
+- `packages/coding-agent/CHANGELOG.md`: Unreleased entry for the opt-in flag (and `README.md` release section via `scripts/sync-readme-releases.mjs`)
 - `packages/coding-agent/examples/extensions/subagent/worker-env.ts`: `OMK_ADAPTIVE_EFFORT=0`
 - `packages/coding-agent/docs/environment-variables.md`
 - Tests: `test/phase-classifier.test.ts`, `test/adaptive-effort.test.ts`, `test/adaptive-effort-flag-off-cold-path.test.ts`, `test/suite/adaptive-effort-cache.test.ts`
