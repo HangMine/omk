@@ -19,7 +19,8 @@ export const SKILL_SEARCH_MAX_QUERY = 512;
 export const SKILL_SEARCH_PROMPT_LINE =
 	"\n\nSkills (specialized instructions for specific tasks) are not listed here. Find them with the skill_search tool, then use the read tool on a skill's location before applying it. Relevant skill candidates may also arrive as messages during the conversation.";
 
-export type SkillSearchInactiveReason = "flag_off" | "few_skills" | "no_read_tool" | "none";
+/** `name_conflict`: another tool (extension, MCP or SDK) already has the name `skill_search`. */
+export type SkillSearchInactiveReason = "flag_off" | "few_skills" | "no_read_tool" | "name_conflict" | "none";
 
 export interface SkillSearchActivation {
 	readonly active: boolean;

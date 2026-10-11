@@ -12,6 +12,7 @@ import { type Context, fauxAssistantMessage, fauxToolCall, type Message } from "
 import { serializePromptMessage, systemHash, toolsHash } from "omk-ai/prompt-hash";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ExtensionFactory } from "../../src/core/extensions/types.ts";
 import { SKILL_INDEX_FILE } from "../../src/core/skill-search.ts";
 import { SKILL_SEARCH_PROMPT_LINE, SKILL_SEARCH_TOOL_NAME } from "../../src/core/skill-search-mode.ts";
 import { loadSkillsFromDir, type Skill } from "../../src/core/skills.ts";
@@ -98,6 +99,7 @@ interface RunOptions {
 	readonly skills: Skill[];
 	readonly search?: boolean;
 	readonly reload?: boolean;
+	readonly extensions?: ExtensionFactory[];
 }
 
 async function run(
@@ -110,7 +112,9 @@ async function run(
 	vi.stubEnv("OMK_SKILL_SEARCH", undefined);
 	vi.stubEnv("OMK_SKILL_SEARCH_SUGGEST", undefined);
 	for (const [key, value] of Object.entries(options.env)) vi.stubEnv(key, value);
-	const resourceLoader = createTestResourceLoader({ extensionsResult: await createTestExtensionsResult([]) });
+	const resourceLoader = createTestResourceLoader({
+		extensionsResult: await createTestExtensionsResult(options.extensions ?? []),
+	});
 	resourceLoader.getSkills = () => ({ skills: options.skills, diagnostics: [] });
 	const harness = await createHarness({ tools: [readTool()], resourceLoader });
 	harnesses.push(harness);
@@ -218,5 +222,49 @@ describe("skill-search session (spec 050)", () => {
 			}));
 		expect(view(on)).toEqual(view(off));
 		expect(existsSync(join(on.agentDir, "cache", SKILL_INDEX_FILE))).toBe(false);
+	});
+});
+
+/** An extension tool that happens to be called `skill_search` (no prompt snippet, so no prompt line of its own). */
+const foreignSkillSearch: ExtensionFactory = (pi) => {
+	pi.registerTool({
+		name: SKILL_SEARCH_TOOL_NAME,
+		label: "Foreign skill search",
+		description: "Someone else's skill_search.",
+		parameters: Type.Object({ q: Type.String() }),
+		execute: async () => ({ content: [{ type: "text", text: "foreign" }], details: {} }),
+	});
+};
+
+describe("a foreign tool named skill_search (#122 review)", () => {
+	const view = (result: { calls: Call[]; harness: Harness }) =>
+		result.calls.map(({ systemText, toolNames, messages }) => ({
+			systemText: systemText.split(result.harness.tempDir).join("<cwd>"),
+			toolNames,
+			messages,
+		}));
+
+	it("flag off: keeps <available_skills> and the same system prompt as without the tool", async () => {
+		const skills = syntheticSkills(tempDir());
+		const without = await run({ env: {}, skills });
+		const foreign = await run({ env: {}, skills, extensions: [foreignSkillSearch] });
+		expect(foreign.calls[0].systemText).toContain("<available_skills>");
+		expect(foreign.calls[0].systemText).not.toContain(SKILL_SEARCH_PROMPT_LINE.trim());
+		expect(view(foreign).map((call) => call.systemText)).toEqual(view(without).map((call) => call.systemText));
+	});
+
+	it("flag on: skips our tool, warns once and behaves exactly like flag off", async () => {
+		const skills = syntheticSkills(tempDir());
+		const off = await run({ env: {}, skills, extensions: [foreignSkillSearch] });
+		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+		const on = await run({ env: { OMK_SKILL_SEARCH: "1" }, skills, extensions: [foreignSkillSearch] });
+		const warnings = stderr.mock.calls.filter(([chunk]) => String(chunk).includes("already named skill_search"));
+		stderr.mockRestore();
+		expect(warnings).toHaveLength(1);
+		expect(on.calls[0].toolNames.filter((name) => name === SKILL_SEARCH_TOOL_NAME)).toHaveLength(1);
+		expect(on.calls[0].systemText).toContain("<available_skills>");
+		expect(on.calls.flatMap((call) => call.userTexts).join("\n")).not.toContain("<skill_candidates>");
+		expect(view(on)).toEqual(view(off));
+		expect(readAll(on.logDir)).toContain('"inactiveReason":"name_conflict"');
 	});
 });

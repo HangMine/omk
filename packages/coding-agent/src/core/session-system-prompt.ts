@@ -36,6 +36,11 @@ export interface SessionSystemPromptInput {
 	readonly activeSkillSource?: string;
 	readonly contextFiles: readonly ContextFile[];
 	readonly contextBudget?: BuildSystemPromptOptions["contextBudget"];
+	/**
+	 * Spec 050: the session's own skill-search decision (`SkillSearchGate.active`). A tool that
+	 * merely has the name `skill_search` (extension, MCP) never switches the prompt to search mode.
+	 */
+	readonly skillSearch?: boolean;
 }
 
 export interface SessionSystemPromptAssembly {
@@ -76,8 +81,8 @@ export function assembleSessionSystemPrompt(input: SessionSystemPromptInput): Se
 		toolSnippets,
 		promptGuidelines,
 		contextBudget: input.contextBudget,
-		// Spec 050: the fixed tool is registered only in a skill-search session (`PromptSkillFreeze`).
-		...(validToolNames.includes(SKILL_SEARCH_TOOL_NAME) ? { skillSearch: true } : {}),
+		// Spec 050: search mode only when the session decided it and our fixed tool is active.
+		...(input.skillSearch === true && validToolNames.includes(SKILL_SEARCH_TOOL_NAME) ? { skillSearch: true } : {}),
 	};
 	const built: BuiltSystemPrompt = buildSystemPromptPlan(options);
 	return { options, prompt: built.prompt, cacheBoundary: built.cacheBoundary };

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createActiveSkillState } from "../src/core/active-skill-state.ts";
+import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import {
 	PROMPT_SKILLS_CUSTOM_TYPE,
 	PROMPT_SKILLS_RELEVANT_LIMIT,
@@ -204,5 +205,59 @@ describe("PromptSkillFreeze (spec 050 R6)", () => {
 		});
 		expect(text).not.toContain("programming");
 		expect(text).not.toContain("/skills/");
+	});
+});
+
+describe("PromptSkillFreeze skill-search setup (spec 050 R1/R2, #122 review)", () => {
+	const ON = { OMK_SKILL_SEARCH: "1" };
+	const many = Array.from({ length: 30 }, (_, i) => skill(`s${i}`, `Skill number ${i}.`));
+	const sdkTool = (name: string) => ({ name }) as ToolDefinition;
+	const dirs: string[] = [];
+	afterEach(() => {
+		while (dirs.length > 0) rmSync(dirs.pop() as string, { recursive: true, force: true });
+	});
+
+	it("does not read the skill list when the flag is off", () => {
+		let reads = 0;
+		const freeze = new PromptSkillFreeze();
+		const skills = () => {
+			reads++;
+			return many;
+		};
+		freeze.skillSearch.setup({ skills, hasReadTool: true, env: {} });
+		expect(reads).toBe(0);
+		expect(freeze.skillSearch.active).toBe(false);
+		expect(freeze.skillSearch.withTool([sdkTool("other")], []).map((tool) => tool.name)).toEqual(["other"]);
+	});
+
+	it("adds the fixed tool once per build in an active session", () => {
+		const freeze = new PromptSkillFreeze();
+		freeze.skillSearch.setup({ skills: () => many, hasReadTool: true, env: ON });
+		const first = freeze.skillSearch.withTool([sdkTool("other")], ["ext-tool"]);
+		const second = freeze.skillSearch.withTool([sdkTool("other")], ["ext-tool"]);
+		expect(first.map((tool) => tool.name)).toEqual(["other", "skill_search"]);
+		expect(second[1]).toBe(first[1]);
+		expect(freeze.skillSearch.active).toBe(true);
+	});
+
+	it("skips its tool, warns once and stays off when another tool is named skill_search", () => {
+		for (const [sdk, ext] of [
+			[[sdkTool("skill_search")], []],
+			[[], ["skill_search"]],
+		] as const) {
+			const warnings: string[] = [];
+			const warn = (message: string) => warnings.push(message);
+			const freeze = new PromptSkillFreeze();
+			freeze.skillSearch.setup({ skills: () => many, hasReadTool: true, env: ON });
+			expect(freeze.skillSearch.withTool([...sdk], [...ext], warn).map((tool) => tool.name)).toEqual(
+				sdk.map((tool) => tool.name),
+			);
+			expect(freeze.skillSearch.withTool([...sdk], [...ext], warn)).toHaveLength(sdk.length);
+			// The conflict is final for the session, even if the other tool goes away.
+			expect(freeze.skillSearch.withTool([], [], warn)).toEqual([]);
+			expect(freeze.skillSearch.active).toBe(false);
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0]).toContain("skill_search");
+		}
 	});
 });
