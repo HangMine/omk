@@ -3,7 +3,7 @@ import { Markdown, type MarkdownTheme } from "omk-tui";
 import { selectConfig } from "./cli/config-selector.ts";
 import { getPackageCommandUsage, printPackageCommandHelp } from "./cli/package-command-help.ts";
 import { CONFIG_COMMAND, type PackageCommand, resolvePackageCommand } from "./cli/package-commands.ts";
-import { applyProjectTrustGate } from "./cli/project-trust-gate.ts";
+import { applyCommandProjectTrustGate } from "./cli/project-trust-gate.ts";
 import {
 	APP_NAME,
 	detectInstallMethod,
@@ -15,7 +15,11 @@ import {
 	type SelfUpdateCommand,
 	VERSION,
 } from "./config.ts";
-import { ALLOW_SCRIPTS_FLAG, formatAllowScriptsHint } from "./core/package-install-args.ts";
+import {
+	ALLOW_SCRIPTS_FLAG,
+	formatAllowScriptsHint,
+	looksLikeSkippedInstallScript,
+} from "./core/package-install-args.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { spawnProcess } from "./utils/child-process.ts";
@@ -327,7 +331,8 @@ export async function handleConfigCommand(args: string[]): Promise<boolean> {
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	reportSettingsErrors(settingsManager, "config command");
-	await applyProjectTrustGate({ cwd, settingsManager, mode: "interactive" });
+	// Spec 053 R10: never asks; an untrusted project's packages/npmCommand stay off, with a stderr warning.
+	await applyCommandProjectTrustGate(cwd, settingsManager);
 	const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
 	const resolvedPaths = await packageManager.resolve();
 
@@ -392,8 +397,9 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	reportSettingsErrors(settingsManager, "package command");
-	// Spec 053: an untrusted project's npmCommand must not run here; stored trust or OMK_TRUST_PROJECT=1 opens it.
-	await applyProjectTrustGate({ cwd, settingsManager, mode: "interactive" });
+	// Spec 053 R10: an untrusted project's packages/npmCommand must not run here; stored trust or
+	// OMK_TRUST_PROJECT=1 (non-interactive) opens it. Never asks; the warning goes to stderr.
+	await applyCommandProjectTrustGate(cwd, settingsManager);
 	const selfUpdateNpmCommand = settingsManager.getGlobalSettings().npmCommand;
 
 	const packageManager = new DefaultPackageManager({
@@ -521,7 +527,12 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : "Unknown package command error";
 		console.error(chalk.red(`Error: ${message}`));
-		if (!options.allowScripts && (options.command === "install" || options.command === "update")) {
+		// Only a failure that looks like a skipped install script earns the --allow-scripts hint.
+		if (
+			!options.allowScripts &&
+			(options.command === "install" || options.command === "update") &&
+			looksLikeSkippedInstallScript(message)
+		) {
 			console.error(chalk.dim(formatAllowScriptsHint(source, options.command)));
 		}
 		process.exitCode = 1;

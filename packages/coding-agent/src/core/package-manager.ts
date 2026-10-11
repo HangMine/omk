@@ -941,7 +941,8 @@ export class DefaultPackageManager implements PackageManager {
 
 	async update(source?: string): Promise<void> {
 		const globalSettings = this.settingsManager.getGlobalSettings();
-		const projectSettings = this.settingsManager.getProjectSettings();
+		// Spec 053: an untrusted project's packages are neither updated nor installed.
+		const projectSettings = trustedProjectSettings(this.settingsManager);
 		const identity = source ? this.getPackageIdentity(source) : undefined;
 		let matched = false;
 		const updateSources: ConfiguredUpdateSource[] = [];

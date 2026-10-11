@@ -1,6 +1,7 @@
 /**
  * Spec 053 R1-R3: package lifecycle scripts are off unless the user passes --allow-scripts
- * to an explicit `omk install` / `omk update`, and failures name that option.
+ * to an explicit `omk install` / `omk update`, and failures that look like a skipped install
+ * script name that option.
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -164,8 +165,10 @@ describe("omk install --allow-scripts (CLI)", () => {
 		expect(calls[0]).not.toContain("--ignore-scripts");
 	});
 
-	it("names --allow-scripts when an install without it fails", async () => {
-		vi.spyOn(DefaultPackageManager.prototype, "installAndPersist").mockRejectedValue(new Error("npm install failed"));
+	it("names --allow-scripts when an install without it fails like a skipped install script", async () => {
+		vi.spyOn(DefaultPackageManager.prototype, "installAndPersist").mockRejectedValue(
+			new Error("Error: Could not locate the bindings file. Tried: build/Release/addon.node"),
+		);
 		vi.spyOn(console, "log").mockImplementation(() => {});
 		const errors: string[] = [];
 		vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -174,6 +177,18 @@ describe("omk install --allow-scripts (CLI)", () => {
 		expect(await handlePackageCommand(["install", "npm:native-pkg"])).toBe(true);
 		expect(process.exitCode).toBe(1);
 		expect(errors.join("\n")).toContain(`omk install ${ALLOW_SCRIPTS_FLAG} npm:native-pkg`);
+	});
+
+	it("does not suggest --allow-scripts for unrelated install failures (PR #124 review B1)", async () => {
+		vi.spyOn(DefaultPackageManager.prototype, "installAndPersist").mockRejectedValue(new Error("npm ERR! 404"));
+		vi.spyOn(console, "log").mockImplementation(() => {});
+		const errors: string[] = [];
+		vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+			errors.push(args.map(String).join(" "));
+		});
+		expect(await handlePackageCommand(["install", "npm:missing-pkg"])).toBe(true);
+		expect(process.exitCode).toBe(1);
+		expect(errors.join("\n")).not.toContain(ALLOW_SCRIPTS_FLAG);
 	});
 
 	it("rejects --allow-scripts on commands that install nothing", async () => {
