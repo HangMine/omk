@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
 	formatHeadroomStatusLabel,
 	loadHeadroomVersion,
+	setHeadroomVersionProbeEnabledForTests,
 } from "../src/modes/interactive/components/control-panel-runtime-status.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 
@@ -53,6 +54,7 @@ describe.skipIf(process.platform === "win32")("InteractiveMode.stop() and a hung
 
 	afterEach(() => {
 		process.env.PATH = originalPath;
+		setHeadroomVersionProbeEnabledForTests(undefined);
 		if (dir) rmSync(dir, { recursive: true, force: true });
 		dir = undefined;
 	});
@@ -64,6 +66,7 @@ describe.skipIf(process.platform === "win32")("InteractiveMode.stop() and a hung
 		writeFileSync(join(dir, "headroom"), `#!/bin/sh\necho $$ > '${pidFile}'\nexec /bin/sleep 30\n`);
 		chmodSync(join(dir, "headroom"), 0o755);
 		process.env.PATH = dir;
+		setHeadroomVersionProbeEnabledForTests(true);
 
 		const probe = loadHeadroomVersion();
 		const pid = Number(await waitForFile(pidFile, 2_000));

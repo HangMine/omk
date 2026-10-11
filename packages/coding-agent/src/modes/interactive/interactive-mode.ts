@@ -144,7 +144,7 @@ import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.t
 import {
 	abortHeadroomVersionProbe,
 	createControlPanelStatusSnapshot,
-	loadHeadroomVersion,
+	repaintWhenHeadroomVersionResolves,
 } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
@@ -817,9 +817,7 @@ export class InteractiveMode {
 			controlPanel.setExpanded(this.getStartupExpansionState());
 			this.builtInHeader = controlPanel;
 			// The headroom label is probed off the render path; repaint once if a version turns up.
-			void loadHeadroomVersion().then((version) => {
-				if (version) this.ui.requestRender();
-			});
+			void repaintWhenHeadroomVersionResolves(() => this.ui.requestRender());
 			this.ui.showOverlay(new ControlPanelRightPaneComponent(controlPanelContent), {
 				anchor: "top-right",
 				width: CONTROL_PANEL_SIDEBAR_WIDTH,

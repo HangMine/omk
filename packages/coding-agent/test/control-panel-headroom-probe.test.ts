@@ -50,10 +50,15 @@ async function flushMicrotasks(): Promise<void> {
 	for (let i = 0; i < 20; i++) await Promise.resolve();
 }
 
-/** The module caches the probe for the process lifetime, so every case loads a fresh copy. */
+/**
+ * The module caches the probe for the process lifetime, so every case loads a fresh copy. Under VITEST the
+ * probe is off by default; these cases opt in because `node:child_process` is mocked here.
+ */
 async function loadModule() {
 	vi.resetModules();
-	return import("../src/modes/interactive/components/control-panel-runtime-status.ts");
+	const module = await import("../src/modes/interactive/components/control-panel-runtime-status.ts");
+	module.setHeadroomVersionProbeEnabledForTests(true);
+	return module;
 }
 
 const policyLabel = getHeadroomRuntimeStatus().policyId;
@@ -136,6 +141,55 @@ describe("headroom version probe off the render path (spec 046)", () => {
 		expect(childProcess.spawnSync).not.toHaveBeenCalled();
 	});
 
+	it("repaints exactly once when a version turns up", async () => {
+		answerProbes((command, args) => (command === "headroom" && args[0] === "--version" ? "3.0.1\n" : null));
+		const { repaintWhenHeadroomVersionResolves } = await loadModule();
+		const requestRender = vi.fn();
+
+		await repaintWhenHeadroomVersionResolves(requestRender);
+		await flushMicrotasks();
+
+		expect(requestRender).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not repaint when no headroom is found", async () => {
+		answerProbes(() => null);
+		const { repaintWhenHeadroomVersionResolves } = await loadModule();
+		const requestRender = vi.fn();
+
+		await repaintWhenHeadroomVersionResolves(requestRender);
+
+		expect(requestRender).not.toHaveBeenCalled();
+	});
+
+	it("bounds a hung headroom by the 750 ms timeout per probe and then falls back", async () => {
+		vi.useFakeTimers();
+		hangProbes();
+		const { formatHeadroomStatusLabel, loadHeadroomVersion } = await loadModule();
+		const settled = vi.fn();
+		void loadHeadroomVersion().then(settled);
+
+		await vi.advanceTimersByTimeAsync(749);
+		expect(childProcess.execFile).toHaveBeenCalledTimes(1);
+		expect(settled).not.toHaveBeenCalled();
+		expect(formatHeadroomStatusLabel()).toBe(policyLabel);
+
+		await vi.advanceTimersByTimeAsync(1);
+		await flushMicrotasks();
+		expect(childProcess.execFile).toHaveBeenCalledTimes(2);
+
+		for (let probe = 3; probe <= 4; probe++) {
+			await vi.advanceTimersByTimeAsync(750);
+			await flushMicrotasks();
+			expect(childProcess.execFile).toHaveBeenCalledTimes(probe);
+		}
+		await vi.advanceTimersByTimeAsync(750);
+		await flushMicrotasks();
+		expect(childProcess.execFile).toHaveBeenCalledTimes(4);
+		expect(settled).toHaveBeenCalledWith(null);
+		expect(formatHeadroomStatusLabel()).toBe(policyLabel);
+	});
+
 	it("abort kills the running probe, settles to null and starts no further probe", async () => {
 		vi.useFakeTimers();
 		hangProbes();
@@ -153,5 +207,16 @@ describe("headroom version probe off the render path (spec 046)", () => {
 		expect(childProcess.execFile).toHaveBeenCalledTimes(1);
 		expect(formatHeadroomStatusLabel()).toBe(policyLabel);
 		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("never spawns under the test runner unless a test opts in", async () => {
+		answerProbes(() => "3.0.1\n");
+		const { formatHeadroomStatusLabel, loadHeadroomVersion, setHeadroomVersionProbeEnabledForTests } =
+			await loadModule();
+		setHeadroomVersionProbeEnabledForTests(undefined);
+
+		await expect(loadHeadroomVersion()).resolves.toBeNull();
+		expect(formatHeadroomStatusLabel()).toBe(policyLabel);
+		expect(childProcess.execFile).not.toHaveBeenCalled();
 	});
 });

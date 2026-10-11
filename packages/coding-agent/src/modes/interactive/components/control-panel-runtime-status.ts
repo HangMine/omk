@@ -34,6 +34,7 @@ const HEADROOM_PYTHON_DISTRIBUTIONS = ["headroom", "headroom-ai"] as const;
 let cachedHeadroomVersion: string | null | undefined;
 let headroomVersionProbe: Promise<string | null> | undefined;
 let headroomVersionProbeAbort: AbortController | undefined;
+let headroomVersionProbeEnabledOverride: boolean | undefined;
 
 interface McpStabilityInput {
 	readonly commandSummary: string;
@@ -55,6 +56,12 @@ export function formatHeadroomStatusLabel(): string {
 /** Probe the installed headroom version once per process, off the render path; callers share the result. */
 export function loadHeadroomVersion(): Promise<string | null> {
 	if (headroomVersionProbe) return headroomVersionProbe;
+	// Test runners (VITEST) never spawn the real `headroom`/`python3` unless a test opts in, like the skills catalog cache.
+	if (!(headroomVersionProbeEnabledOverride ?? process.env.VITEST !== "true")) {
+		cachedHeadroomVersion = null;
+		headroomVersionProbe = Promise.resolve(null);
+		return headroomVersionProbe;
+	}
 	const abort = new AbortController();
 	headroomVersionProbeAbort = abort;
 	headroomVersionProbe = probeInstalledHeadroomVersion(abort.signal).then((version) => {
@@ -65,6 +72,13 @@ export function loadHeadroomVersion(): Promise<string | null> {
 	return headroomVersionProbe;
 }
 
+/** Repaint exactly once if the probe finds a version; a missing or aborted headroom needs no repaint. */
+export function repaintWhenHeadroomVersionResolves(requestRender: () => void): Promise<void> {
+	return loadHeadroomVersion().then((version) => {
+		if (version) requestRender();
+	});
+}
+
 /**
  * Kill a probe that is still running (shutdown). The pending probe settles to `null` and is cached,
  * so a hung `headroom` cannot hold shutdown or outlive the process, and nothing restarts it.
@@ -72,6 +86,11 @@ export function loadHeadroomVersion(): Promise<string | null> {
 export function abortHeadroomVersionProbe(): void {
 	headroomVersionProbeAbort?.abort();
 	headroomVersionProbeAbort = undefined;
+}
+
+/** Tests only: `true` lets a test run the probe under VITEST, `undefined` restores the default. */
+export function setHeadroomVersionProbeEnabledForTests(enabled: boolean | undefined): void {
+	headroomVersionProbeEnabledOverride = enabled;
 }
 
 export function countRoutableNonHubSkills(skills: readonly { readonly name: string }[]): number {
