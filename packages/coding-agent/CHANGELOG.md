@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- `omk run cancel` and `omk run explain` on a running verified run no longer fail with `verified-run: integrity` when the run's writer appends to its journal at the same moment. Journal reads now retry that one case up to 3 times; real journal corruption still fails at once (spec 056).
 - Extension messages sent with `triggerTurn`, background-task notifications among them, are delivered once, after the work that kept the session busy and on the resulting context: automatic or manual (`/compact`) compaction, a branch summary, a retry's model switch, prompt preflight, the resource check before a run, or a tool that settles after its run ended. Previously they failed with `PromptExecutionBusyError` and no follow-up turn ran, or, after a manual `/compact`, were answered from the context before compaction without being stored.
 - Follow-up input (`sendUserMessage(text, { deliverAs: "followUp" })`, or a prompt with `streamingBehavior`) that arrives while another prompt is still in preflight, its pre-prompt compaction included, runs with that prompt's run; if that prompt fails, the input runs on its own once the session is idle. Registered extension commands run at once in that window. Other slash text is still refused while the session is busy.
 - Text typed in the interactive TUI during compaction is sent when compaction ends: as a follow-up of the run that resumes, or as a new prompt. Previously the send failed and the text went back to the editor queue.
