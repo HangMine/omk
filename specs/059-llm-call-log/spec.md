@@ -56,11 +56,11 @@ createLlmCallRunLogStreamFn(inner: StreamFn, options?: { env?; now? }) → Strea
 | `phase` | `"plan" \| "explore" \| "edit" \| "debug" \| "verify" \| "build" \| "run" \| null` |
 | `phaseSource` | `"todo" \| "tool" \| null` |
 | `effortSent` | not a separate field: `effort` above is already the level sent with this request (below 037's wrapper and 033's cap) |
-| `effortGroup` | `"high"` (plan, debug, verify: configured effort) or `"low"` (explore, edit, build, run: one level below the configured effort) |
+| `effortGroup` | `"high"` (plan, debug, verify: the configured effort, which is the ceiling) or `"low"` (explore, edit, build, run: `high`, or the ceiling if it is below `high`, or the next level below that the model supports) |
 | `effortSwitch` | `{ from, to, n }` on the call where the group changed, else `null` |
-| `lowerClamped` | `true` when lowering one level would send the same provider value or turn reasoning off, so the configured effort was kept; not counted as a switch |
+| `lowerClamped` | `true` when the low-group target sends the same provider value as the ceiling, or the model supports no level at or below it, so nothing different was sent; not counted as a switch |
 
-037 lowers the low group only (Tech Lead, 2026-10-11 15:18 KST); the earlier `raiseClamped` field is dropped with the raise design.
+037 never raises above the configured effort; it only lowers the low group (Tech Lead, 2026-10-11). The earlier `raiseClamped` field is dropped with the raise design.
 
 5. **Privacy** (spec 042): numbers, ids, sha256 hashes and enum names only. Never prompt text, tool arguments, output, error messages, paths, URLs, headers or secrets.
 6. **Best effort**: a failing write or hash never throws into the call.
