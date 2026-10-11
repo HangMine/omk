@@ -18,7 +18,7 @@ OMK packages bundle extensions, skills, prompt templates, and themes so you can 
 
 ## Install and Manage
 
-> **Security:** OMK packages run with full system access. Extensions execute arbitrary code, and skills can instruct the model to perform any action including running executables. Review source code before installing third-party packages.
+> **Security:** OMK packages run with full system access. Extensions execute arbitrary code, and skills can instruct the model to perform any action including running executables. Review source code before installing third-party packages. Package install scripts are off by default, and a cloned project's packages and extensions load only after you trust the project.
 
 ```bash
 omk install npm:@foo/bar@1.0.0
@@ -40,7 +40,31 @@ omk update --extension npm:@foo/bar
 
 These commands manage omk packages, not the omk CLI installation. To uninstall omk itself, see [Quickstart](quickstart.md#uninstall).
 
-By default, `install` and `remove` write to user settings (`~/.omk/agent/settings.json`). Use `-l` to write to project settings (`.omk/settings.json`) instead. Project settings can be shared with your team, and omk installs any missing packages automatically on startup.
+By default, `install` and `remove` write to user settings (`~/.omk/agent/settings.json`). Use `-l` to write to project settings (`.omk/settings.json`) instead. Project settings can be shared with your team, and omk installs any missing packages automatically on startup once you trust the project (see [Project trust](#project-trust)).
+
+### Install scripts
+
+Package lifecycle scripts (`preinstall`, `install`, `postinstall`) run arbitrary code with your privileges, so omk installs packages with `--ignore-scripts`. This applies to `omk install`, `omk update`, dependencies of git packages, missing project packages installed at startup, and `-e` packages. A package that builds native code in its install script will then fail to load; when the error looks like a skipped native build, it names the fix. After reviewing the package, rerun the explicit command with `--allow-scripts`:
+
+```bash
+omk install --allow-scripts npm:@foo/native-bar
+omk update --allow-scripts
+```
+
+`--allow-scripts` applies to that one command only. Installs that happen on their own (startup, `-e`) never run scripts.
+
+### Project trust
+
+A cloned repository's `.omk/` can load code: `packages` and `extensions` in `.omk/settings.json`, files in `.omk/extensions/`, and the `npmCommand`, `shellPath` and `shellCommandPrefix` settings. omk loads none of these until you trust the project:
+
+- Interactive `omk` asks once per project before the session starts and stores the answer in `~/.omk/project-trust.json`, tied to a hash of the project's `packages`, `extensions`, `npmCommand`, `shellPath`, `shellCommandPrefix` values, the relative paths of all files under `.omk/extensions/` (`node_modules` and dot entries excluded, symlinked directories followed), and the contents of `.omk/extensions/package.json` and `.omk/extensions/<entry>/package.json`. It asks again when that hash changes. Editing an existing extension source file does not change the hash. Remove the project's entry from that file to be asked again. A project with more than 5000 files under `.omk/extensions/` is never trusted.
+- `-p`, `--mode json`, `--mode rpc` and spawned workers never ask. They follow a stored answer for the same path and hash; otherwise they load project code only with `OMK_TRUST_PROJECT=1`, which prints one line to stderr naming the trusted project path.
+- `OMK_TRUST_PROJECT=1` applies only to non-interactive runs and only to the directory omk started in. omk reads it once at startup and removes it from its own environment, so commands the `bash` tool runs (including another `omk`) do not inherit it. Interactive `omk` ignores it and asks.
+- `OMK_TRUST_PROJECT=0` keeps project code off in every mode, even after you trusted the project (benchmarks use it), and child processes inherit it.
+- The subagent extension passes `OMK_TRUST_PROJECT=1` to a worker only when the parent trusted its project, the worker's directory is that project, a directory inside it, or a git worktree of the same repository, and that directory has the same hash. It passes `OMK_TRUST_PROJECT=0` down unchanged.
+- An untrusted project still gets its skills, prompt templates, themes and other settings; omk reports what it did not load.
+
+`omk install`, `omk update`, `omk remove`, `omk list`, `omk config` and `omk package doctor` use the stored answer (or `OMK_TRUST_PROJECT=1`) but never ask. In an untrusted project they ignore its `npmCommand`, `omk update` and `omk config` neither update nor install its `packages`, and a warning on stderr says so. Project MCP servers have their own trust (`OMK_TRUST_PROJECT_MCP`).
 
 To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
 

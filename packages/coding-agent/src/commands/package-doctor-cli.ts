@@ -1,4 +1,5 @@
 import { isPackageDoctorCommand } from "../cli/package-commands.ts";
+import { applyCommandProjectTrustGate } from "../cli/project-trust-gate.ts";
 import { APP_NAME, getAgentDir } from "../config.ts";
 import { inspectPackageCompatibility, type PackageDoctorResult } from "../core/package-doctor.ts";
 import { DefaultPackageManager, type PackageInspection, type ResolvedResource } from "../core/package-manager.ts";
@@ -64,6 +65,8 @@ function resourcePaths(inspection: PackageInspection): {
 
 async function defaultPrepare(source: string, cwd: string, agentDir: string): Promise<PackageInspection> {
 	const settingsManager = SettingsManager.create(cwd, agentDir);
+	// Spec 053: `npm pack` must not run an untrusted project's npmCommand; never asks, warns on stderr.
+	await applyCommandProjectTrustGate(cwd, settingsManager);
 	const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
 	return packageManager.preparePackageInspection(source);
 }
