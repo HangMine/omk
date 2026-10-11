@@ -58,9 +58,16 @@ import {
 	truncateParallelOutput,
 } from "./graph-result.ts";
 import { runManagedProcess } from "./managed-process.ts";
-import { emptyUsage, type SingleResult, type SubagentAttemptResult } from "./subagent-runtime-types.ts";
+import { canSpawnSubagents, childSubagentEnv } from "./nesting.ts";
+import {
+	emptyUsage,
+	type SingleResult,
+	type SubagentAttemptResult,
+	toDetailsResult,
+} from "./subagent-runtime-types.ts";
 import { createSubagentStream } from "./subagent-stream.ts";
 import { subagentWorkerEnv } from "./worker-env.ts";
+import { createWorkerExtensionPlanner } from "./worker-extensions.ts";
 import {
 	type GraphTask,
 	GraphValidationError,
@@ -325,6 +332,8 @@ function getOmkInvocation(args: string[]): { command: string; args: string[] } {
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
 type ResultUpdateCallback = (partial: SingleResult) => void;
+/** Worker extension argv for a worker `--model` (spec 057): `--no-extensions` plus forwarded `-e` paths. */
+type WorkerExtensionArgsFn = (model: string | undefined) => string[];
 
 async function runSingleAgentAttempt(
 	defaultCwd: string,
@@ -337,11 +346,13 @@ async function runSingleAgentAttempt(
 	cutoffMs: number,
 	signal: AbortSignal | undefined,
 	onUpdate: ResultUpdateCallback | undefined,
+	workerExtensionArgs: WorkerExtensionArgsFn,
 ): Promise<SubagentAttemptResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) throw new Error(`Unknown agent: ${agentName}`);
 
-	const args: string[] = ["--mode", "json", "-p", "--no-session"];
+	// Spec 057 R1: workers skip user extensions unless OMK_WORKER_EXTENSIONS or the model's provider says otherwise.
+	const args: string[] = ["--mode", "json", "-p", "--no-session", ...workerExtensionArgs(agent.model)];
 	if (agent.model) args.push("--model", agent.model);
 	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
 
@@ -434,7 +445,7 @@ async function runSingleAgentAttempt(
 			command: invocation.command,
 			args: invocation.args,
 			cwd: workerCwd,
-			env: subagentWorkerEnv(process.env, projectTrust),
+			env: subagentWorkerEnv(childSubagentEnv(process.env), projectTrust),
 			cutoffMs,
 			signal,
 			onStdout: stream.stdout,
@@ -499,6 +510,7 @@ async function runSingleAgent(
 	budget: ExecutionBudget,
 	profileStore: DeadlineProfileStore,
 	pendingSequentialTasks: number,
+	workerExtensionArgs: WorkerExtensionArgsFn,
 ): Promise<SingleResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) {
@@ -523,7 +535,19 @@ async function runSingleAgent(
 		: undefined;
 	if (unbounded) {
 		return (
-			await runSingleAgentAttempt(defaultCwd, agents, agentName, task, task, cwd, step, 0, signal, reportUpdate)
+			await runSingleAgentAttempt(
+				defaultCwd,
+				agents,
+				agentName,
+				task,
+				task,
+				cwd,
+				step,
+				0,
+				signal,
+				reportUpdate,
+				workerExtensionArgs,
+			)
 		).result;
 	}
 	return await runAdaptiveAgent({
@@ -554,6 +578,7 @@ async function runSingleAgent(
 				input.cutoffMs,
 				signal,
 				input.onUpdate,
+				workerExtensionArgs,
 			),
 	});
 }
@@ -624,6 +649,9 @@ const SubagentParams = Type.Object({
 });
 
 export default function (omk: ExtensionAPI) {
+	// A child at the nesting limit gets no subagent tool, so lanes cannot spawn lanes.
+	if (!canSpawnSubagents(process.env)) return;
+	const workerExtensions = createWorkerExtensionPlanner(omk);
 	omk.registerTool({
 		name: "subagent",
 		label: "Subagent",
@@ -644,6 +672,8 @@ export default function (omk: ExtensionAPI) {
 			const agents = discovery.agents.map((agent) =>
 				agent.model || !selectedModel ? agent : { ...agent, model: selectedModel },
 			);
+			const workerExtensionArgs: WorkerExtensionArgsFn = (model) =>
+				workerExtensions.argsFor(model, ctx.modelRegistry);
 			const confirmProjectAgents = params.confirmProjectAgents ?? true;
 			const executionPolicy = resolveSubagentExecutionPolicy(
 				ctx.thinkingLevel,
@@ -671,7 +701,7 @@ export default function (omk: ExtensionAPI) {
 					mode,
 					agentScope,
 					projectAgentsDir: discovery.projectAgentsDir,
-					results,
+					results: results.map(toDetailsResult),
 					executionBudget: summarizeExecutionBudget(executionBudget, results, executionPolicy.unbounded),
 					...(mode === "graph" && graphDetails
 						? { graph: { ...graphDetails, completedNodeIds: [...graphDetails.completedNodeIds] } }
@@ -756,6 +786,7 @@ export default function (omk: ExtensionAPI) {
 						executionBudget,
 						profileStore,
 						params.chain.length - i,
+						workerExtensionArgs,
 					);
 					results.push(result);
 
@@ -856,6 +887,7 @@ export default function (omk: ExtensionAPI) {
 								executionBudget,
 								profileStore,
 								0,
+								workerExtensionArgs,
 							);
 							result.nodeId = laneId;
 							result.dependencyDigests = dependencyDigests(task, outputs);
@@ -908,6 +940,7 @@ export default function (omk: ExtensionAPI) {
 									executionBudget,
 									profileStore,
 									plan.waves.length - waveIndex,
+									workerExtensionArgs,
 								);
 								return { id, result };
 							},
@@ -1051,6 +1084,7 @@ export default function (omk: ExtensionAPI) {
 								executionBudget,
 								profileStore,
 								1,
+								workerExtensionArgs,
 							);
 							allResults[index] = result;
 							emitParallelUpdate();
@@ -1106,6 +1140,7 @@ export default function (omk: ExtensionAPI) {
 							executionBudget,
 							profileStore,
 							1,
+							workerExtensionArgs,
 						);
 						allResults[index] = result;
 						emitParallelUpdate();
@@ -1148,6 +1183,7 @@ export default function (omk: ExtensionAPI) {
 					executionBudget,
 					profileStore,
 					1,
+					workerExtensionArgs,
 				);
 				const isError = isFailedResult(result);
 				if (isError) {

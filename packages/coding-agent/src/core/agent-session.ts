@@ -135,6 +135,7 @@ import { McpManager, type McpServerConfig, type McpServerStatus } from "./mcp/ma
 import { type McpProjectTrustSummary, projectTrustSummary } from "./mcp/trust-summary.ts";
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
 import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
+import { resolveWorkspaceWriteRoots } from "./tools/workspace-write-guard.ts";
 import { type ToolCallMetric, TurnMetricsSink } from "./turn-metrics.ts";
 
 /** Values that disable a session-level feature through its environment variable. */
@@ -245,7 +246,7 @@ import {
 	type ResourcePressureStabilizer,
 	rederiveResourceAdmissionForPressure,
 } from "./resource-admission.ts";
-import { resolveResourceGovernorSettings } from "./resource-governor-settings.ts";
+import { heavyProcessCapacity, resolveResourceGovernorSettings } from "./resource-governor-settings.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import {
 	admissionObservationFacts,
@@ -2320,7 +2321,12 @@ export class AgentSession {
 	 * child launcher wiring lands in M6.
 	 */
 	get workloadPermitPool(): WorkloadPermitPool {
-		this._workloadPermitPool ??= new WorkloadPermitPool();
+		const capacity = heavyProcessCapacity(
+			this._lastResourceAdmission,
+			this.settingsManager.getResourceGovernorSettings(),
+		);
+		this._workloadPermitPool ??= new WorkloadPermitPool({ capacity });
+		if (capacity !== undefined) this._workloadPermitPool.setCapacity(capacity);
 		return this._workloadPermitPool;
 	}
 
@@ -4658,12 +4664,17 @@ export class AgentSession {
 					canReadPath: (path: string) => loadoutAccessGuard({ operation: "read", toolName: "read", path }).allowed,
 				}
 			: {};
-		const loadoutWriteOptions = loadoutAccessGuard
-			? {
-					canWritePath: (path: string) =>
-						loadoutAccessGuard({ operation: "write", toolName: "write", path }).allowed,
-				}
-			: {};
+		// write/edit stay inside cwd plus global fileTools.writeRoots; project settings cannot widen it.
+		const workspaceRoots = resolveWorkspaceWriteRoots(this.settingsManager.getGlobalSettings().fileTools, this._cwd);
+		const loadoutWriteOptions = {
+			...(workspaceRoots ? { workspaceRoots } : {}),
+			...(loadoutAccessGuard
+				? {
+						canWritePath: (path: string) =>
+							loadoutAccessGuard({ operation: "write", toolName: "write", path }).allowed,
+					}
+				: {}),
+		};
 		const baseToolDefinitions = (() => {
 			if (this._baseToolsOverride) {
 				return Object.fromEntries(

@@ -27,6 +27,7 @@ import {
 } from "./interactive-login-options.ts";
 import {
 	disposeComponent,
+	disposePendingTools,
 	ExpandableText,
 	isExpandable,
 	normalizeToolExecutionResult,
@@ -141,7 +142,7 @@ import { BranchSummaryMessageComponent } from "./components/branch-summary-messa
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { ControlPanelComponent, ControlPanelRightPaneComponent } from "./components/control-panel.ts";
 import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
-import { createControlPanelStatusSnapshot } from "./components/control-panel-runtime-status.ts";
+import { controlPanelStatusReaders } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
@@ -801,8 +802,7 @@ export class InteractiveMode {
 				compactOnboarding: () =>
 					`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
 				onboarding: () => `OMK can explain its own features and look up its docs. Ask it how to use or extend OMK.`,
-				statusSnapshot: () =>
-					createControlPanelStatusSnapshot(this.session, this.sessionManager, this.footerDataProvider),
+				...controlPanelStatusReaders(() => this.session, this.footerDataProvider),
 			};
 			const controlPanel = new ControlPanelComponent(controlPanelContent, {
 				requestRender: () => this.ui.requestRender(),
@@ -810,6 +810,7 @@ export class InteractiveMode {
 				isReducedMotion: () => process.env.OMK_REDUCED_MOTION === "1" || process.env.OMK_REDUCE_MOTION === "1",
 				isHeaderVisibleHint: () => this.customHeader === undefined,
 				getRenderWidth: () => this.ui.contentWidth,
+				isInViewport: () => this.ui.viewportTop === 0,
 			});
 			controlPanel.setExpanded(this.getStartupExpansionState());
 			this.builtInHeader = controlPanel;
@@ -1797,11 +1798,7 @@ export class InteractiveMode {
 			commandContextActions: {
 				waitForIdle: () => this.session.agent.waitForIdle(),
 				newSession: async (options) => {
-					if (this.loadingAnimation) {
-						this.loadingAnimation.stop();
-						this.loadingAnimation = undefined;
-					}
-					this.statusContainer.clear();
+					this.stopWorkingLoader();
 					try {
 						const result = await this.runtimeHost.newSession(options);
 						if (!result.cancelled) {
@@ -3167,7 +3164,7 @@ export class InteractiveMode {
 				break;
 			case "agent_start":
 				this.workingStartedAt = Date.now();
-				this.pendingTools.clear();
+				disposePendingTools(this.pendingTools);
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
@@ -3369,7 +3366,8 @@ export class InteractiveMode {
 					this.streamingComponent = undefined;
 					this.streamingMessage = undefined;
 				}
-				this.pendingTools.clear();
+				// Tools still pending when the turn ends never get tool_execution_end: stop their live timers.
+				disposePendingTools(this.pendingTools);
 
 				await this.checkShutdownRequested();
 
@@ -3385,7 +3383,8 @@ export class InteractiveMode {
 				this.defaultEditor.onEscape = () => {
 					this.session.abortCompaction();
 				};
-				this.statusContainer.clear();
+				// Stop (not just detach) the working loader: a detached Loader keeps ticking renders.
+				this.stopWorkingLoader();
 				const cancelHint = `(${keyText("app.interrupt")} to cancel)`;
 				const label =
 					event.reason === "manual"
@@ -5147,11 +5146,7 @@ export class InteractiveMode {
 		sessionPath: string,
 		options?: Parameters<ExtensionCommandContext["switchSession"]>[1],
 	): Promise<{ cancelled: boolean }> {
-		if (this.loadingAnimation) {
-			this.loadingAnimation.stop();
-			this.loadingAnimation = undefined;
-		}
-		this.statusContainer.clear();
+		this.stopWorkingLoader();
 		try {
 			const result = await this.runtimeHost.switchSession(sessionPath, {
 				withSession: options?.withSession,

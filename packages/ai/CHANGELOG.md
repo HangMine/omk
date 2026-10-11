@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-11
+
+### Fixed
+
+- xAI reasoning tokens are included in output usage without double-counting when total tokens are present. Provider-reported billed USD is available separately from the catalog cost estimate.
+
 ## [1.3.2] - 2026-10-10
 
 ### Added

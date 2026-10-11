@@ -2,8 +2,16 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-11
+
+### Added
+
+- `TUI.viewportTop`: the first buffer row inside the viewport as of the last render (0 while the whole frame fits), so components can tell whether their rows have scrolled into scrollback.
+
 ### Changed
 
+- `visibleWidth` skips grapheme segmentation for text that is printable ASCII, Hangul syllables or CJK unified ideographs once escape sequences are stripped, and the width cache grows from 512 to 8192 entries (strings over 4096 characters are not cached). Width logic moved from `utils.ts` to `visible-width.ts`; `utils.ts` still exports `visibleWidth`.
+- `Box` compares its children's rendered lines with a shallow copy of the previous output before building padded lines, so an unchanged box no longer re-concatenates and re-compares every line each frame. A child that mutates its returned array in place still invalidates the cache.
 - Long transcripts cost far less per-frame work. The new `WindowedContainer` freezes settled children above a live-line budget into bounded line segments and stops re-rendering them; a frozen child that changes is re-rendered alone and only its segment is rebuilt. On a 100k-line headless transcript a keypress frame drops from ~33 ms to ~3 ms mean, and a change to an old, off-screen message stays under 5 ms p95 (was 35–38 ms mean). Per-frame cost still grows slowly with history (each frame scans frozen children and copies the line list twice): a 100k-line keypress frame is ≈3.3× the 25k one.
 - `WindowedContainer.setViewportRows(() => rows)` makes the live-line budget follow the terminal: `max(120, 2 × rows)`, re-read every render; a taller terminal thaws the frozen prefix. Without it the budget stays 120 (`setLiveLineBudget` fixes it).
 - `LineResetMemo` (split out of `tui.ts`) reuses the previous frame's reset output for unchanged rows, including rows shifted by lines inserted or removed above. The differential renderer finds changed rows from both ends and `Container.render` bulk-copies child output.
@@ -11,6 +19,7 @@
 
 ### Fixed
 
+- `Editor` and `Input` keep at most 200 undo snapshots (the internal `UndoStack` drops the oldest past its limit), so undo history no longer grows without bound while typing a long draft.
 - Freezing a `Markdown` no longer clears its stream cache by assigning `undefined`, which made the next render after a resize throw; `Markdown.releaseRenderCache()` resets it instead.
 - Freezing no longer clears fields named `cache` / `cachedLines` / `cachedText` / `cachedWidth` by name, which crashed third-party components whose `cache` was not a render cache (e.g. a `Map`) on the next resize. Releasing is now opt-in through `Component.releaseRenderCache()`: `Text`, `Markdown`, `Box` and `Image` drop their caches, `Container` and `Box` forward to their children, other components are left untouched.
 
