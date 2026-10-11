@@ -111,6 +111,7 @@ async function run(
 	vi.stubEnv("OMK_RUN_LOG_DIR", logDir);
 	vi.stubEnv("OMK_SKILL_SEARCH", undefined);
 	vi.stubEnv("OMK_SKILL_SEARCH_SUGGEST", undefined);
+	vi.stubEnv("OMK_SKILL_SELECT", undefined);
 	for (const [key, value] of Object.entries(options.env)) vi.stubEnv(key, value);
 	const resourceLoader = createTestResourceLoader({
 		extensionsResult: await createTestExtensionsResult(options.extensions ?? []),
@@ -222,6 +223,60 @@ describe("skill-search session (spec 050)", () => {
 			}));
 		expect(view(on)).toEqual(view(off));
 		expect(existsSync(join(on.agentDir, "cache", SKILL_INDEX_FILE))).toBe(false);
+	});
+});
+
+describe("skill-select modes (spec 058)", () => {
+	const view = (result: { calls: Call[]; harness: Harness }) =>
+		result.calls.map(({ systemText, toolNames, messages }) => ({
+			systemText: systemText.split(result.harness.tempDir).join("<cwd>"),
+			toolNames,
+			messages,
+		}));
+	const sessionRecord = (logDir: string) =>
+		readAll(logDir)
+			.split("\n")
+			.filter((line) => line.includes('"type":"session"'))
+			.map((line) => JSON.parse(line) as Record<string, unknown>)[0];
+
+	for (const mode of ["bm25", "metacon"] as const) {
+		it(`${mode}: system and tools stay byte-identical across tasks, skill_search and /reload (AC 3)`, async () => {
+			const skills = syntheticSkills(tempDir());
+			const { calls, logDir } = await run({ env: { OMK_SKILL_SELECT: mode }, skills, search: true, reload: true });
+			expect(calls.length).toBeGreaterThanOrEqual(3);
+			expect(prefixBreaks(calls)).toEqual([]);
+			expect(calls[0].toolNames).toContain(SKILL_SEARCH_TOOL_NAME);
+			expect(calls[0].systemText).toContain(SKILL_SEARCH_PROMPT_LINE.trim());
+			const toolResult = calls[1].messages.find((message) => message.includes('"toolName":"skill_search"'));
+			expect(toolResult).toContain("pdf-forms");
+			expect(sessionRecord(logDir)).toMatchObject({ active: true, mode });
+		});
+
+		it(`${mode}: the run log has no query, skill name or path (AC 5)`, async () => {
+			const root = tempDir();
+			const { logDir } = await run({ env: { OMK_SKILL_SELECT: mode }, skills: syntheticSkills(root), search: true });
+			const log = readAll(logDir);
+			expect(log).toContain(`"mode":"${mode}"`);
+			expect(log).not.toContain(MARKER);
+			expect(log).not.toContain("pdf-forms");
+			expect(log).not.toContain(root);
+		});
+
+		it(`${mode}: 24 skills or fewer sends the same requests as off (AC 1)`, async () => {
+			const skills = bundledSkills();
+			const off = await run({ env: {}, skills });
+			const on = await run({ env: { OMK_SKILL_SELECT: mode }, skills });
+			expect(view(on)).toEqual(view(off));
+			expect(existsSync(join(on.agentDir, "cache", SKILL_INDEX_FILE))).toBe(false);
+		});
+	}
+
+	it("OMK_SKILL_SELECT=wpl is off: same requests as off, invalidMode in the session record (AC 1)", async () => {
+		const skills = syntheticSkills(tempDir());
+		const off = await run({ env: {}, skills });
+		const wpl = await run({ env: { OMK_SKILL_SELECT: "wpl", OMK_SKILL_SEARCH: "1" }, skills });
+		expect(view(wpl)).toEqual(view(off));
+		expect(sessionRecord(wpl.logDir)).toMatchObject({ active: false, mode: "off", invalidMode: true });
 	});
 });
 

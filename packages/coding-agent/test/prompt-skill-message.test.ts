@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createActiveSkillState } from "../src/core/active-skill-state.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import {
+	explicitSkillNames,
 	PROMPT_SKILLS_CUSTOM_TYPE,
 	PROMPT_SKILLS_RELEVANT_LIMIT,
 	PromptSkillFreeze,
@@ -276,5 +277,16 @@ describe("PromptSkillFreeze skill-search setup (spec 050 R1/R2, #122 review)", (
 		const turn = await freeze.turn(input({ env: ON }));
 		expect(turn.messages).toEqual([]);
 		expect(reads).toBeGreaterThan(1);
+	});
+});
+
+describe("explicit skills for metacon (spec 058 R4)", () => {
+	it("passes only !skill and /skill: names, not defaultActiveSkills", () => {
+		const selection = createActiveSkillState(["house-style", "programming"], ["pdf-forms", "programming"], "bang");
+		expect(explicitSkillNames({ selection, defaults: ["house-style", "programming"] })).toEqual(["pdf-forms"]);
+		const defaultsOnly = createActiveSkillState(["house-style"], [], undefined);
+		expect(explicitSkillNames({ selection: defaultsOnly, defaults: ["house-style"] })).toEqual([]);
+		const bangOnly = createActiveSkillState([], ["pdf-forms"], "bang");
+		expect(explicitSkillNames({ selection: bangOnly, defaults: [] })).toEqual(["pdf-forms"]);
 	});
 });
