@@ -1,0 +1,8305 @@
+{
+ "version": "phase-v3",
+ "source": "R8 omk logs, masked",
+ "classifier": "phase_r8_v3.decide",
+ "samples": [
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "git status && echo q1 && git branch -av && echo q1 && git stash list && echo q1 && git log --opt --opt -40 && echo q1 && git reflog -30",
+   "failed": true,
+   "prevPhase": "run",
+   "recent": [],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\nassert x\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\nsubprocess.run(X)\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "mkdir -p /d1/f1 && cd /d1/f1 && curl -fL --opt 9 -o d2/f2.gz q1 && ls -lh d2/f2.gz && tar --opt d2/f2.gz | head -20 && tar --opt d2/f2.gz && ls d3/f3.x | head -40 && echo q2 && head -80 d4/f4.md 2>/dev/null || head -80 d5/f5 2>/dev/null || ls d6/f6.md",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "apt-cache a1",
+     "failed": false
+    },
+    {
+     "key": "d10/f10.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b1 a13",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "b1 a1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "d6/f6.c",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.so",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d8/f8.py",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 /d1/test_f1.py 2>&1 | grep q1",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/test_f1.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/test_f1.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python /d1/test_f1.py; echo a1",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/test_f1.py",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14\nb1 a15 a16 a17 a18\npython3 - <<'EOF'\nopen(P, \"w\")\nprint(x)\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1.c",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.c",
+     "failed": false
+    },
+    {
+     "key": "b1 a19",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.c",
+     "failed": false
+    },
+    {
+     "key": "b1 a27",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cd /d1/f1 && git status --opt && git branch -vv && echo q1 && git reflog --opt=v | head -30 && echo q2 && git rev-parse a1 a2 a3 a4 && echo q3 && git a5 a6 /d2/f2 && git a5 a6 /d3/f3 && echo q4 && b1_test -f /d4/f4.py && python3 - <<'EOF'\nassert x\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\nassert x\nsubprocess.run(X)\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "apt-get install",
+     "failed": false
+    },
+    {
+     "key": "dpkg -L",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 /d1/f1.py /d2/f2.x -o /d3/f3.toml && cat /d3/f3.toml && python3 - <<'EOF'\nassert x\nprint(x)\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "gcc -O3 --opt -o /d1/f1 /d2/f2.c -lm && p1/b1\npython3 - <<'EOF'\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "/d3/f3.c",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.c",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.c",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 /d1/test_f1.py",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/test_f1.py",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13\ncat > /d1/f1.x << EOF",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d3/f3.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b1 a54",
+     "failed": false
+    },
+    {
+     "key": "b1 a1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "set -e\necho q1\nb1 status\nb2 -u list --opt a1 -C /d1/f1.x status 2>&1 | head -5 || true\nb3 --opt | grep -E q2 || true\necho q3\nb4_test -f /d1/f1.x && echo a2\ngrep -n -E q4 /d1/f1.x\necho q5\nb5 -n | grep -E q6\necho q7\ngrep -E q8 /d2/f2\necho q9\npython3 - <<'EOF'\nassert x\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b6 init",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nassert x\ndef f(): pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 /d1/f1.py && python3 - <<'EOF'\nprint(\"FAIL\")\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "printf q1 > /d1/f1.x\necho q2\nb1 -e -r 9 /d2/f2.x /d3/f3.x < /d1/f1.x 2>&1 | grep q3\nprintf q4 > /d1/f1.x\necho q5\nb1 -e -r 9 /d2/f2.x /d3/f3.x < /d1/f1.x 2>&1 | grep q3\nprintf q6 > /d1/f1.x\necho q7\nb1 -e -r 9 /d2/f2.x /d3/f3.x < /d1/f1.x 2>&1 | grep q3\nprintf q8 > /d1/f1.x\necho q9\nb1 -e -r 9 /d2/f2.x /d3/f3.x < /d1/f1.x 2>&1 | sed -n q10",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d1/f1.x",
+     "failed": true
+    },
+    {
+     "key": "/d3/f3.x",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.x",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "ls /d1/f1 | head -50; find /d2/f2 --opt q1 -o --opt q2 | head",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d3/f3",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "man a1 2>/dev/null | b1 -bx | head -80; b2 -tp 9 -sc 9 -mv 9 -dv 9 -n d1/f1.x -d 9 a2 2>&1; echo; b3 test a3 a4 9\npython3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "b4 a1",
+     "failed": false
+    },
+    {
+     "key": "dpkg -l",
+     "failed": false
+    },
+    {
+     "key": "apt-get a14",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 d1/f1.py a1 --opt 2>&1 | tail -20 && python3 - <<'EOF'\nassert x\ndef f(): pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\nprint(x)\nglob.glob(P)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "p2/b2",
+     "failed": false
+    },
+    {
+     "key": "p2/b2",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d8/f8.c",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(\"FAIL\")\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "cd /d1/f1 && python3 d2/f2.py",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "pip install a1 -q && b1 a2 -qq && apt-get install -y -qq a3 2>&1 | tail -x || true; which a3; python3 -c print(x)",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5\npython3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "b2",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "/d7/f7.o",
+     "failed": true
+    },
+    {
+     "key": "/d10/f10",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12\ngrep -n q1 /d1/f1.c | head -30\necho q2\nsed -n q3 /d1/f1.c",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "node --opt /d1/f1.js && echo a1",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d1/f1.js",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "rm -rf /d1/f1 && mkdir -p /d1/f1 && cp -a /d2/f2 /d3/f3 && cd /d4/f4 && uv run a1 /d5/f5.py /d3/f3 /d6/f6 && uv run a1 /d7/f7.py /d6/f6 && python3 - <<'EOF'\nprint(\"FAIL\")\nprint(x)\nglob.glob(P)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "uv run",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "uv run",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "ls -la /d1/f1/ /d2/f2 2>/dev/null; which a1 a2 a3 2>/dev/null; b1 --version 2>/dev/null || b2 --version 2>/dev/null; dpkg -l | grep -E q1 | head -50; b3 --opt 2>/dev/null || b4 --opt 2>/dev/null; ls /d3/f3 /d4/f4 2>/dev/null | head -40",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [],
+   "expected": "build"
+  },
+  {
+   "command": "rm -f /d1/f1.x /d2/f2.x; V=v V=v node /d3/f3.js > /d4/f4.txt 2> /d5/f5.txt; echo a1; cat /d5/f5.txt; python3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "b1 a2",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cd /d1/f1 && rm -f d2/f2.o && make -f d3/f3.x -x 2>&1 | tail -25 && echo q1 && b1 -S /d4/f4 | head -16 && ls -lh /d4/f4 && b2 /d4/f4 | grep -E q2",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d3/f3.x",
+     "failed": false
+    },
+    {
+     "key": "b1 -S",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "b4 a2",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\nx == expected\nprint(\"FAIL\")\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nx == expected\nprint(\"FAIL\")\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cd /d1/f1 && python3 <<'EOF'\nopen(P, \"w\")\ndef f(): pass\nwhile x: pass\n# test\nprint(x)\nglob.glob(P)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "/d1/f1.db",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "export a1; apt-get install -y a2 a3 a4 2>&1 | tail -30",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "dpkg -l",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5.x",
+     "failed": false
+    },
+    {
+     "key": "dpkg -l",
+     "failed": false
+    },
+    {
+     "key": "apt-cache a13",
+     "failed": false
+    },
+    {
+     "key": "apt-get a17",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\nprint(\"FAIL\")\nsubprocess.run(X)\ndef f(): pass\n# test\nprint(x)\nos.listdir(P)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndf.to_csv(P)\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndf.to_csv(P)\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cp /d1/f1.py /d2/f2.py && cd /d3/f3 && python3 /d4/test_f4.py",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d4/test_f4.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "which a1 a2 a3 a4 a5 2>/dev/null; ls /d1/f1 /d2/f2 2>/dev/null; type a1 a2 2>&1",
+   "failed": true,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "python3 --version",
+     "failed": true
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "cd /d1/f1 && git branch -v && echo q1 && git status && echo q2 && git reflog -15 && echo q3 && git log --opt --opt --opt && echo q4 && b1_test -f /d2/f2.py && python3 - <<'EOF'\nassert x\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "git a2",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d4/f4.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\nsubprocess.run(X)\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\nprint(\"FAIL\")\nsubprocess.run(X)\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "d2/f2.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "g++ --version",
+     "failed": true
+    },
+    {
+     "key": "apt-get a12",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "cp /d1/f1.py /d2/f2.py && cd /d3/f3 && python3 /d4/test_f4.py",
+   "failed": true,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d4/test_f4.py",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d7/f7.log",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7 a8\npython3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": true
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.c",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python -m d1/f1.x --opt=v --opt=v /d2/test_f2.py && python -m d1/f1.x --opt=v --opt=v /d2/test_f2.py && python -m d1/f1.x --opt=v --opt=v /d2/test_f2.py",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d1/f1.x",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d1/f1.x",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cd /d1/f1 && tar a1 d2/f2.gz && grep -n q1 d3/f3.x | head -60",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "d5/f5.x",
+     "failed": false
+    },
+    {
+     "key": "d6/f6.gz",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d10/f10.x",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 /d1/f1.py /d2/f2.x -o /d3/f3.toml && cat /d3/f3.toml && python3 -c assert x\nprint(x)\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "gcc -o /d1/f1 /d2/f2.c && p1/b1",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d3/f3",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3",
+     "failed": false
+    },
+    {
+     "key": "d4/f4",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1.c",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.c",
+     "failed": false
+    },
+    {
+     "key": "b1 a1",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.c",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5.c",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cd /d1/f1 && b1 -u d2/f2.o | grep -E q1 | head\necho q2\nfor a1 a2 d2/f2.o; do\n  if a3 -u q3 2>/dev/null | grep -q a4; then a5 q3; fi\ndone\necho q4\nfor a1 a2 d2/f2.o; do\n  if a3 -u q3 2>/dev/null | grep -q a6; then a5 q3; fi\ndone\necho q5\nfor a1 a2 d2/f2.o; do\n  V=v b2 q3 2>/dev/null | grep -E q6 || b3\n  if a7 -n q7 a8; then a5 q8; echo q7; fi\ndone\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d3/f3.x",
+     "failed": false
+    },
+    {
+     "key": "d3/f3.x",
+     "failed": false
+    },
+    {
+     "key": "d2/f2.o",
+     "failed": false
+    },
+    {
+     "key": "b5 a9",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cat /d1/f1.txt; echo; python3 -c assert x\nprint(x)\nf.read()\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d7/f7.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "sleep 9\nprintf q1 | b1 -x d1/f1.x >/dev/null\nsleep d2/f2.x\npython3 - <<'EOF'\nx.save(P)\nprint(x)\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "b3 --opt",
+     "failed": false
+    },
+    {
+     "key": "p4/b4",
+     "failed": false
+    },
+    {
+     "key": "b2 run",
+     "failed": false
+    },
+    {
+     "key": "/d16/f16.out",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "set -e\npython3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "b1 a1",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python -m d1/f1.x --opt=v --opt=v /d2/test_f2.py && python -m d1/f1.x --opt=v --opt=v /d2/test_f2.py && python -m d1/f1.x --opt=v --opt=v /d2/test_f2.py",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d3/f3.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d1/f1.x",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cat > /d1/f1.py << EOF",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d2/f2/",
+     "failed": false
+    },
+    {
+     "key": "apt-get a1",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d7/f7.py",
+     "failed": true
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 /d1/test_f1.py",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/test_f1.py",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "node --opt /d1/f1.js && cd /d2/f2 && rm -f /d3/f3.x /d4/f4.x\nV=v node d5/f5.js > /d6/f6.txt 2> /d7/f7.txt\necho a1\ngrep -a q1 /d7/f7.txt\npython3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d5/f5.js",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "which a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 2>/dev/null; ls /d1/f1 /d2/f2 /d3/f3 /d4/f4 /d5/f5 2>/dev/null; head -c 9 /d6/f6 | xxd 2>/dev/null || head -c 9 /d6/f6 | od -A a12 -t a13 -v",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d7/f7",
+     "failed": false
+    },
+    {
+     "key": "/d6/f6",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nglob.glob(P)\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cd /d1/f1 && ./b1 d2/f2.json d3/f3.x > /d4/f4.txt; echo a1; od -An --opt /d4/f4.txt; od -An --opt d5/f5.txt; python3 - <<'EOF'\nopen(P, \"w\")\nassert x\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python - <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d8/f8.py",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nsubprocess.run(X)\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "grep -n -E q1 /d1/f1.x | head -80\necho q2\ncd /d2/f2 && configure --help 2>&1 | head --opt",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "apt-get a2",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.gz",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.gz",
+     "failed": false
+    },
+    {
+     "key": "/d9/f9",
+     "failed": false
+    },
+    {
+     "key": "dpkg -l",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 /d1/f1.py && python3 - <<'EOF'\nprint(\"FAIL\")\ndef f(): pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "set -e\npkill -f a1 || true\nsleep d1/f1.x\nrm -f /d2/f2.x /d3/f3.x\nif a2 a3 --opt | grep -q q1; then\n  nohup b1 --opt /d4/f4 a4 a5 > /d5/f5.log 2>&1 &\n  sleep d6/f6.x\nfi\nb2 a6 a7 a8 a9 d7/f7.x a10 a11 a12 a13 a14 a15 a16 a17 a18 a19\nnohup p3/b3 a20\n  b4 a21 a20\n  b5 9 a20\n  b6 9 a20\n  b7 a22 a20\n  b8 a23 a20\n  b9 d8/f8 a20\n  b10 d9/f9 a20\n  b11 d10/f10 a20\n  b11 d11/f11 a20\n  b12 a24 a20\n  b13 a25 a20\n  b14 a20\n  b15 a20\n  b16 a26 a20\n  b17 a27 a20\n  b16 a28 a20\n  > /d12/f12.log 2>&1 &\necho a29\nsleep 9\nb18 --opt | grep -E q2\nls -l /d2/f2.x /d3/f3.x\nb2 a30 a31\npython3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndf.to_csv(P)\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cd /d1/f1 && git a1 --opt | while a2 a3; do a4 grep -l -a q1 q2 2>/dev/null && echo q3; done | head -40; echo q4; git a1 --opt --opt | awk q5 | git a5 --opt=vq6 2>/dev/null | head -3; echo q7; git log --opt -S q1 --opt | head; echo q8; git log -p --opt -S q9 --opt=vq10 | grep -E q11 | head -40",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "d2/f2.yaml",
+     "failed": false
+    },
+    {
+     "key": "grep --opt",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "git a1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 --version && pip3 --version && which a1 && ls -la /d1/f1 && b1 --opt 2>/dev/null || b2 --opt 2>/dev/null; echo q1; pip3 a2 a3 pip 2>/dev/null | head -5; python3 -c print(x)",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [],
+   "expected": "build"
+  },
+  {
+   "command": "pip3 install --opt --quiet a1 a2 2>&1 | tail -8 && python3 -c print(x)",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": true
+    },
+    {
+     "key": "apt-get a15",
+     "failed": false
+    },
+    {
+     "key": "b1 --opt",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "wget -q -O /d1/f1.json q1\npython3 - <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "apt-get install",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b1 a18",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "b1 --opt",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a14 a18\nb1 a19 a20 a21 a22 a23 a24 a25 a26 a27 a14 a28\nb1 a29 a30 a14 a31 a32 a14 a18 a33 a34 a35 a36 a37 a38 a39 a40 a41 a42 a43q1d1/f1;p2/b2;p3/b3' /d2/f2.c\ngrep -n q2 /d2/f2.c\nwc -c /d2/f2.c\ngcc -O3 -o /d3/f3.out /d2/f2.c -lm 2>&1\necho a44\ntime p4/b4 /d4/f4.x /d5/f5.x q3 > /d6/f6.txt\necho q4\ncat -A /d6/f6.txt\necho\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d3/f3.out",
+     "failed": false
+    },
+    {
+     "key": "b1 show",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.c",
+     "failed": false
+    },
+    {
+     "key": "/d7/f7.c",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "sed -n q1 /d1/f1.x",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "which a1",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\nopen(P, \"w\")\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "git checkout",
+     "failed": false
+    },
+    {
+     "key": "git a10",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "ls -la a1 && find a1 --opt q1 -o --opt q2 -o --opt q3 | head --opt && cd a1 && git log --opt -40 && git status && git diff --opt a2 | head -80",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "ls -la",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nopen(P, \"w\")\ndef f(): pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "b1 check",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.py",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.h",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.h",
+     "failed": false
+    },
+    {
+     "key": "d4/f4.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "grep -n q1 -A 9 /d1/f1.h | head -20",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "apt-get a1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.h",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.h",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.h",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "apt-get a1 -qq && apt-get install -y -qq a2 >/dev/null && python3 --version && gcc --version | head -1",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "gcc --version",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 -m a1 /d1/f1.py && python3 -c assert x\nprint(x)\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "node /d1/f1.js /d2/f2.out > /d3/f3.json && python3 - <<'EOF'\nassert x\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1.c",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "git show",
+     "failed": false
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "git a3",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 /d1/f1.py && echo q1 && cat -A /d2/f2 && echo q2 && python3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 d1/f1.py a1 --opt 2>&1 | grep -E q1 | head -30",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "tail -30 /d1/f1.txt; echo q1; tail -c 9 /d2/f2.txt; echo; ps -p a1 -f q2 | head -x -o a2 2>/dev/null | head; ls -la /d3/f3 2>/dev/null",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.js",
+     "failed": false
+    },
+    {
+     "key": "d8/f8.js",
+     "failed": true
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "xargs -P",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5.txt",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5.txt",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "b1 a1\n  b2 a2q1\n  b2 a3q2\n  b2 a4 a5\n  V=v b3\n  sqlite3 /d1/f1 q3 > /d2/f2.txt\n  V=v b3\n  awk -v a6q4 -v a7q5 -v a8q6 q7\n  wc -c < /d2/f2.txt\n}\n\nb4 q8 q9\n\nb4 q10 q11\n\nb4 q12 q13\n\nb4 q14 q15\n\nb4 q16 q17\n\nb4 q18 q19\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b5 a30",
+     "failed": true
+    },
+    {
+     "key": "sqlite3 a38",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 d1/f1.py a1 --opt 2>&1 | tail -8 && python3 - <<'EOF'\nassert x\ndef f(): pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d2/f2.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "apt-get a1 -qq && apt-get install -y -qq a2 a3 a4 2>&1 | tail -20",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "/d8/f8/",
+     "failed": false
+    },
+    {
+     "key": "/d11/f11",
+     "failed": false
+    },
+    {
+     "key": "/d7/f7/",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "sqlite3 /d1/f1 << EOF",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "od -A a1 -t a2 -N 9 /d1/f1.x; echo q1; strings -n 9 /d1/f1.x | head -80; echo q2; ls /d2/f2/ | head --opt; echo q3; ls /d3/f3 /d4/f4 2>/dev/null; type a3 a4 a5 a6 a7 2>&1",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d5/f5",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "pip install a1 --quiet && python3 -c print(x)\nos.listdir(P)\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\nclass C: pass\nprint(x)\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "pip3 install q1 q2 && python3 -c print(x)",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "pip3 --version",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\nassert x\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 -u - <<'EOF'\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "ps a1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "b1 -af",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "gcc -O2 -o /d1/f1 /d2/f2.c && p1/b1 9",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d3/f3",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "grep -n q1 /d1/f1 /d2/f2 /d3/f3 d4/f4 d5/f5 2>/dev/null | head -30\nls /d6/f6.x/ 2>/dev/null\necho q2\necho q3",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "/d7/f7.x",
+     "failed": false
+    },
+    {
+     "key": "apt-get install",
+     "failed": false
+    },
+    {
+     "key": "configure --opt=v",
+     "failed": false
+    },
+    {
+     "key": "d10/f10.x",
+     "failed": false
+    },
+    {
+     "key": "make install",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 -c print(x)\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.py",
+     "failed": true
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "set -e\nrm -rf /d1/f1 /d2/f2 /d3/f3\nmkdir -p /d1/f1\nuv run a1 /d4/f4.py /d1/f1 /d2/f2\necho q1; find /d2/f2 --opt q2\ncp -a /d2/f2 /d3/f3\nuv run a1 /d5/f5.py /d3/f3\necho q3; find /d3/f3 --opt q2\nb1 a2 a3 a4 a5\nrm -rf /d6/f6\nuv run a1 /d4/f4.py /d1/f1 /d7/f7\nb2_test -f /d8/f8.txt && echo a6\nb1 a7 a8\nset a9\nuv run a1 /d4/f4.py /d1/f1 /d2/f2\necho q4\nb1 a10 run a11 a12 install a13 a14 a15 a16 a17 a18 a19 a20\nls -la /d9/f9.x /d10/f10.toml /d11/f11.x | head\nuv a18 --opt\necho q5\nb1 a21 a22 a12 a23 a24 check a25\nb1 a26 a27 a19 a28 a29 a30 a31 a32 a33\nb1 a34 a35\nrm -rf /d12/f12 /d13/f13 /d14/f14\nmkdir -p q6\necho a36 > q7\nuv run a1 /d4/f4.py /d12/f12 /d13/f13\ncp -a /d13/f13 /d14/f14\nuv run a1 /d5/f5.py /d14/f14\ncmp q7 q8 && echo a37\nb1 a38 a26\nrm -rf /d15/f15 /d16/f16\nmkdir -p /d17/f17\nb3 > /d18/f18.x\nuv run a1 /d4/f4.py /d15/f15 /d16/f16\nuv run a1 /d5/f5.py /d16/f16\nb2_test -f /d18/f18.x && b2_test a39 -s /d19/f19.x && echo a40\nb1 a41 a42 a43\nb2_test a44 /d20/f20 --opt a45 | wc -x -eq 9 && echo a46\nb1 a47 a48 a49 a50 a51\nrm -rf /d21/f21 /d22/f22 /d23/f23 /d24/f24 /d25/f25 /d26/f26 /d27/f27 /d28/f28\necho a52",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "ls -la /d1/f1 && ls -la /d2/f2 && cd /d2/f2 && git log --opt --opt | head --opt && echo q1 && git status && echo q1 && git a1 --opt | wc -l",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [],
+   "expected": "run"
+  },
+  {
+   "command": "cat /d1/f1; which a1 a2 pip a3 2>/dev/null; ls /d2/f2 | head -80",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "/d7/f7",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "cd /d1/f1 && python3 /d2/f2.py && python3 - <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d3/f3_check.py",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 -m a1 /d1/f1 && pip install a2 a3 a4 a5 a6 a7 -q && python -c print(x)",
+   "failed": true,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\nopen(P, \"w\")\nsubprocess.run(X)\n# test\nprint(x)\nglob.glob(P)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 -m a1 /d1/f1 && pip install --opt d2/f2 d3/f3.x && python -c assert x\nprint(x)",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\nopen(P, \"w\")\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "b1 -h",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.x",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "cd /d1/f1 && echo q1 && cat d2/f2 && echo q2 && cat d3/f3 && echo q3 && cat d4/f4 && ls -la d5/f5 d6/f6 d7/f7 2>&1 && echo q4 && ls -la d8/f8 && echo q5 && ls d9/f9 | head",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d10/f10.txt",
+     "failed": false
+    },
+    {
+     "key": "b1 a11",
+     "failed": false
+    },
+    {
+     "key": "git a14",
+     "failed": false
+    },
+    {
+     "key": "/d23/f23.txt",
+     "failed": false
+    },
+    {
+     "key": "d14/f14",
+     "failed": true
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\n# test\nprint(x)\nglob.glob(P)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "a3q1d2/f2.xq2a4q2a5'",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(\"FAIL\")\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7 a8 a9 check a10 a11 a12 a13 a14\nfor i a6 9 9 9 9 9 9; do\n  sleep 9\n  if a15 a16 -p a17 /d1/f1 >/dev/null 2>&1; then\n    echo q1\n    b2\n  fi\n  echo q2\ndone\npython3 -c print(x)\nf.read()\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b1 a22",
+     "failed": false
+    },
+    {
+     "key": "/d8/f8.py",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(\"FAIL\")\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\nassert x\n# test\nprint(x)\nos.listdir(P)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "set -e\necho q1 > /d1/f1.c\nb1 --opt --opt -Os --opt=v --opt=v --opt --opt --opt --opt --opt --opt --opt --opt -G 9 --opt --opt --opt -x --opt=v /d1/f1.c --opt -o /d2/f2 2>&1\necho q2\nb2 -d /d2/f2 | awk q3 | grep -E q4 | sort | uniq -c | sort -nr\necho q5\nb2 -d /d2/f2 | grep -E q6 | head -40\necho q7\nb3 -S /d2/f2\necho q8\nb3 -h /d2/f2 | head -20\necho q9\nb3 -r /d2/f2 | head\necho q10\nb4 /d2/f2 | head -30\necho q11\nb2 -d /d2/f2 | head -50\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d3/f3.h",
+     "failed": false
+    },
+    {
+     "key": "/d14/f14.c",
+     "failed": false
+    },
+    {
+     "key": "b5 a6",
+     "failed": false
+    },
+    {
+     "key": "/d20/f20.c",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.c",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "b1 a1 d1/f1.c a2 a3 a4 a5 a6 a7\nsed -i q1 /d2/f2.c\ngcc -o /d3/f3 /d2/f2.c /d4/f4.x -lm && p2/b2",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "b1 a8",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d3/f3",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "gcc -O2 -o /d1/f1 /d2/f2.c && p1/b1 9",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": true
+    },
+    {
+     "key": "/d3/f3.c",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cd /d1/f1 && python3 d2/f2.py install 2>&1 | tail -8 && cd /d3/f3 && python3 /d4/f4.py && python3 -m pytest /d5/tests/test_f5.py /d6/tests/test_f6.py -q --opt=v && python3 - <<'EOF'\nassert x\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "d7/tests/test_f7.py",
+     "failed": false
+    },
+    {
+     "key": "b1 check",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "b1 a15",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python /d1/test_f1.py",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d1/test_f1.py",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 -m a1 run -p 9 -i d1/f1.x --opt /d2/f2 > /d3/f3.log 2>&1 & a2 a3 > /d4/f4.x && sleep 9 && cat /d3/f3.log && echo q1 && curl --opt d5/f5/ && echo && python3 -m pip install --opt d6/f6 d7/f7.x && python3 -c assert x\nprint(x)",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "python3 -m",
+     "failed": false
+    },
+    {
+     "key": "python3 -m",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(\"FAIL\")\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": true
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "which a1 a2 a3 a4 a5 a6 a7 a8 2>/dev/null; ls /d1/f1 /d2/f2 2>/dev/null; head -c 9 /d3/f3.x; echo; wc -c /d3/f3.x; xxd /d4/f4 | sed -n q1",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d4/f4",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "p1/b1",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\nassert x\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cat > /d1/f1.x << EOF\npython3 - <<'EOF'\nopen(P, \"w\")\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nx.save(P)\nprint(x)\nos.listdir(P)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "/d3/f3",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cd /d1/f1 && git a1 -p a2; echo q1; git a1 -p a3; echo q1; git a1 -t a3; git a1 -t a4; git a1 -p a4; echo q2; git a1 -p a5; echo q3; git a1 -p a6",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "/d8/f8",
+     "failed": false
+    },
+    {
+     "key": "git a1",
+     "failed": true
+    },
+    {
+     "key": "/d16/f16/",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nclass C: pass\nwhile x: pass\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "sqlite3 /d1/f1 << EOF",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d8/f8",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "b1 check a1 a2 a3 install a4 a5 a6 a7 a8 a9 a10 a11 a12\ngrep -n q1 /d1/f1.c /d2/f2.h /d3/f3.c | head --opt",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 -c # test\nprint(x)",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 -m a1 /d1/f1 && pip install --opt pip && pip install q1 && python -c print(x)",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\nwhile x: pass\nprint(x)\nglob.glob(P)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/tests/f1.x",
+     "failed": false
+    },
+    {
+     "key": "/d1/tests/f1.x",
+     "failed": false
+    },
+    {
+     "key": "/d1/tests/f1.x",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.py",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "nohup python3 /d1/f1.py > /d2/f2.log 2>&1 & a1 a2 > /d3/f3.x; sleep 9; cat /d2/f2.log; python3 - <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": true
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cd /d1/f1 && python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d5/f5.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "pip install -q a1 a2 a3 2>&1 | tail -20",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13\npython3 - <<'EOF'\ndef f(): pass\nwhile x: pass\n# test\nprint(x)\nglob.glob(P)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "a27q1d2/f2.xq2a28q2a29'",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "dpkg -l",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nassert x\nsubprocess.run(X)\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a18 a22q1--opt'\nb1 a23 a9 a24 a25 a26 a27 a28 a29 a30 a31 a9 a32 a33 a15 a16 a34\ncurl -sI q2 2>&1 | head -15\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "apt-cache a35",
+     "failed": false
+    },
+    {
+     "key": "apt-get install",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\nopen(P, \"w\")\nsubprocess.run(X)\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "pip install a1 a2 a3 -q && python3 -c print(x)",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\nwrite_text\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "g++ --opt=v -o /d1/f1 /d2/f2.cpp /d3/f3.cpp -O2 --opt -LP -x -x -x -lm 2>&1\necho q1\ng++ --opt=v -o /d4/f4 /d2/f2.cpp /d3/f3.cpp -g -O0 -LP -x -x -x -lm 2>&1\necho q2\necho q3\np1/b1; echo q4\necho q5\np2/b2; echo q6\necho q7\nb3 --opt=v --opt=v --opt=v --opt=v /d1/f1; echo q8\necho q9\nb3 --opt=v --opt=v --opt=v --opt=v /d4/f4; echo q10",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d5/f5.cc",
+     "failed": false
+    },
+    {
+     "key": "/dev/null",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "d6/f6",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "rm -f /d1/f1.x /d2/f2.x; V=v V=v node /d3/f3.js > /d4/f4.txt 2> /d5/f5.txt; echo a1; echo q1; cat /d5/f5.txt; echo q2; head -20 /d4/f4.txt; echo q3; ls -la /d1/f1.x /d2/f2.x; python3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 - <<'EOF'\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d7/f7.log",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "set -e\necho q1\nb1 -u list --opt a1 -C /d1/f1.x status\nb2 status\nb3 --opt | grep -E q2 || true\necho q3\nb4_test -f /d1/f1.x && echo a2\ngrep -n q4 /d1/f1.x\necho q5\npython3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "b5 a3",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": "apt-get a8",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\nassert x\ndef f(): pass\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "python3 -m",
+     "failed": false
+    },
+    {
+     "key": "python3 -m",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "d9/f9",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "apt-get a1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1/",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndf.to_csv(P)\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "pip3 install a1 --opt d1/f1 -q && python3 -c print(x)",
+   "failed": true,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "d2/f2.x",
+     "failed": false
+    },
+    {
+     "key": "/d9/f9",
+     "failed": false
+    },
+    {
+     "key": "/d7/f7/",
+     "failed": false
+    },
+    {
+     "key": "/d20/f20",
+     "failed": false
+    },
+    {
+     "key": "apt-get a8",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\nwhile x: pass\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "dpkg -l",
+     "failed": false
+    },
+    {
+     "key": "apt-get a15",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 -c print(x)",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "dpkg -L",
+     "failed": false
+    },
+    {
+     "key": "/d6/f6.cpp",
+     "failed": false
+    },
+    {
+     "key": "/d7/f7.cpp",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "find /d1/f1 /d2/f2 --opt q1 --opt q2 2>/dev/null | head -80; echo q3; python3 -c print(x)",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cd /d1/f1 && uv run a1 -x << EOF",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "d2/f2.py",
+     "failed": true
+    },
+    {
+     "key": "/d3/f3.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "uv run",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "cat /d1/f1 | head -20; apt-get --version | head -1",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "cd /d1/f1\nb1 --opt=v --opt=v --opt --opt -G 9 --opt --opt a1\n  p2/b2 -x -x a1\n  b3 -o /d2/f2 2>&1 | head -3\nls -lh /d2/f2\nb4 -h /d2/f2 | head -16\nb5 /d2/f2 | grep -E q1\nb6 a2 a3 a4 a5 a6 a7 d3/f3.js a8\nb7_test -x /d2/f2 && echo a9\npython3 - <<'EOF'\nassert x\nprint(x)\nf.read()\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d3/f3.js",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d3/f3.js",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "ls -la /d1/f1.csv /d2/f2.csv /d3/f3.txt\necho q1\nfile /d1/f1.csv /d2/f2.csv\necho q2\nwc -c /d1/f1.csv /d2/f2.csv\necho q3\nxxd /d1/f1.csv | head -3\necho q4\nsqlite3 --opt q5 /d4/f4 < /d5/f5.x > /d6/f6.txt 2> /d7/f7.x\necho q6\ncat /d7/f7.x\necho q7\nsqlite3 --opt q5 /d4/f4 < /d8/f8.x > /d9/f9.txt 2> /d10/f10.x\necho q8\ncat /d10/f10.x\necho q9\nb1 a1 a2 a3 a4\ntail -n a5 /d2/f2.csv > /d11/f11.csv\nb1 a6 a7 a8 a9 a10 a11 a12 a13\npython3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\nassert x\nprint(\"FAIL\")\nclass C: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "git log",
+     "failed": true
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b16 check",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a2 a6 a7 a8 a9 a10 a11\nfor a12 a13 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9; do\n  cat > /d1/f1.x << EOF",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "b1 a14",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.x",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5.x",
+     "failed": false
+    },
+    {
+     "key": "b1 9",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\nsubprocess.run(X)\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "b1 -e",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "sqlite3 /d1/f1 q1",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "b1 a1",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 /d1/f1.py",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 d1/f1.py a1 --opt 2>&1 | tail -25 && python3 - <<'EOF'\nassert x\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\njson.dump(X, F)\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "b1_check a1\n  b2 a2 a3\n  cat > /d1/f1.x << EOF",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d6/f6.x",
+     "failed": false
+    },
+    {
+     "key": "b4 a29",
+     "failed": false
+    },
+    {
+     "key": "b4 a54",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\nglob.glob(P)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/tests/f1.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1/",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "export d1/f1\ncd /d2/f2 && make -C test 2>&1 | tail -40; echo a1\nls test | head -30",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "d4/f4.x",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5.x",
+     "failed": false
+    },
+    {
+     "key": "d10/f10.x",
+     "failed": false
+    },
+    {
+     "key": "b3q14 --opt=vq15",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "pip install q1 --opt && python3 -c print(x)",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "cat > /d1/f1.x << EOF",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "b1 a1",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    },
+    {
+     "key": "b3_check a14",
+     "failed": false
+    },
+    {
+     "key": "b3_check a14",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cd /d1/f1 && rm -rf a1 && mkdir a1 && cp -a /d2/f2.c /d3/f3.h d4/f4/ && cd a1 && rm -f d5/f5.o a2 && make a3 a4q1 a5q2 -x 2>&1 | tail -5 && ./b1 d6/f6 d7/f7.x d8/f8.x a6 a7 a8 >/dev/null 2>&1; echo a9 && p2/b2 d6/f6 d7/f7.x d9/f9.x a6 a7 a8 >/dev/null 2>&1; echo a10 && cmp /d10/f10.x /d11/f11.x && echo a11 || echo a12 && perl -e q3",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d12/f12.c",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d14/f14.o",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "grep -n q1 -n /d1/f1.py | head -80",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "/d4/f4.py",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\nopen(P, \"w\")\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cd /d1/f1 && git a1 -1 --opt=vq1 a2 && git log -1 --opt=vq2 a3 a1 -1 --opt=vq1 a4 && echo q3 && git log --opt=vq4 --opt=vq5 --opt=vq6 | head -40",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "debug",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\nassert x\nsubprocess.run(X)\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cd /d1/f1 && python3 -m pytest /d2/tests/test_f2.py /d3/tests/test_f3.py -q --opt=v 2>&1 | tail -80",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4",
+     "failed": false
+    },
+    {
+     "key": "d8/f8.py",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "node --opt /d1/f1.js && node /d1/f1.js /d2/f2.out > /d3/f3.json && python3 - <<'EOF'\nassert x\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "find /d1/f1 --opt a1 -o --opt a2 | head --opt; echo q1; ls --opt /d2/f2 2>/dev/null | head --opt",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    },
+    {
+     "key": "2>/dev/null",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "b1 a1 test a2 a3 a4 a5 a6 a7 a8 a9 a10\nb1 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21\ncat > /d1/f1.x << EOF",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.x",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.x",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "g++ --version | head -3; which a1 a2; python3 --version; pip a3 a4 a5 2>&1 | head -20; ls /d1/f1 /d2/f2 2>/dev/null; dpkg -l | grep -E q1 | head -30",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "cat > /d1/f1.c << EOF",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d2/f2.c",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.txt",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.x",
+     "failed": false
+    },
+    {
+     "key": "b1 a1",
+     "failed": false
+    },
+    {
+     "key": "b1 a32",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "b1 a1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\n# test\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "git --version",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "git a3",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "debug"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.py",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "ls -la /d1/f1 /d2/f2 /d3/f3 /d4/f4 2>/dev/null; wc -l /d5/f5; head -c 9 /d6/f6; echo; head -c 9 /d7/f7",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\n# test\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    },
+    {
+     "key": "dpkg -l",
+     "failed": false
+    },
+    {
+     "key": "apt-get a15",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "node --opt /d1/f1.js && cd /d2/f2 && V=v node d3/f3.js > /d4/f4.txt 2> /d5/f5.txt\necho a1\ngrep -a q1 /d5/f5.txt\npython3 - <<'EOF'\nprint(x)\nf.read()\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "b1 a1 a2 9 a3 a4 a5 a6 a7 a8 a9 a6 a10\nb1 a11 check d1/f1.txt a12 a13 d2/f2.txt a14 a15\npython3 - <<'EOF'\nsubprocess.run(X)\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "/d3/f3.c",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.c",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5.c",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d6/f6",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 /d1/f1.py && python3 - <<'EOF'\nassert x\nprint(x)\nf.read()\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "cat > /d1/f1.x << EOF\npython3 <<'EOF'\nopen(P, \"w\")\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "b1 a1",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5.h",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d6/f6.txt",
+     "failed": false
+    },
+    {
+     "key": "/d6/f6.txt",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cd /d1/f1 && V=v V=v node d2/f2.js > /d3/f3.txt 2> /d4/f4.txt; echo a1; echo q1; wc -c /d3/f3.txt; tail -c 9 /d3/f3.txt; echo; echo q2; tail -80 /d4/f4.txt",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "b1 a2",
+     "failed": false
+    },
+    {
+     "key": "/d6/f6.c",
+     "failed": false
+    },
+    {
+     "key": "b1 a25",
+     "failed": false
+    },
+    {
+     "key": "/d9/f9.h",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cp /d1/f1.py /d2/f2.py && cd /d3/f3 && python3 -m pytest /d4/tests/test_f4 -q --opt=v 2>&1 | tail -40",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d5/f5",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "ls /d1/f1 2>/dev/null | wc -l; ps -ef | grep a1 | grep -v grep | wc -l; ls /d2/f2 | wc -l; b1 test a2 a1 a3\ntime b2 /d3/f3.x a4 --opt 9 2>/dev/null | head -40",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "/d6/f6",
+     "failed": true
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cat > /d1/f1.c << EOF",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d2/f2.c",
+     "failed": false
+    },
+    {
+     "key": "/d3/f3.c",
+     "failed": false
+    },
+    {
+     "key": "/d4/f4.c",
+     "failed": false
+    },
+    {
+     "key": "p1/b1",
+     "failed": false
+    },
+    {
+     "key": "p1/b1",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "python3 <<'EOF'\ndf.to_csv(P)\nassert x\nsubprocess.run(X)\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "b1_check a1\n  b2 a2 a3 a4 a5\n  cat > /d1/f1.x << EOF",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": "b1_check a1",
+     "failed": false
+    },
+    {
+     "key": "b1_check a1",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.x",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "nproc; free -h; df -h /d1/f1/ /d2/f2 /d3/f3; python3 -m pip install a1 2>&1 | tail -30",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d11/f11",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\nsubprocess.run(X)\nwhile x: pass\nprint(x)\nglob.glob(P)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "d6/f6",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "b1_test -f /d1/f1.html && echo q1 && cat /d1/f1.html && python3 - <<'EOF'\nassert x\nsubprocess.run(X)\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\nsubprocess.run(X)\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 <<'EOF'\nopen(P, \"w\")\njson.dump(X, F)\ndef f(): pass\nwhile x: pass\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "edit"
+  },
+  {
+   "command": "cd /d1/f1 && git status --opt && git diff --opt && git reflog -5 && python3 - <<'EOF'\nassert x\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "b1 a1 a2 a3 a4 a5 a6 a7\nV=v p2/b2 | awk q1a8\necho a9\nb3 -d -j d1/f1.x /d2/f2 --opt=v --opt=v a10 a11 | head -80\necho q2\ngrep -n q3 /d3/f3.h | head -30\nsed -n q4 /d3/f3.h\necho q5\nV=v p2/b2 | awk q6a8\necho a12\nb3 -d -j d1/f1.x /d2/f2 --opt=v --opt=v\necho q7\ngrep -n q8 /d4/f4.c | head -30\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "d7/f7.js",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d1/f1",
+     "failed": true
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "cd /d1/f1 && python3 -m pytest /d2/tests/test_f2.py /d3/tests/test_f3.py -q --opt=v 2>&1 | tail -15 && python3 -c print(x)\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "b1 a4",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "cd /d1/f1 && gcc -O3 --opt --opt -IP -IP a1\n  b1 -o d2/f2.so a1\n  p2/b2 a1\n  p3/b3 && b4\npython3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "apt-get a2",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.py",
+     "failed": false
+    },
+    {
+     "key": "/d2/f2.py",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "/d1/f1/",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "cd /d1/f1 && rm -rf a1 && git status --opt && b1_test a2 -d a1 && echo a3",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "pip install",
+     "failed": true
+    },
+    {
+     "key": "pip install",
+     "failed": true
+    },
+    {
+     "key": "dpkg -L",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "b1 -N a1 /d1/f1.o /d2/f2.o && gcc -o /d3/f3 /d4/f4.o /d2/f2.o -lm && p2/b2",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "/d5/f5",
+     "failed": true
+    },
+    {
+     "key": "/d5/f5",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/f1.o",
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "ls -la /d1/f1 && find /d1/f1 --opt a1 | head --opt && wc -c /d2/f2 2>/dev/null | head -50",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nwhile x: pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "set --opt a1\necho q1\nb1 --opt | grep -E q2 || true\nb2 -a a2 | head -3\nb2 -a a3 | head -3\nb3 a4 a5\necho q3\nb4_test -d /d1/f1 && git --opt=v rev-parse --opt\nb4_test -x /d2/f2 && echo a6\nb5 -T | grep -E q4\necho q5\nb4_test -f /d3/f3.x && echo a7\necho q6\nexport a8q7\nV=v b6\ncd q8\ngit clone d4/f4 a9\ncd a9\ngit config a10 d5/f5.x\ngit config d6/f6.x a11\nb7 a12 a13 a14 a15 a16 a17 a18\ngit checkout a19\nprintf q9 > d7/f7.html\ngit add d7/f7.html\ngit commit -m q10 --opt\nV=v b8\ngit push a20 a19\nV=v b8\necho q11\ngit checkout a16\nprintf q12 > d7/f7.html\ngit add d7/f7.html\ngit commit -m q13 --opt\nV=v b8\ngit push a20 a16\nV=v b8\necho q14\npython3 - <<'EOF'\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "apt-get a14",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "b7 a54",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "cd /d1/f1 && make a1 -x 2>&1 | tail -80",
+   "failed": false,
+   "prevPhase": "edit",
+   "recent": [
+    {
+     "key": "curl -sI",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 - <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "verify",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "sed -n q1 /d1/f1.x; echo q2; wc -c /d1/f1.x; echo q3; rg -n q4 /d1/f1.x | head -5; rg -o q4 /d1/f1.x | sort | uniq -c | sort -nr",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "/d1/f1.x",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "explore"
+  },
+  {
+   "command": "python3 - <<'EOF'\nprint(\"FAIL\")\ndef f(): pass\nwhile x: pass\nprint(x)\nglob.glob(P)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "/d1/tests/f1.x",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "verify"
+  },
+  {
+   "command": "python3 -m pip install a1 a2 a3 a4 a5 a6 a7 a8 2>&1 | tail -25",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "/d1/f1",
+     "failed": false
+    },
+    {
+     "key": "d5/f5.py",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "python3 <<'EOF'\ndef f(): pass\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "build",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "build"
+  },
+  {
+   "command": "ls /d1/f1 /d2/f2 /d3/f3 /d4/f4 /d5/f5 2>/dev/null; which a1 a2 a3 a4 a5 2>/dev/null; node -v; python3 -V",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "/d6/f6",
+     "failed": true
+    },
+    {
+     "key": "/d8/f8",
+     "failed": true
+    },
+    {
+     "key": "/d10/f10/",
+     "failed": true
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\nf.read()\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "grep --opt",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "git a1",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "git a1",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "for a1 a2 a3 a4 a5 a6 a7; do\n  for a8 a2 a3 a4 a5 a6 a7; do\n    if a9 q1 a10 q2 a11; then\n      echo q3\n      b1 -b -r 9 -f d1/f1.x d2/f2.x\n    fi\n  done\ndone",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "b1 -h",
+     "failed": false
+    },
+    {
+     "key": "d6/f6",
+     "failed": false
+    },
+    {
+     "key": "d8/f8.x",
+     "failed": false
+    },
+    {
+     "key": "/d15/f15.txt",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cd /d1/f1 && curl --opt -O d2/f2.gz && b1 a1 a2 --opt d3/f3.gz d4/f4.gz 2>&1 | tail -25 && echo q1 && b1 a1 a2 --opt d5/f5.gz 2>&1 | tail -20 && echo q2 && b1 a1 a2 --opt d6/f6.gz 2>&1 | tail -15",
+   "failed": false,
+   "prevPhase": "explore",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "b2",
+     "failed": false
+    },
+    {
+     "key": "d14/f14",
+     "failed": false
+    },
+    {
+     "key": "d10/f10.gz",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "export d1/f1\necho q1\nb1 d2/f2.x | head --opt\necho q2\nb2 a1 a2 a3 a4 a5 a6\nb1 d3/f3.x | sed -n q3\necho q4\nb2 a7 a8 a9 a10 a11\npython3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n",
+   "failed": true,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": null,
+     "failed": false
+    },
+    {
+     "key": "d6/f6.x",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "grep -n q1 -n /d1/f1.py && python3 - <<'EOF'\ndef f(): pass\nprint(x)\nf.read()\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "python3 -x",
+     "failed": true
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": true
+    },
+    {
+     "key": "/d2/f2.py",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  },
+  {
+   "command": "cd /d1/f1 && python3 - <<'EOF'\nsubprocess.run(X)\nprint(x)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "failed": false,
+   "prevPhase": "run",
+   "recent": [
+    {
+     "key": "grep --opt",
+     "failed": false
+    },
+    {
+     "key": "d2/f2.yaml",
+     "failed": false
+    },
+    {
+     "key": "git grep",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    },
+    {
+     "key": "py:inline",
+     "failed": false
+    }
+   ],
+   "expected": "run"
+  }
+ ]
+}
