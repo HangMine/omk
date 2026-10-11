@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getHeadroomRuntimeStatus } from "../src/core/context-budget-headroom.ts";
 
 type ExecFileCallback = (error: Error | null, stdout: string, stderr: string) => void;
+type ExecFileOptions = { readonly timeout: number; readonly signal: AbortSignal };
 
 const childProcess = vi.hoisted(() => ({
 	spawnSync: vi.fn(() => ({ status: 1, stdout: "", stderr: "" })),
@@ -26,6 +27,29 @@ function answerProbes(answer: (command: string, args: readonly string[]) => stri
 	);
 }
 
+/**
+ * A command that never answers on its own, like a hung `headroom`: it ends only the way Node's execFile
+ * ends it, by the `timeout` option or by the abort `signal`, with Node's error shape for each.
+ */
+function hangProbes(): void {
+	childProcess.execFile.mockImplementation(
+		(command: string, _args: readonly string[], options: ExecFileOptions, callback: ExecFileCallback) => {
+			const timer = setTimeout(() => {
+				callback(Object.assign(new Error(`${command} timed out`), { killed: true, signal: "SIGTERM" }), "", "");
+			}, options.timeout);
+			options.signal.addEventListener("abort", () => {
+				clearTimeout(timer);
+				callback(Object.assign(new Error("The operation was aborted"), { name: "AbortError" }), "", "");
+			});
+		},
+	);
+}
+
+/** Let the probe's promise chain run to its next spawn or settle (a few awaits per probe). */
+async function flushMicrotasks(): Promise<void> {
+	for (let i = 0; i < 20; i++) await Promise.resolve();
+}
+
 /** The module caches the probe for the process lifetime, so every case loads a fresh copy. */
 async function loadModule() {
 	vi.resetModules();
@@ -38,6 +62,10 @@ describe("headroom version probe off the render path (spec 046)", () => {
 	beforeEach(() => {
 		childProcess.spawnSync.mockClear();
 		childProcess.execFile.mockReset();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it("never spawns synchronously from the render-path label and starts one probe at most", async () => {
@@ -91,6 +119,7 @@ describe("headroom version probe off the render path (spec 046)", () => {
 				shell: false,
 				windowsHide: true,
 				env: { PATH: process.env.PATH ?? "" },
+				signal: expect.any(AbortSignal),
 			});
 		}
 	});
@@ -105,5 +134,24 @@ describe("headroom version probe off the render path (spec 046)", () => {
 		await expect(loadHeadroomVersion()).resolves.toBeNull();
 		expect(childProcess.execFile).toHaveBeenCalledTimes(4);
 		expect(childProcess.spawnSync).not.toHaveBeenCalled();
+	});
+
+	it("abort kills the running probe, settles to null and starts no further probe", async () => {
+		vi.useFakeTimers();
+		hangProbes();
+		const { abortHeadroomVersionProbe, formatHeadroomStatusLabel, loadHeadroomVersion } = await loadModule();
+		const settled = vi.fn();
+		void loadHeadroomVersion().then(settled);
+		const [, , options] = childProcess.execFile.mock.calls[0] as [string, string[], ExecFileOptions];
+
+		abortHeadroomVersionProbe();
+		await flushMicrotasks();
+
+		expect(options.signal.aborted).toBe(true);
+		expect(settled).toHaveBeenCalledWith(null);
+		await vi.advanceTimersByTimeAsync(10 * 750);
+		expect(childProcess.execFile).toHaveBeenCalledTimes(1);
+		expect(formatHeadroomStatusLabel()).toBe(policyLabel);
+		expect(vi.getTimerCount()).toBe(0);
 	});
 });

@@ -33,6 +33,7 @@ const HEADROOM_PYTHON_DISTRIBUTIONS = ["headroom", "headroom-ai"] as const;
 
 let cachedHeadroomVersion: string | null | undefined;
 let headroomVersionProbe: Promise<string | null> | undefined;
+let headroomVersionProbeAbort: AbortController | undefined;
 
 interface McpStabilityInput {
 	readonly commandSummary: string;
@@ -53,11 +54,24 @@ export function formatHeadroomStatusLabel(): string {
 
 /** Probe the installed headroom version once per process, off the render path; callers share the result. */
 export function loadHeadroomVersion(): Promise<string | null> {
-	headroomVersionProbe ??= probeInstalledHeadroomVersion().then((version) => {
+	if (headroomVersionProbe) return headroomVersionProbe;
+	const abort = new AbortController();
+	headroomVersionProbeAbort = abort;
+	headroomVersionProbe = probeInstalledHeadroomVersion(abort.signal).then((version) => {
 		cachedHeadroomVersion = version;
+		if (headroomVersionProbeAbort === abort) headroomVersionProbeAbort = undefined;
 		return version;
 	});
 	return headroomVersionProbe;
+}
+
+/**
+ * Kill a probe that is still running (shutdown). The pending probe settles to `null` and is cached,
+ * so a hung `headroom` cannot hold shutdown or outlive the process, and nothing restarts it.
+ */
+export function abortHeadroomVersionProbe(): void {
+	headroomVersionProbeAbort?.abort();
+	headroomVersionProbeAbort = undefined;
 }
 
 export function countRoutableNonHubSkills(skills: readonly { readonly name: string }[]): number {
@@ -88,13 +102,13 @@ export function classifyMcpStability(entry: McpStabilityInput): McpStability {
 	return "stable";
 }
 
-async function probeInstalledHeadroomVersion(): Promise<string | null> {
+async function probeInstalledHeadroomVersion(signal: AbortSignal): Promise<string | null> {
 	const version =
-		(await readVersionFromCommand("headroom", ["--version"])) ??
-		(await readVersionFromCommand("headroom", ["version"]));
+		(await readVersionFromCommand("headroom", ["--version"], signal)) ??
+		(await readVersionFromCommand("headroom", ["version"], signal));
 	if (version) return version;
 	for (const distribution of HEADROOM_PYTHON_DISTRIBUTIONS) {
-		const pythonVersion = await readPythonDistributionVersion(distribution);
+		const pythonVersion = await readPythonDistributionVersion(distribution, signal);
 		if (pythonVersion) return pythonVersion;
 	}
 	return null;
@@ -102,14 +116,18 @@ async function probeInstalledHeadroomVersion(): Promise<string | null> {
 
 function readPythonDistributionVersion(
 	distribution: (typeof HEADROOM_PYTHON_DISTRIBUTIONS)[number],
+	signal: AbortSignal,
 ): Promise<string | null> {
-	return readVersionFromCommand("python3", [
-		"-c",
-		`import importlib.metadata as m; print(m.version('${distribution}'))`,
-	]);
+	return readVersionFromCommand(
+		"python3",
+		["-c", `import importlib.metadata as m; print(m.version('${distribution}'))`],
+		signal,
+	);
 }
 
-function readVersionFromCommand(command: string, args: readonly string[]): Promise<string | null> {
+function readVersionFromCommand(command: string, args: readonly string[], signal: AbortSignal): Promise<string | null> {
+	// After an abort, start nothing new: the remaining fallbacks resolve to null without spawning.
+	if (signal.aborted) return Promise.resolve(null);
 	return new Promise((resolve) => {
 		try {
 			execFile(
@@ -121,9 +139,10 @@ function readVersionFromCommand(command: string, args: readonly string[]): Promi
 					shell: false,
 					windowsHide: true,
 					env: { PATH: process.env.PATH ?? "" },
+					signal,
 				},
 				(error, stdout, stderr) => {
-					resolve(error ? null : parseHeadroomVersionOutput(`${stdout}\n${stderr}`));
+					resolve(error || signal.aborted ? null : parseHeadroomVersionOutput(`${stdout}\n${stderr}`));
 				},
 			);
 		} catch {
