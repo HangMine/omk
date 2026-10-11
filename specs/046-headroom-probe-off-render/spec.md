@@ -44,7 +44,7 @@ User-visible result: unchanged where headroom is not installed. Where it is inst
 
 Unchanged and passing: `control-panel-runtime-status.test.ts`, `control-plane-rail.test.ts` (its hermetic `child_process` mock also stubs `execFile`).
 
-Timing (informal, not an A/B): first call of `formatHeadroomStatusLabel()` before and after, on this box. A formal first-paint A/B is not required for this fix; it rides along with fix 1's 20-pair measurement.
+Timing (informal, not an A/B): first call of `formatHeadroomStatusLabel()` before and after, on this box. A formal first-paint A/B is not required for this fix; it rides along with fix 1's 20-pair measurement. Script and raw data: `bench/run.sh <base-ref> [pairs]` (fresh `tsx` process per run, arms alternating, load1 recorded per run), `bench/first-label.mts`, `bench/raw.tsv`.
 
 ## Non-goals
 
@@ -60,3 +60,4 @@ Timing (informal, not an A/B): first call of `formatHeadroomStatusLabel()` befor
 - `packages/coding-agent/test/control-panel-headroom-probe.test.ts`: new
 - `packages/coding-agent/test/control-plane-rail.test.ts`: hermetic mock also stubs `execFile`
 - `packages/coding-agent/CHANGELOG.md`: one Changed entry
+- `specs/046-headroom-probe-off-render/bench/`: timing script (`run.sh`, `first-label.mts`) and raw output (`raw.tsv`)
