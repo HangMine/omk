@@ -54,3 +54,4 @@ description: "omk run cancel/explain fail with verified-run: integrity when the 
 
 - A writer that appends faster than every 2–6 ms for the whole retry window can still surface `integrity`. The real writer appends one durable (fsync'd) record per event, so this needs a far faster writer than omk has.
 - The retry sleeps synchronously (at most 12 ms in total), because `readRunJournal` is synchronous.
+- A half-written append that leaves the file size unchanged (same size and ctime at both `fstat` calls in `readRegularFile`) is not detected as a concurrent change. `readRunJournal` then rejects the partial bytes as `integrity` (or `journal_truncated`) without a retry (`packages/coding-agent/src/core/verified-run/journal.ts` ~L56-58). Only a size or ctime move is treated as retryable.
