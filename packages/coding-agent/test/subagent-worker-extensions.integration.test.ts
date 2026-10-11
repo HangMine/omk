@@ -112,6 +112,7 @@ const ENV_KEYS = [
 	"OMK_CODING_AGENT_DIR",
 	"OMK_FINISH_CHECK",
 	"OMK_OFFLINE",
+	"OMK_PRINT_EXIT_GRACE_MS",
 	"OMK_TRUST_PROJECT",
 	"OMK_WORKER_EXTENSIONS",
 	"OMK_057_MARKER_DIR",
@@ -162,6 +163,9 @@ describe("subagent worker extensions (spec 057 integration)", () => {
 		process.env.OMK_CODING_AGENT_DIR = agentDir;
 		process.env.OMK_FINISH_CHECK = "0";
 		process.env.OMK_OFFLINE = "1";
+		// main() runs inside a long-lived test runner, not a completed CLI process.
+		// The real exit guard is covered by print-exit-guard.test.ts.
+		process.env.OMK_PRINT_EXIT_GRACE_MS = "0";
 		process.env.OMK_TRUST_PROJECT = "0";
 		process.env.OMK_057_MARKER_DIR = markerDir;
 		process.env.OMK_057_MOCK_BASE_URL = `http://127.0.0.1:${port}/v1`;
