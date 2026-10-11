@@ -141,7 +141,7 @@ import { BranchSummaryMessageComponent } from "./components/branch-summary-messa
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { ControlPanelComponent, ControlPanelRightPaneComponent } from "./components/control-panel.ts";
 import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
-import { createControlPanelStatusSnapshot } from "./components/control-panel-runtime-status.ts";
+import { createControlPanelStatusSnapshot, loadHeadroomVersion } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
@@ -811,6 +811,10 @@ export class InteractiveMode {
 			});
 			controlPanel.setExpanded(this.getStartupExpansionState());
 			this.builtInHeader = controlPanel;
+			// The headroom label is probed off the render path; repaint once if a version turns up.
+			void loadHeadroomVersion().then((version) => {
+				if (version) this.ui.requestRender();
+			});
 			this.ui.showOverlay(new ControlPanelRightPaneComponent(controlPanelContent), {
 				anchor: "top-right",
 				width: CONTROL_PANEL_SIDEBAR_WIDTH,

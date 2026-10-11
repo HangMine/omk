@@ -4,6 +4,7 @@
 
 ### Changed
 
+- The control panel no longer checks the installed headroom version while it draws. The check (`headroom --version`, `headroom version`, then the `headroom` and `headroom-ai` Python packages) now runs once in the background and the label updates when it answers, so it no longer adds about 0.1 s to every first frame, or up to 3 s when `headroom` hangs. Where headroom is installed, the label shows the policy id until the check answers.
 - A headless `-p --mode json` worker (the subagent command line) loads 131 fewer modules at startup, 1,644 files instead of 1,775. The subcommand handlers (`doctor`, `stats`, `provider adopt|sync|doctor`, `sdk session`, `router-feedback`, `run`), the verified-run coordinator, `omk-adaptorch-wpl`, ACP mode, `omk quota`, `omk neo`, the `--resume` picker's loaders and HTML export now load only on the path that uses them. Commands behave as before.
 
 ## [1.3.2] - 2026-10-10

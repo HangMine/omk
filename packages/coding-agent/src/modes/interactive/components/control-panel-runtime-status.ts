@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import { getHeadroomRuntimeStatus } from "../../../core/context-budget-headroom.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
@@ -32,6 +32,7 @@ const VERSION_COMMAND_TIMEOUT_MS = 750;
 const HEADROOM_PYTHON_DISTRIBUTIONS = ["headroom", "headroom-ai"] as const;
 
 let cachedHeadroomVersion: string | null | undefined;
+let headroomVersionProbe: Promise<string | null> | undefined;
 
 interface McpStabilityInput {
 	readonly commandSummary: string;
@@ -41,9 +42,22 @@ interface McpStabilityInput {
 	readonly authDecision: Pick<McpServerEntry["authDecision"], "rule">;
 }
 
+/**
+ * Render-path label. Never spawns synchronously: before the version probe settles it starts the probe
+ * (once, without waiting) and shows the same policy-id fallback as "headroom not installed".
+ */
 export function formatHeadroomStatusLabel(): string {
-	const version = getInstalledHeadroomVersion();
-	return version ? `headroom:${version}` : getHeadroomRuntimeStatus().policyId;
+	if (cachedHeadroomVersion === undefined) void loadHeadroomVersion();
+	return cachedHeadroomVersion ? `headroom:${cachedHeadroomVersion}` : getHeadroomRuntimeStatus().policyId;
+}
+
+/** Probe the installed headroom version once per process, off the render path; callers share the result. */
+export function loadHeadroomVersion(): Promise<string | null> {
+	headroomVersionProbe ??= probeInstalledHeadroomVersion().then((version) => {
+		cachedHeadroomVersion = version;
+		return version;
+	});
+	return headroomVersionProbe;
 }
 
 export function countRoutableNonHubSkills(skills: readonly { readonly name: string }[]): number {
@@ -74,41 +88,48 @@ export function classifyMcpStability(entry: McpStabilityInput): McpStability {
 	return "stable";
 }
 
-function getInstalledHeadroomVersion(): string | null {
-	if (cachedHeadroomVersion !== undefined) return cachedHeadroomVersion;
-	cachedHeadroomVersion = readVersionFromCommand("headroom", ["--version"]);
-	if (cachedHeadroomVersion) return cachedHeadroomVersion;
-	cachedHeadroomVersion = readVersionFromCommand("headroom", ["version"]);
-	if (cachedHeadroomVersion) return cachedHeadroomVersion;
+async function probeInstalledHeadroomVersion(): Promise<string | null> {
+	const version =
+		(await readVersionFromCommand("headroom", ["--version"])) ??
+		(await readVersionFromCommand("headroom", ["version"]));
+	if (version) return version;
 	for (const distribution of HEADROOM_PYTHON_DISTRIBUTIONS) {
-		cachedHeadroomVersion = readPythonDistributionVersion(distribution);
-		if (cachedHeadroomVersion) return cachedHeadroomVersion;
+		const pythonVersion = await readPythonDistributionVersion(distribution);
+		if (pythonVersion) return pythonVersion;
 	}
-	cachedHeadroomVersion = null;
-	return cachedHeadroomVersion;
+	return null;
 }
 
-function readPythonDistributionVersion(distribution: (typeof HEADROOM_PYTHON_DISTRIBUTIONS)[number]): string | null {
+function readPythonDistributionVersion(
+	distribution: (typeof HEADROOM_PYTHON_DISTRIBUTIONS)[number],
+): Promise<string | null> {
 	return readVersionFromCommand("python3", [
 		"-c",
 		`import importlib.metadata as m; print(m.version('${distribution}'))`,
 	]);
 }
 
-function readVersionFromCommand(command: string, args: readonly string[]): string | null {
-	try {
-		const result = spawnSync(command, [...args], {
-			encoding: "utf8",
-			timeout: VERSION_COMMAND_TIMEOUT_MS,
-			shell: false,
-			windowsHide: true,
-			env: { PATH: process.env.PATH ?? "" },
-		});
-		if (result.error || result.status !== 0) return null;
-		return parseHeadroomVersionOutput(`${result.stdout}\n${result.stderr}`);
-	} catch {
-		return null;
-	}
+function readVersionFromCommand(command: string, args: readonly string[]): Promise<string | null> {
+	return new Promise((resolve) => {
+		try {
+			execFile(
+				command,
+				[...args],
+				{
+					encoding: "utf8",
+					timeout: VERSION_COMMAND_TIMEOUT_MS,
+					shell: false,
+					windowsHide: true,
+					env: { PATH: process.env.PATH ?? "" },
+				},
+				(error, stdout, stderr) => {
+					resolve(error ? null : parseHeadroomVersionOutput(`${stdout}\n${stderr}`));
+				},
+			);
+		} catch {
+			resolve(null);
+		}
+	});
 }
 
 export function parseHeadroomVersionOutput(output: string): string | null {
