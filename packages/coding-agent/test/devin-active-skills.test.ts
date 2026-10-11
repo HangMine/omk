@@ -28,6 +28,8 @@ function activeSection(prompt: string): string {
 }
 
 describe("Devin SWE-2 turn-scoped active skills", () => {
+	// Spec 050 R6: the first prompt's pick stays in the (frozen) system prompt; a later prompt's own pick,
+	// here none, is sent as a `<prompt_skills>` message after its user message.
 	it("activates matching devin-harness skills only for the current turn", async () => {
 		vi.stubEnv("OMK_DEVIN_HARNESS", "1");
 		const harness = await createHarness({
@@ -41,6 +43,7 @@ describe("Devin SWE-2 turn-scoped active skills", () => {
 		});
 		let matchedPrompt = "";
 		let nextPrompt = "";
+		let nextMessages = "";
 		harness.setResponses([
 			(context) => {
 				matchedPrompt = context.systemPrompt ?? "";
@@ -48,6 +51,7 @@ describe("Devin SWE-2 turn-scoped active skills", () => {
 			},
 			(context) => {
 				nextPrompt = context.systemPrompt ?? "";
+				nextMessages = JSON.stringify(context.messages);
 				return fauxAssistantMessage("second");
 			},
 		]);
@@ -58,7 +62,11 @@ describe("Devin SWE-2 turn-scoped active skills", () => {
 			expect(matchedPrompt).toContain('<active_skills source="devin-harness">');
 			expect(activeSection(matchedPrompt)).toContain("<name>debugging</name>");
 			expect(activeSection(matchedPrompt)).not.toContain("<name>headroom</name>");
-			expect(activeSection(nextPrompt)).toBe("");
+			expect(nextPrompt).toBe(matchedPrompt);
+			expect(nextMessages).toContain("<prompt_skills>");
+			expect(nextMessages).toContain(
+				'<active_skills source=\\"devin-harness\\">\\nNo skills are active for this prompt.',
+			);
 		} finally {
 			vi.unstubAllEnvs();
 			harness.cleanup();

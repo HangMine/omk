@@ -249,6 +249,7 @@ describe("AgentSession prompt characterization", () => {
 		let expandedPrompt = "";
 		let turnSystemPrompt = "";
 		let nextTurnSystemPrompt = "";
+		let nextTurnMessages = "";
 
 		harness.setResponses([
 			(context) => {
@@ -259,6 +260,7 @@ describe("AgentSession prompt characterization", () => {
 			},
 			(context) => {
 				nextTurnSystemPrompt = context.systemPrompt ?? "";
+				nextTurnMessages = JSON.stringify(context.messages);
 				return fauxAssistantMessage("ok");
 			},
 		]);
@@ -273,7 +275,9 @@ describe("AgentSession prompt characterization", () => {
 		expect(commandRuns).toEqual([]);
 		expect(turnSystemPrompt).toContain('<active_skills source="bang">');
 		expect(turnSystemPrompt).toContain("<name>browser-feedback</name>");
-		expect(nextTurnSystemPrompt).not.toContain('<active_skills source="bang">');
+		// Spec 050 R6: the first prompt's choice stays in the frozen system prompt; the next prompt says it has none.
+		expect(nextTurnSystemPrompt).toBe(turnSystemPrompt);
+		expect(nextTurnMessages).toContain("No skills are active for this prompt.");
 	});
 
 	it("expands prompt templates before sending the prompt", async () => {
