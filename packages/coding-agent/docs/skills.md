@@ -112,7 +112,23 @@ OMK adds a compact active-skills marker containing names and, for explicit-only 
 
 This file is an explicit operator choice, so it may activate a skill whose frontmatter otherwise requires direct invocation. Active skills do not expand authorization and apply only when relevant. Keep the list focused because overlapping language or workflow instructions can conflict.
 
-When the native `xai` Grok harness is enabled, OMK may additionally mark up to three matching, non-explicit-only skills active for a non-queued top-level `prompt()` request. It scores the live discovered descriptions and does not persist those automatic selections into the next turn; operator and bang selections still merge normally.
+When the native `xai` Grok harness is enabled, OMK may additionally mark up to three matching, non-explicit-only skills active for a non-queued top-level `prompt()` request. It scores the live discovered descriptions; operator and bang selections still merge normally.
+
+### Per-prompt selections keep the system prompt stable
+
+The skill choice of a session's first prompt (harness picks, `!skill:` selections, and the context-budget ranking) is written into the system prompt and then kept for the session, so the provider's prompt cache keeps its prefix. A later prompt whose choice differs gets it as a hidden message after the user message (`<prompt_skills>`), which takes precedence over the system prompt's choice. A rebuilt base prompt (tool, model or settings change, `/reload`) or a change to `defaultActiveSkills` freezes the next prompt's choice again.
+
+### Skill search (`OMK_SKILL_SEARCH`)
+
+With many skills the `<available_skills>` list grows the system prompt by every description. Setting `OMK_SKILL_SEARCH=1` (experimental, default off) switches a session that has more than 24 model-invocable skills and the `read` tool to search mode:
+
+- The system prompt has one fixed line instead of the list, and a fixed `skill_search` tool (`query`, optional `limit` 1–8) is added. Both stay the same for the whole session.
+- `skill_search` ranks names and descriptions with BM25 and returns `name — description — location` lines; the agent then reads the SKILL.md it picks.
+- At each task start, up to three new candidates above a score floor arrive as a hidden `<skill_candidates>` message. A skill is offered once per session. Subagent workers keep the tool but get no candidates (`OMK_SKILL_SEARCH_SUGGEST=0`).
+- The index is built on the first search or task start, never at startup, and cached in `cache/skill-index-v1.json` under the agent directory. Changed SKILL.md files (path, size, mtime, inode) rebuild it; a corrupt file is a miss.
+- With `OMK_RUN_LOG_DIR` set, `skill-select.jsonl` records session, index, search and suggest events with hashes and counts only, never the query, skill names or paths.
+
+With 24 skills or fewer, without `read`, or with the flag off, prompts are unchanged.
 
 ## Skill Commands
 
