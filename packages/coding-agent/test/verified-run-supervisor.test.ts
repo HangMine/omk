@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -218,9 +218,10 @@ describe("owned process supervisor cancellation proof", () => {
 	it("detects a live descendant independently of the recorded direct child", async () => {
 		const ready = deferred<NamespaceIdentity>();
 		const controller = new AbortController();
+		const descendantReady = join(root, "descendant-ready");
 		const execution = executeSandbox({
 			...request(),
-			argv: ["/bin/sh", "-c", "setsid sleep 60 & sleep 60"],
+			argv: ["/bin/sh", "-c", "setsid /bin/sh -c 'echo ready > descendant-ready; exec sleep 60' & sleep 60"],
 			signal: controller.signal,
 			onReady: (identity) => ready.resolve(identity),
 		});
@@ -231,10 +232,18 @@ describe("owned process supervisor cancellation proof", () => {
 			}),
 		]);
 		try {
+			// onReady commits the identity before the gate releases the command.
+			// /proc can count unreadable same-uid tasks as candidate members, so
+			// wait for the actual detached descendant before observing or cancelling.
+			const deadline = performance.now() + 5000;
+			while (!existsSync(descendantReady) && performance.now() < deadline)
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(existsSync(descendantReady)).toBe(true);
 			// The witness enumerates namespace membership, not the recorded init:
 			// a dead or fabricated direct child cannot mask the surviving members.
 			const members = await waitForMembers({ namespace: identity.namespace }, 2);
 			expect(members).toContain(identity.pid);
+			expect(members.length).toBeGreaterThanOrEqual(2);
 			expect(await supervisor.awaitBoundaryDrained(identity, 0)).toBe("populated");
 		} finally {
 			controller.abort();
