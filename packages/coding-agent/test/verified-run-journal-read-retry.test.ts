@@ -71,6 +71,8 @@ describe("journal read retry (spec 056)", () => {
 	});
 
 	it("surfaces the current integrity error after the retries are used up", () => {
+		// 2 assertions before the try/catch + 2 inside the catch: fails if the second read does not throw.
+		expect.assertions(4);
 		let calls = 0;
 		const read = () => {
 			calls += 1;
