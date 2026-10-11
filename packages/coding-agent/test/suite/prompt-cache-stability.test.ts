@@ -156,6 +156,11 @@ interface SessionOptions {
 	readonly settings?: HarnessOptions["settings"];
 	/** Extra extensions, loaded after the built-in harness ones (for the detector self-test). */
 	readonly extensions?: ExtensionFactory[];
+	/**
+	 * #120 follow-up: drive finish-check from its own local clock (`now`, no `readBudget`), and move
+	 * that fake clock forward with every reply, so wall time really passes between turns.
+	 */
+	readonly fakeClock?: boolean;
 	/** Text of the second user prompt (default `TASK_B`). */
 	readonly secondPrompt?: string;
 }
@@ -166,6 +171,7 @@ async function runSession(
 	options: SessionOptions = {},
 ): Promise<CapturedCall[]> {
 	let fraction = 0.05;
+	let clockMs = 0;
 	const budget = () => ({ budgetMs: 900_000, elapsedMs: fraction * 900_000, elapsedFraction: fraction });
 	const factories: ExtensionFactory[] = [
 		identicalLoop,
@@ -180,7 +186,8 @@ async function runSession(
 				runLog: () => undefined,
 				onTerminate: () => () => undefined,
 			}),
-		(omk) => finishCheck(omk, { env, now: () => 0, readBudget: budget }),
+		(omk) =>
+			finishCheck(omk, options.fakeClock ? { env, now: () => clockMs } : { env, now: () => 0, readBudget: budget }),
 		...(options.extensions ?? []),
 	];
 	let cwd = "";
@@ -231,6 +238,7 @@ async function runSession(
 
 	const at = (next: number, reply: () => ReturnType<typeof fauxAssistantMessage>) => () => {
 		fraction = next;
+		clockMs = next * 900_000;
 		return reply();
 	};
 	const write = (path: string, content: string) =>
@@ -333,6 +341,18 @@ describe("prompt cache prefix stability (spec 051)", () => {
 			"call 2: system prompt hash changed",
 			"call 2: message 0 of call 1 changed",
 		]);
+	});
+
+	// #120 follow-up: finish-check reads the clock only for its steers; the system prompt carries the
+	// total budget (`budgetMs`) and is added once in before_agent_start, so a moving clock never reaches it.
+	it("keeps the full system prompt hash identical on every call while a fake clock advances", async () => {
+		const calls = await runSession(FLAGS_ON, harnesses, { fakeClock: true });
+		expect(calls.filter((call) => call.userPromptStart).length).toBeGreaterThanOrEqual(1);
+		expect(new Set(calls.map((call) => call.system)).size).toBe(1);
+		const seen = calls.at(-1)?.userTexts.join("\n") ?? "";
+		expect(seen).toContain(TASK_B);
+		// The save-now steer at 75% fires only if finish-check really read the advancing clock.
+		expect(seen).toContain(FINISH_CHECK_SAVE_NOW_MESSAGE);
 	});
 
 	// Spec 050 R6 (AC 10): the harness pick of the first user prompt stays in the system prompt for the whole
