@@ -12,6 +12,7 @@
 ### Fixed
 
 - The optional Gondolin example now rejects malformed nested RSA digest structures before VM startup using a reviewed, fail-closed runtime guard for CVE-2026-85393. Normal certificate and signature handling remains supported. The upstream audit warning remains visible until an official patch is available; see [Gondolin signature security](docs/gondolin-security.md).
+- Freezing off-screen transcript components resets Markdown's render cache through its typed API and preserves unrelated extension caches, preventing resize crashes.
 - Subagent tool-result details contain plain data; process settlement promises stay with the lane owner. Shared heavy-process capacity follows the current admission decision or configured normal cap, and checkpoint briefs retain both their goals and closing criteria.
 - Top-level Grok/Devin harness sessions can use their workspace and the subagent tool while preserving blocked paths and project trust. Subagent nesting defaults to one child level.
 - Orchestration scope matching normalizes case, separators and traversal, conservatively checks wildcard overlaps, and rejects escaping lane and evidence paths.
@@ -32,7 +33,7 @@
 ### Changed
 
 - Control-panel and sidebar section rules use the strong border token consistently.
-- Pin shell-quote to its security-fixed 1.11.0 release. The unresolved node-forge advisory remains a release blocker.
+- Pin shell-quote to its security-fixed 1.11.0 release. A reviewed runtime guard protects the OMK Gondolin example; the upstream node-forge audit warning remains visible pending an official patch.
 - Long transcripts render faster: `visibleWidth` in `omk-tui` measures styled ASCII, Hangul and CJK text without grapheme segmentation, and its width cache holds 8192 entries (was 512, which missed on every line of a long frame). Measured on 24k rendered lines: styled ASCII 604 ms → 19 ms, styled Korean about 607–764 ms → 25 ms; the first frame after a resize at 25k lines 357–411 ms → 142–148 ms; a streaming 1200-line code block 105 ms → 6.6 ms per frame. Streaming a 64 KB markdown reply is unchanged (about 13–15 ms per frame; markdown parsing dominates). A property test checks the fast paths against grapheme segmentation on styled ASCII, Hangul, CJK, emoji and wide characters.
 - Tool-output boxes compare raw child output before rebuilding padding, while preserving render-generation invalidation and off-screen cache release.
 - `!` / `!!` shell commands with long output no longer slow down as they print. The output block re-joined and re-truncated the whole output on every chunk, so the cost per 1 KB chunk grew from 0.9 ms at 0.9 MB to 21.8 ms at 13.8 MB; it now works from a bounded tail of the most recent 100 K characters and stays at about 0.3 ms. The displayed lines, hidden-line count and truncation notice are unchanged (a property test checks the tail against the full output), and `getOutput()` still returns the full output.
