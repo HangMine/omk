@@ -2,12 +2,13 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StreamFn } from "omk-agent-core";
-import { type AssistantMessage, type Context, createAssistantMessageEventStream, type Model, type Usage } from "omk-ai";
+import { type AssistantMessage, type Context, createAssistantMessageEventStream, getModel, type Usage } from "omk-ai";
 import { systemHash, toolsHash } from "omk-ai/prompt-hash";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	createLlmCallRunLogStreamFn,
+	effortSentFor,
 	LLM_CALL_RUN_LOG,
 	resetLlmCallRunLogClock,
 } from "../src/core/llm-call-run-log.ts";
@@ -16,7 +17,8 @@ import { RUN_LOG_DIR_ENV } from "../src/core/run-log.ts";
 
 // spec 059: one <OMK_RUN_LOG_DIR>/llm-call.jsonl line per provider request.
 const SECRET = "SENTINEL_LLM_CALL_7c1e";
-const model = { id: "grok-4.7", api: "openai-completions", provider: "xai" } as unknown as Model<"openai-completions">;
+// The registered grok-4.7, with the grok thinking map: `max`/`ultra` go out as "xhigh".
+const model = getModel("xai", "grok-4.7");
 
 const roots: string[] = [];
 function tempDir(): string {
@@ -30,16 +32,19 @@ const lines = (dir: string) =>
 		.split("\n")
 		.map((line) => JSON.parse(line) as Record<string, unknown>);
 
-function usage(input: number, output: number, cacheRead: number, cacheWrite: number): Usage {
+function usage(input: number, output: number, cacheRead: number, cacheWrite: number, costTotal = 0): Usage {
 	return {
 		input,
 		output,
 		cacheRead,
 		cacheWrite,
 		totalTokens: input + output + cacheRead + cacheWrite,
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: costTotal },
 	};
 }
+
+/** What a provider's message holds when the stream ended before the final usage chunk. */
+const NO_USAGE = usage(0, 0, 0, 0);
 
 function message(u: Usage, stopReason: AssistantMessage["stopReason"] = "stop"): AssistantMessage {
 	return {
@@ -116,7 +121,7 @@ describe("llm-call run log (spec 059)", () => {
 		const dir = tempDir();
 		const provider = fakeProvider(() => {
 			clock += 250;
-			return message(usage(1_200, 80, 900, 300));
+			return { ...message(usage(1_200, 80, 900, 300, 0.0123)), responseId: "chatcmpl-059" };
 		});
 		const wrapped = createLlmCallRunLogStreamFn(provider.fn, { env: { [RUN_LOG_DIR_ENV]: dir }, now });
 		const ctx = context();
@@ -132,15 +137,21 @@ describe("llm-call run log (spec 059)", () => {
 			provider: "xai",
 			model: "grok-4.7",
 			effort: "high",
+			effortSent: "high",
 			messageCount: 1,
 			systemHash: systemHash(ctx),
 			toolsHash: toolsHash(ctx),
 			phase: null,
 			phaseSource: null,
+			requestedAtMs: 1_000,
+			responseId: "chatcmpl-059",
 			input: 1_200,
 			output: 80,
 			cacheRead: 900,
 			cacheWrite: 300,
+			costTotal: 0.0123,
+			costInUsdTicks: null,
+			usageMissing: false,
 			stopReason: "stop",
 			durationMs: 250,
 			gapMs: null,
@@ -149,7 +160,15 @@ describe("llm-call run log (spec 059)", () => {
 			pid: process.pid,
 			role: "lead",
 		});
-		expect(second).toMatchObject({ effort: null, messageCount: 2, durationMs: 250, gapMs: 40 });
+		expect(second).toMatchObject({
+			effort: null,
+			effortSent: null,
+			requestedAtMs: 1_290,
+			responseId: null,
+			messageCount: 2,
+			durationMs: 250,
+			gapMs: 40,
+		});
 		expect(second.systemHash).toBe(first.systemHash);
 		expect(first.systemHash).toMatch(/^[0-9a-f]{64}$/);
 	});
@@ -175,7 +194,111 @@ describe("llm-call run log (spec 059)", () => {
 		const failingWrapped = createLlmCallRunLogStreamFn(failing, { env: { [RUN_LOG_DIR_ENV]: dir }, now });
 		await expect(Promise.resolve().then(() => failingWrapped(model, context(), {}))).rejects.toThrow("auth failed");
 		expect(lines(dir)).toHaveLength(2);
-		expect(lines(dir)[1]).toMatchObject({ stopReason: "error", input: null, output: null, cacheRead: null });
+		expect(lines(dir)[1]).toMatchObject({
+			stopReason: "error",
+			input: null,
+			output: null,
+			cacheRead: null,
+			costTotal: null,
+			usageMissing: true,
+		});
+	});
+
+	it("writes null, never 0, for usage and cost when no usage arrived, and flags usageMissing", async () => {
+		const dir = tempDir();
+		const provider = fakeProvider(() => message(NO_USAGE, "aborted"));
+		const wrapped = createLlmCallRunLogStreamFn(provider.fn, { env: { [RUN_LOG_DIR_ENV]: dir }, now });
+		await (await wrapped(model, context(), { reasoning: "xhigh" })).result();
+		await new Promise((resolve) => setImmediate(resolve));
+		expect(lines(dir)).toEqual([
+			expect.objectContaining({
+				stopReason: "aborted",
+				input: null,
+				output: null,
+				cacheRead: null,
+				cacheWrite: null,
+				costTotal: null,
+				costInUsdTicks: null,
+				usageMissing: true,
+			}),
+		]);
+	});
+
+	it("resolves effortSent to the provider wire value", () => {
+		expect(effortSentFor(model, "max")).toBe("xhigh");
+		expect(effortSentFor(model, "ultra")).toBe("xhigh");
+		expect(effortSentFor(model, "xhigh")).toBe("xhigh");
+		expect(effortSentFor(model, "high")).toBe("high");
+		expect(effortSentFor(model, undefined)).toBeNull();
+		expect(effortSentFor(getModel("xai", "grok-4.5"), "max")).toBe("high");
+	});
+
+	it("logs a cap retry as its own line, with the lowered effort and its wire value", async () => {
+		const dir = tempDir();
+		const sent: unknown[] = [];
+		const provider: StreamFn = (_model, _context, options) => {
+			sent.push(options?.reasoning);
+			const firstAttempt = sent.length === 1;
+			const signal = options?.signal;
+			const stream = createAssistantMessageEventStream();
+			void (async () => {
+				const partial = message(NO_USAGE);
+				stream.push({ type: "start", partial });
+				if (firstAttempt) {
+					stream.push({ type: "thinking_start", contentIndex: 0, partial });
+					stream.push({ type: "thinking_delta", contentIndex: 0, delta: "x".repeat(400), partial });
+					// The cap aborts here; like a real stream, it ends without the final usage chunk.
+					await new Promise<void>((resolve) => {
+						if (signal?.aborted) resolve();
+						else signal?.addEventListener("abort", () => resolve(), { once: true });
+					});
+					const aborted = message(NO_USAGE, "aborted");
+					stream.push({ type: "error", reason: "aborted", error: aborted });
+					stream.end(aborted);
+					return;
+				}
+				const final = { ...message(usage(1_100, 40, 900, 0, 0.004)), responseId: "chatcmpl-retry" };
+				stream.push({ type: "text_start", contentIndex: 0, partial: final });
+				stream.push({ type: "done", reason: "stop", message: final });
+				stream.end(final);
+			})();
+			return stream;
+		};
+		const logged = createLlmCallRunLogStreamFn(provider, { env: { [RUN_LOG_DIR_ENV]: dir }, now });
+		// Wired as createSdkProviderStream does: cap(llmCallLog(provider)).
+		const capped = createResponseReasoningCapStreamFn(logged, { maxReasoningTokens: 50, maxWallMs: 60_000 });
+		const response = await capped(model, context(), { reasoning: "xhigh" });
+		for await (const _event of response) {
+			// drain
+		}
+		await response.result();
+		await new Promise((resolve) => setImmediate(resolve));
+
+		expect(sent).toEqual(["xhigh", "high"]);
+		expect(lines(dir)).toHaveLength(2);
+		const [first, retry] = lines(dir);
+		expect(first).toMatchObject({
+			effort: "xhigh",
+			effortSent: "xhigh",
+			stopReason: "aborted",
+			usageMissing: true,
+			input: null,
+			output: null,
+			costTotal: null,
+			costInUsdTicks: null,
+		});
+		expect(retry).toMatchObject({
+			effort: "high",
+			effortSent: "high",
+			stopReason: "stop",
+			usageMissing: false,
+			input: 1_100,
+			cacheRead: 900,
+			costTotal: 0.004,
+			costInUsdTicks: null,
+			responseId: "chatcmpl-retry",
+		});
+		expect(first.effortSent).not.toBe(retry.effortSent);
 	});
 
 	it("never writes prompt text, tool text, output, error text or paths", async () => {

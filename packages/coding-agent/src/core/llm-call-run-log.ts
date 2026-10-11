@@ -18,9 +18,23 @@
  *
  * `phase` and `phaseSource` are reserved for spec 037 (per-phase effort) and are always `null`
  * here, so a verdict script can read one schema before and after 037 lands.
+ *
+ * COST: `costTotal` is omk's own `usage.cost.total`, which leaves out xAI reasoning tokens, so
+ * verdicts use xAI `cost_in_usd_ticks` only. omk's usage parsers drop that raw field (see spec
+ * 059), so `costInUsdTicks` is `null` and `responseId`/`requestedAtMs` are the keys for joining
+ * the adapter's `omk_usage_raw.jsonl`. When no usage arrived (a cap abort cuts the stream before
+ * the final usage chunk), every usage and cost number is `null`, never 0, with `usageMissing: true`.
  */
 import type { StreamFn } from "omk-agent-core";
-import type { AssistantMessage, StopReason } from "omk-ai";
+import {
+	type Api,
+	type AssistantMessage,
+	clampThinkingLevel,
+	type Model,
+	type StopReason,
+	type ThinkingLevel,
+	type Usage,
+} from "omk-ai";
 import { systemHash, toolsHash } from "omk-ai/prompt-hash";
 import { appendRunLog, RUN_LOG_DIR_ENV, type RunLogRecord } from "./run-log.ts";
 
@@ -32,7 +46,11 @@ export interface LlmCallRunLogOptions {
 	readonly now?: () => number;
 }
 
-/** End time of the most recent finished call in this process; `gapMs` is measured from it. */
+/**
+ * End time of the most recent finished call in this process; `gapMs` is measured from it.
+ * One value per process: when calls overlap (parallel requests in one process), `gapMs` is
+ * measured from whichever call ended last and can be 0 or misleading (spec 059).
+ */
 let lastCallEndAt: number | undefined;
 
 /** Test hook: forget the previous call so the next one logs `gapMs: null`. */
@@ -41,6 +59,29 @@ export function resetLlmCallRunLogClock(): void {
 }
 
 const count = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+/**
+ * Provider wire value of `reasoning`, resolved the way the OpenAI-style providers do it
+ * (`clampThinkingLevel`, then `model.thinkingLevelMap`), e.g. grok-4.7 `max` → `"xhigh"`.
+ * Read-only: computed from the same model the provider gets, the request is not touched.
+ */
+export function effortSentFor(model: Model<Api>, reasoning: ThinkingLevel | undefined): string | null {
+	if (reasoning === undefined) return null;
+	const level = clampThinkingLevel(model, reasoning);
+	if (level === "off") return null;
+	return model.thinkingLevelMap?.[level] ?? level;
+}
+
+/**
+ * Providers start every message with all-zero usage and fill it from the final usage chunk.
+ * A real request always has prompt tokens, so all-zero token counts mean the usage never arrived.
+ */
+function usageArrived(usage: Usage | undefined): usage is Usage {
+	if (!usage) return false;
+	return [usage.input, usage.output, usage.cacheRead, usage.cacheWrite].some(
+		(value) => typeof value === "number" && Number.isFinite(value) && value > 0,
+	);
+}
 
 function stopReasonOf(message: AssistantMessage | undefined, signal: AbortSignal | undefined): StopReason {
 	if (message?.stopReason) return message.stopReason;
@@ -64,14 +105,22 @@ export function createLlmCallRunLogStreamFn(inner: StreamFn, options: LlmCallRun
 				provider: String(model.provider),
 				model: String(model.id),
 				effort: streamOptions?.reasoning ?? null,
+				effortSent: effortSentFor(model, streamOptions?.reasoning),
 				messageCount: context.messages.length,
 				systemHash: systemHash(context),
 				toolsHash: toolsHash(context),
 				phase: null,
 				phaseSource: null,
+				requestedAtMs: startedAt,
 			};
 		} catch {
-			base = { provider: String(model.provider), model: String(model.id), phase: null, phaseSource: null };
+			base = {
+				provider: String(model.provider),
+				model: String(model.id),
+				phase: null,
+				phaseSource: null,
+				requestedAtMs: startedAt,
+			};
 		}
 		let logged = false;
 		const log = (message: AssistantMessage | undefined) => {
@@ -79,16 +128,22 @@ export function createLlmCallRunLogStreamFn(inner: StreamFn, options: LlmCallRun
 			logged = true;
 			const endedAt = now();
 			lastCallEndAt = endedAt;
-			const usage = message?.usage;
+			const arrived = message?.usage;
+			const usage = usageArrived(arrived) ? arrived : undefined;
 			try {
 				appendRunLog(
 					LLM_CALL_RUN_LOG,
 					{
 						...base,
+						responseId: typeof message?.responseId === "string" ? message.responseId : null,
 						input: count(usage?.input),
 						output: count(usage?.output),
 						cacheRead: count(usage?.cacheRead),
 						cacheWrite: count(usage?.cacheWrite),
+						costTotal: count(usage?.cost?.total),
+						// omk's Usage has no raw xAI ticks (spec 059); join omk_usage_raw.jsonl instead.
+						costInUsdTicks: null,
+						usageMissing: usage === undefined,
 						stopReason: stopReasonOf(message, streamOptions?.signal),
 						durationMs: Math.max(0, endedAt - startedAt),
 						gapMs,
