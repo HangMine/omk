@@ -54,3 +54,38 @@ describe("assembleSessionSystemPrompt", () => {
 		expect(assembled.cacheBoundary).toBeLessThanOrEqual(assembled.prompt.length);
 	});
 });
+
+describe("assembleSessionSystemPrompt skill-search mode (spec 050, #122 review)", () => {
+	const skills = Array.from({ length: 30 }, (_, i) => ({
+		name: `s${i}`,
+		description: `Skill number ${i}.`,
+		filePath: `/skills/s${i}/SKILL.md`,
+		baseDir: `/skills/s${i}`,
+		sourceInfo: {
+			path: `/skills/s${i}/SKILL.md`,
+			source: "test",
+			scope: "user" as const,
+			origin: "top-level" as const,
+		},
+		disableModelInvocation: false,
+	}));
+	const base = { skills, toolNames: ["read", "bash"] };
+	const withForeign = { skills, toolNames: ["read", "bash", "skill_search"] };
+
+	it("keeps <available_skills> and the exact prompt when a foreign tool is named skill_search", () => {
+		const none = assembleSessionSystemPrompt(input(base));
+		const foreign = assembleSessionSystemPrompt(input(withForeign));
+		expect(foreign.prompt).toContain("<available_skills>");
+		expect(foreign.prompt).toBe(none.prompt);
+		expect(foreign.options.skillSearch).toBeUndefined();
+	});
+
+	it("switches to the search line only for the session's own decision with the tool active", () => {
+		const on = assembleSessionSystemPrompt(input({ ...withForeign, skillSearch: true }));
+		expect(on.options.skillSearch).toBe(true);
+		expect(on.prompt).not.toContain("<available_skills>");
+		const toolGone = assembleSessionSystemPrompt(input({ ...base, skillSearch: true }));
+		expect(toolGone.options.skillSearch).toBeUndefined();
+		expect(toolGone.prompt).toContain("<available_skills>");
+	});
+});

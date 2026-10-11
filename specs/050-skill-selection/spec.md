@@ -63,6 +63,8 @@ description: "스킬이 많을 때 system prompt에서 스킬 목록을 빼고, 
 - 도구 `skill_search`: 입력 `{ query: string (≤512자), limit?: 1..8 (기본 5) }`. 결과는 줄마다 `name — 짧은 설명 — 경로`이고 점수 순이다. 짧은 설명은 기존 `compactSkillDescription`(200자)을 쓴다. 본문은 돌려주지 않는다.
 - system에는 `<available_skills>` 대신 고정 문장 한 줄만 넣는다: 스킬은 `skill_search`로 찾고, 쓸 때 `read`로 경로를 읽으며, 대화 중에 후보 메시지가 올 수 있다. 이 문장과 도구 스키마는 스킬 수나 내용과 상관없는 상수다.
 - `disable-model-invocation` 스킬은 검색 결과에서도 빠진다. `/skill:name`과 `!skill:name` 명시 호출은 지금처럼 동작한다.
+- **검색 방식은 세션의 판정으로만 켠다.** system을 고정 한 줄로 바꾸는 조건은 `PromptSkillFreeze`가 세션 시작 때 내린 활성 판정이다. 이름이 `skill_search`인 도구가 있다는 사실만으로는 바꾸지 않는다. 그래서 플래그가 꺼진 세션에 확장·MCP·SDK가 같은 이름의 도구를 넣어도 `<available_skills>`가 남고 요청은 main과 같다.
+- **이름 충돌(Tech Lead 결정)**: 플래그가 켜졌는데 다른 도구가 이미 `skill_search`라는 이름을 쓰면, 우리 도구를 넣지 않고 경고를 한 번 내며, 그 세션은 플래그 꺼짐과 똑같이 동작한다(`<available_skills>` 유지, 후보 메시지 없음). 도구 목록을 다시 만들 때마다 확인하고, 한 번 충돌하면 그 세션 동안 꺼짐으로 둔다. `session` 레코드의 `inactiveReason`은 `name_conflict`다.
 
 ### R3 - 후보 메시지 (P0)
 
@@ -129,7 +131,7 @@ R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모�
 
 - **AC 1**: BASELINE.md와 같은 방법을 쓴다. mock에 실제로 나간 요청의 system 문자열을 `o200k_base`로 센다. 기준은 번들 6개 기본의 1,473 토큰이고, 합성 1,191개(복사본)에서 ≤ 3,473이어야 한다. `skill_search` 스키마가 늘리는 tools JSON 토큰은 따로 보고한다.
 - **AC 2**: 플래그를 켜고 스킬 1,191개로 여러 턴을 돈다(task 2개, todo 변경, `skill_search`, `/reload` 포함). 모든 호출의 `systemHash`와 `toolsHash`가 첫 호출과 같아야 하고, 앞 호출의 `messagesPrefixHash`가 유지되어야 한다. helper는 #117의 `omk-ai/prompt-hash`를 쓴다.
-- **AC 3**: 기준점은 둘이다(Tech Lead 결정). (a) **플래그 꺼짐 대 main**: 같은 스킬 수에서 나가는 요청이 바이트 단위로 같아야 한다. 예외는 R6이 의도한 "두 번째 프롬프트 이후의 재선택"뿐이고, 그 경우는 AC 10에서 따로 본다. 시작 시간과 RSS도 차이가 없어야 한다(Perf 기준 이내). (b) **플래그 켜짐 대 꺼짐**: 1,191개, 카탈로그 캐시 PR 이후 조건에서 +10 ms, +5 MiB 이내. CI에는 `print-mode-worker-cold-path.test.ts` 방식의 `skill-search-flag-off-cold-path.test.ts`를 넣는다. 꺼짐과 비활성에서 `skill-search.ts`가 로드되지 않아야 한다. 인덱스 파일은 첫 검색 전에 없어야 한다.
+- **AC 3**: 기준점은 둘이다(Tech Lead 결정). (a) **플래그 꺼짐 대 main**: 같은 스킬 수에서 나가는 요청이 바이트 단위로 같아야 한다. 예외는 R6이 의도한 "두 번째 프롬프트 이후의 재선택"뿐이고, 그 경우는 AC 10에서 따로 본다. 시작 시간과 RSS도 차이가 없어야 한다(Perf 기준 이내). (b) **플래그 켜짐 대 꺼짐**: 1,191개, 카탈로그 캐시 PR 이후 조건에서 +10 ms, +5 MiB 이내. CI에는 `print-mode-worker-cold-path.test.ts` 방식의 `skill-search-flag-off-cold-path.test.ts`를 넣는다. 꺼짐과 비활성에서 `skill-search.ts`가 로드되지 않아야 한다. 인덱스 파일은 첫 검색 전에 없어야 한다. `skill-search-mode.ts`(플래그 해석, 고정 문장)와 `tools/skill-search-tool.ts`(고정 도구 정의)는 시작 경로에서 정적으로 import한다. 둘 다 작고 다른 모듈을 거의 끌어오지 않아서 받아들인다(Tech Lead 확인). 인덱스, BM25, run log 레코드는 `skill-search.ts`와 `skill-index-store.ts`에만 있고 이 둘은 지연 로드한다.
 - **AC 4**: worker 명령을 1,191개로 돌린다. 검색하지 않는 worker는 SKILL.md를 하나도 열지 않아야 한다(테스트에서 `fs` 열기 횟수를 센다). 검색하는 worker는 인덱스를 한 번만 만들거나 캐시를 읽는다.
 - **AC 5 (TB 동일성)**: 공동 A/B 조건(번들 6개)에서 플래그를 켜도 나가는 요청이 오늘과 같아야 한다. "같다"의 뜻: 고정 시계, 같은 cwd, 같은 mock에서 첫 호출과 둘째 호출 요청 본문의 `messages` 배열(system 포함)과 `tools` 배열을 JSON 직렬화했을 때 **바이트 단위로 같다**. 다른 최상위 키도 같아야 하는데, 세션 id에서 나오는 키만 예외이고 그 목록은 테스트에 적는다.
 - **AC 6**: 같은 세션에서 이미 보여 준 스킬은 후보 메시지에 다시 나오지 않는다. 점수 하한 미만이면 메시지가 없다.
@@ -149,6 +151,8 @@ R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모�
 ## 알려진 한계
 
 - `PromptSkillFreeze`는 세션 파일에 저장하지 않는다. 그래서 `--resume` 뒤 첫 프롬프트에서 선택을 다시 고정한다. resume 뒤에는 어차피 프롬프트 캐시가 차가워서 손해가 없다.
+- 인덱스 캐시 파일(`<agentDir>/cache/skill-index-v1.json`)은 프로젝트별이 아니라 agent 디렉터리 하나에 하나다. 스킬 구성이 다른 프로젝트를 번갈아 쓰면 서로 덮어써서, 다른 프로젝트의 다음 세션은 인덱스를 다시 만든다. 지문이 달라 miss가 될 뿐 틀린 결과는 나오지 않는다. 지문에는 인덱스 알고리즘 버전(`SKILL_INDEX_ALGORITHM_VERSION`)이 들어 있어서, `compactSkillDescription` 같은 항목 생성 규칙을 바꾸면 버전을 올려 옛 캐시를 버린다. 쓰다 남은 `.tmp`(1분 넘은 것)는 다음 쓰기 때 지운다.
+- 작업 시작 후보 계산이 실패하면(인덱스 빌드나 검색 오류) 그 프롬프트는 후보 없이 그대로 보낸다.
 
 ## Non-goals
 
