@@ -152,6 +152,7 @@ import { ExtensionEditorComponent } from "./components/extension-editor.ts";
 import { ExtensionInputComponent } from "./components/extension-input.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
 import { FooterComponent } from "./components/footer.ts";
+import { abortHeadroomVersionProbe, repaintWhenHeadroomVersionResolves } from "./components/headroom-version-probe.ts";
 import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";
@@ -812,6 +813,8 @@ export class InteractiveMode {
 			});
 			controlPanel.setExpanded(this.getStartupExpansionState());
 			this.builtInHeader = controlPanel;
+			// The headroom label is probed off the render path; repaint once if a version turns up.
+			void repaintWhenHeadroomVersionResolves(() => this.ui.requestRender());
 			this.ui.showOverlay(new ControlPanelRightPaneComponent(controlPanelContent), {
 				anchor: "top-right",
 				width: CONTROL_PANEL_SIDEBAR_WIDTH,
@@ -6478,6 +6481,8 @@ export class InteractiveMode {
 	}
 
 	stop(options: { finalSessionLog?: boolean } = {}): void {
+		// A hung `headroom --version` must not hold shutdown for its timeouts or outlive this process.
+		abortHeadroomVersionProbe();
 		this.unregisterSignalHandlers();
 		if (this.settingsManager.getShowTerminalProgress()) {
 			this.ui.terminal.setProgress(false);

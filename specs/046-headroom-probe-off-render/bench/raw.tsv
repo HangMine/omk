@@ -1,0 +1,16 @@
+# base=7961ae26e5 branch=5162f0e1d2 node=v22.23.3 headroom=none python3=present
+pair	load1	arm	first_label_ms	probe_settled_ms	version	label
+1	2.30	base	102.12			context-budget-v2
+1	2.30	branch	8.45	122.0	null	context-budget-v2
+2	3.00	base	100.69			context-budget-v2
+2	3.00	branch	3.36	100.2	null	context-budget-v2
+3	3.00	base	94.85			context-budget-v2
+3	3.00	branch	3.65	97.1	null	context-budget-v2
+4	3.00	base	105.81			context-budget-v2
+4	3.00	branch	3.63	112.6	null	context-budget-v2
+5	3.00	base	96.53			context-budget-v2
+5	3.00	branch	3.20	101.5	null	context-budget-v2
+6	3.00	base	92.13			context-budget-v2
+6	3.00	branch	3.79	103.2	null	context-budget-v2
+7	3.00	base	110.96			context-budget-v2
+7	3.00	branch	3.39	98.0	null	context-budget-v2

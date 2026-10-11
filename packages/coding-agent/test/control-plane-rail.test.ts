@@ -24,6 +24,9 @@ import { stripAnsi } from "../src/utils/ansi.ts";
 vi.mock("node:child_process", async (importOriginal) => ({
 	...(await importOriginal<typeof import("node:child_process")>()),
 	spawnSync: vi.fn(() => ({ status: 1, stdout: "", stderr: "" })),
+	execFile: vi.fn((_command: string, _args: readonly string[], _options: unknown, callback: (error: Error) => void) =>
+		callback(new Error("headroom probe disabled in tests")),
+	),
 }));
 vi.mock("../src/core/mcp-inventory.ts", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../src/core/mcp-inventory.ts")>()),

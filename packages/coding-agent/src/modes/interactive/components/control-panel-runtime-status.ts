@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import { getHeadroomRuntimeStatus } from "../../../core/context-budget-headroom.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
@@ -9,6 +8,9 @@ import { readControlPlaneSignals } from "../control-plane-signals.ts";
 import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
 import type { ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 import { formatCwdForFooter } from "./footer.ts";
+import { getCachedHeadroomVersion, loadHeadroomVersion } from "./headroom-version-probe.ts";
+
+export { parseHeadroomVersionOutput } from "./headroom-version-probe.ts";
 
 const OMK_HUB_SKILL_NAMES = new Set([
 	"omk-skills",
@@ -28,10 +30,6 @@ const OMK_HUB_SKILL_NAMES = new Set([
 
 const INVALID_MCP_NETWORK_RULES = new Set(["mcp.network.invalid_mode", "mcp.network.empty_allowlist"]);
 const PRIVILEGED_MCP_COMMANDS = new Set(["sudo", "su"]);
-const VERSION_COMMAND_TIMEOUT_MS = 750;
-const HEADROOM_PYTHON_DISTRIBUTIONS = ["headroom", "headroom-ai"] as const;
-
-let cachedHeadroomVersion: string | null | undefined;
 
 interface McpStabilityInput {
 	readonly commandSummary: string;
@@ -41,8 +39,13 @@ interface McpStabilityInput {
 	readonly authDecision: Pick<McpServerEntry["authDecision"], "rule">;
 }
 
+/**
+ * Render-path label. Never spawns synchronously: before the version probe settles it starts the probe
+ * (once, without waiting) and shows the same policy-id fallback as "headroom not installed".
+ */
 export function formatHeadroomStatusLabel(): string {
-	const version = getInstalledHeadroomVersion();
+	const version = getCachedHeadroomVersion();
+	if (version === undefined) void loadHeadroomVersion();
 	return version ? `headroom:${version}` : getHeadroomRuntimeStatus().policyId;
 }
 
@@ -72,48 +75,6 @@ export function classifyMcpStability(entry: McpStabilityInput): McpStability {
 	const command = entry.commandSummary.split(/\s+/, 1)[0] ?? "";
 	if (PRIVILEGED_MCP_COMMANDS.has(command)) return "unstable";
 	return "stable";
-}
-
-function getInstalledHeadroomVersion(): string | null {
-	if (cachedHeadroomVersion !== undefined) return cachedHeadroomVersion;
-	cachedHeadroomVersion = readVersionFromCommand("headroom", ["--version"]);
-	if (cachedHeadroomVersion) return cachedHeadroomVersion;
-	cachedHeadroomVersion = readVersionFromCommand("headroom", ["version"]);
-	if (cachedHeadroomVersion) return cachedHeadroomVersion;
-	for (const distribution of HEADROOM_PYTHON_DISTRIBUTIONS) {
-		cachedHeadroomVersion = readPythonDistributionVersion(distribution);
-		if (cachedHeadroomVersion) return cachedHeadroomVersion;
-	}
-	cachedHeadroomVersion = null;
-	return cachedHeadroomVersion;
-}
-
-function readPythonDistributionVersion(distribution: (typeof HEADROOM_PYTHON_DISTRIBUTIONS)[number]): string | null {
-	return readVersionFromCommand("python3", [
-		"-c",
-		`import importlib.metadata as m; print(m.version('${distribution}'))`,
-	]);
-}
-
-function readVersionFromCommand(command: string, args: readonly string[]): string | null {
-	try {
-		const result = spawnSync(command, [...args], {
-			encoding: "utf8",
-			timeout: VERSION_COMMAND_TIMEOUT_MS,
-			shell: false,
-			windowsHide: true,
-			env: { PATH: process.env.PATH ?? "" },
-		});
-		if (result.error || result.status !== 0) return null;
-		return parseHeadroomVersionOutput(`${result.stdout}\n${result.stderr}`);
-	} catch {
-		return null;
-	}
-}
-
-export function parseHeadroomVersionOutput(output: string): string | null {
-	const match = /\bv?(\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?)\b/.exec(output);
-	return match?.[1] ?? null;
 }
 
 export function createControlPanelStatusSnapshot(
