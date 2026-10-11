@@ -125,7 +125,8 @@ With many skills the `<available_skills>` list grows the system prompt by every 
 - The system prompt has one fixed line instead of the list, and a fixed `skill_search` tool (`query`, optional `limit` 1–8) is added. Both stay the same for the whole session.
 - `skill_search` ranks names and descriptions with BM25 and returns `name — description — location` lines; the agent then reads the SKILL.md it picks.
 - At each task start, up to three new candidates above a score floor arrive as a hidden `<skill_candidates>` message. A skill is offered once per session. Subagent workers keep the tool but get no candidates (`OMK_SKILL_SEARCH_SUGGEST=0`).
-- The index is built on the first search or task start, never at startup, and cached in `cache/skill-index-v1.json` under the agent directory. Changed SKILL.md files (path, size, mtime, inode) rebuild it; a corrupt file is a miss.
+- The index is built on the first search or task start, never at startup, and cached in `cache/skill-index-v1.json` under the agent directory. Changed SKILL.md files (path, size, mtime, inode) or a new index format rebuild it; a corrupt file is a miss. The cache is one file per agent directory, not per project: projects with different skills overwrite it, and the next session in the other project rebuilds it.
+- If another tool (an extension, MCP server or SDK tool) is already named `skill_search`, the session keeps the normal skill list and prints one warning; without the flag such a tool never changes the prompt.
 - With `OMK_RUN_LOG_DIR` set, `skill-select.jsonl` records session, index, search and suggest events with hashes and counts only, never the query, skill names or paths.
 
 With 24 skills or fewer, without `read`, or with the flag off, prompts are unchanged.

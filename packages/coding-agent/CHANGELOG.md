@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Experimental `OMK_SKILL_SEARCH=1` (default off) for sessions with more than 24 model-invocable skills and the `read` tool: the system prompt replaces the skill list with one fixed line, a fixed `skill_search` tool ranks skills by name and description (BM25), and up to three new candidates arrive as a hidden message at each task start. The index is built on first use, never at startup, and cached in `cache/skill-index-v1.json` under the agent directory. Subagent workers keep the tool without automatic candidates. With `OMK_RUN_LOG_DIR`, `skill-select.jsonl` gets hash-only records. If another tool is already named `skill_search`, the session stays as without the flag. Off, or with 24 skills or fewer, requests are unchanged. See [skills](docs/skills.md#skill-search-omk_skill_search).
+
 ### Changed
+
+- The skill choice of a session's first prompt (provider harness picks, `!skill:` selections, context-budget ranking) is kept in the system prompt for the session; a later prompt's different choice is sent as a hidden `<prompt_skills>` message after the user message, so the provider's prompt cache keeps its prefix. A single `-p` request is unchanged.
 
 - The skill catalog cache now also covers the one-`SKILL.md`-per-skill paths that auto-discovery produces, so a start no longer reads, parses and hashes every `SKILL.md` again. Each file is checked with one `stat` (size, mtime, ctime, inode); an edited, removed or added skill is picked up on the next start. File entries are capped at 4,096 separately from the 64 directory entries, least recently used first out. The loaded skills and the request are unchanged.
 - The interactive chat no longer slows down as a session grows. `ChatContainer` freezes finished messages above the viewport and re-renders a frozen message only when it changes, for example a tool card expanded with `Ctrl+O` or a late tool result. On a 20k-line transcript of real message and tool components, a keypress frame drops from ~40 ms to ~1.7 ms mean (p95 ~52 ms → ~2 ms), and process RSS no longer climbs by ~180 MB during the first streaming response.
