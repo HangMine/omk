@@ -88,9 +88,9 @@ description: "스킬이 많을 때 system prompt에서 스킬 목록을 빼고, 
 R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모두 지금 사용자 프롬프트마다 system을 바꾸는 곳이다(spec 051).
 
 - **첫 프롬프트는 오늘과 같다.** 첫 사용자 프롬프트에서는 xAI/Devin harness 선택, `contextBudget` 선택, 명시 `!skill`·`/skill:` 선택을 지금처럼 system(`<active_skills>`, budget 스킬 부분)에 넣는다. 그 system을 **세션 동안 고정**한다. 그래서 `-p` 단일 프롬프트 실행의 요청은 main과 바이트 단위로 같다(AC 11).
-- **두 번째 프롬프트부터는 끝 메시지로.** 다시 고른 스킬(이름. 위치를 넣는 규칙은 지금 `<active_skills>`와 같다)은 system에 넣지 않는다. 대신 사용자 메시지 바로 뒤에 붙는 custom 메시지로 넣는다. 위치는 `_pendingNextTurnMessages`를 넣는 곳(`agent-session.ts:2606`) 옆이다. 메시지에는 "이 프롬프트에 적용되는 스킬"이라고 적어서, 고정된 system의 첫 선택보다 우선함을 밝힌다.
+- **두 번째 프롬프트부터는 끝 메시지로.** 다시 고른 스킬(이름. 위치를 넣는 규칙은 지금 `<active_skills>`와 같다)은 system에 넣지 않는다. 대신 사용자 메시지 바로 뒤에 붙는 custom 메시지로 넣는다. 위치는 `_pendingNextTurnMessages`를 넣는 곳(`agent-session.ts:2606`) 옆이다. 메시지에는 "이 프롬프트에 적용되는 스킬"이라고 적어서, 고정된 system의 첫 선택보다 우선함을 밝힌다. 이 메시지는 세션 기록에 쌓이므로 가장 최근의 `<prompt_skills>`만 적용한다고 함께 적는다.
   - xAI/Devin harness: 고르는 규칙(`selectHarnessSkills`, 최대 3개)은 바꾸지 않는다.
-  - `contextBudget`: system의 스킬 부분은 첫 프롬프트 때의 선택과 순서로 고정한다. 질의 관련 상위 스킬은 끝 메시지로 붙인다. 컨텍스트 파일 처리는 그대로다. 050이 활성인 세션에서는 첫 프롬프트부터 렌더러에 스킬을 넘기지 않는다(`includeSkills: false`). 이 경우는 050이 활성이라 AC 11 대상이 아니다(AC 11은 050 비활성 조건).
+  - `contextBudget`: system의 스킬 부분은 첫 프롬프트 때의 선택과 순서로 고정한다. 질의 관련 상위 스킬은 끝 메시지로 붙인다. budget 질의 전체(스킬과 컨텍스트 파일)를 첫 프롬프트 기준으로 고정한다. 두 번째 프롬프트부터 관련된 컨텍스트 파일은 다시 고르지 않는다(알려진 한계, 기본 꺼짐 설정). 050이 활성인 세션에서는 첫 프롬프트부터 렌더러에 스킬을 넘기지 않는다(`includeSkills: false`). 이 경우는 050이 활성이라 AC 11 대상이 아니다(AC 11은 050 비활성 조건).
   - 명시 `!skill`·`/skill:`: 사용자 입력이다. 두 번째 프롬프트부터는 끝 메시지로 넣는다.
 - **모듈 크기**: `agent-session.ts`는 module-size 여유가 약 3줄(4212/4215)이다. 그래서 "첫 프롬프트인지", 고르기, 메시지 렌더는 작은 helper `core/prompt-skill-message.ts`에 두고, `agent-session.ts`에는 호출 한두 줄만 넣는다.
 - **TB 영향**: TB는 `-p` 단일 프롬프트라 R6이 요청을 바꾸지 않는다. 공동 A/B 조건(번들 6개)도 그대로다(AC 5, 11).
@@ -146,6 +146,10 @@ R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모�
 - **TB 공동 A/B와의 관계**: 고정점 `d69af96`은 바뀌지 않는다. `-p`와 번들 6개 조건의 요청이 main과 같다는 것을 AC 5와 AC 11로 보증한다.
 - 스킬이 많은 조건의 점수 A/B, 그리고 BM25 대 학습형 선택 비교는 필요해지면 그때 따로 정한다. 근거로는 `skill-select.jsonl`의 `read.suggested` 비율을 쓸 수 있다.
 
+## 알려진 한계
+
+- `PromptSkillFreeze`는 세션 파일에 저장하지 않는다. 그래서 `--resume` 뒤 첫 프롬프트에서 선택을 다시 고정한다. resume 뒤에는 어차피 프롬프트 캐시가 차가워서 손해가 없다.
+
 ## Non-goals
 
 - 카탈로그 캐시 수정(별도 PR).
@@ -153,7 +157,7 @@ R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모�
 - 스킬 본문을 system이나 후보 메시지에 넣는 것.
 - 실제 스킬 디렉터리 정리나 수정.
 - reasoning effort(037).
-- 같은 종류의 다른 캐시 문제는 메모만 남기고 범위 밖이다. 자정을 넘기면 system의 `Current date`가 바뀌는 것(`system-prompt.ts:223`), `agent-session.ts:2658`의 cache-boundary 판정을 `startsWith`로 바꾸는 것, xAI `x-grok-conv-id` 헤더는 Staff Engineer의 별도 PR이다(spec 051).
+- 같은 종류의 다른 캐시 문제는 메모만 남기고 범위 밖이다. 자정을 넘기면 system의 `Current date`가 바뀌는 것(`system-prompt.ts:223`)과 xAI `x-grok-conv-id` 헤더는 Staff Engineer의 별도 PR이다(spec 051). `agent-session.ts`의 cache-boundary 판정을 `startsWith`로 바꾸는 것은 #120으로 main에 머지됐다.
 
 ## 정해진 질문 (Tech Lead, 2026-10-11)
 
@@ -173,7 +177,7 @@ R6은 `OMK_SKILL_SEARCH`와 상관없이 적용한다. 아래 세 경로는 모�
 - `packages/coding-agent/src/core/system-prompt.ts`, `skills-prompt.ts`: 활성 세션에서 목록 대신 고정 안내 한 줄
 - `packages/coding-agent/src/core/prompt-skill-message.ts`: R6 helper(harness와 `contextBudget`이 고른 스킬을 끝 메시지로 렌더, task 시작 후보 메시지 연결). `agent-session.ts` module-size 여유가 3줄이라 로직은 여기에 둔다
 - `packages/coding-agent/src/core/agent-session.ts`: helper 호출 한두 줄만
-- `packages/coding-agent/src/core/system-prompt.ts`: `<active_skills>`는 operator 기본값만, budget 스킬 부분은 세션 시작 순서로 고정
+- R6은 `system-prompt.ts`를 바꾸지 않는다. 첫 프롬프트의 선택(`<active_skills>`, budget 질의)을 helper가 고정해 그대로 넘긴다
 - `packages/coding-agent/test/suite/prompt-cache-stability.test.ts`(#117): `it.fails`를 `it`으로 바꾸고 harness 예외 제거(AC 9, 10)
 - `packages/coding-agent/src/core/extensions/builtin/todo-checklist.ts`: 활성 todo가 바뀔 때 후보 줄 (049가 있을 때)
 - `packages/coding-agent/examples/extensions/subagent/worker-env.ts`: `OMK_SKILL_SEARCH`는 그대로 물려주고 `OMK_SKILL_SEARCH_SUGGEST=0`을 더한다(R7의 자동 후보 끄기. 034의 `OMK_DELIVERABLE_GUARD=0`과 같은 방식)
