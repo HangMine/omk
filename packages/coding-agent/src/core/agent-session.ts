@@ -768,6 +768,10 @@ export class AgentSession {
 		this._modelPinned = config.modelPinned === true;
 		this._resourceLoader = config.resourceLoader;
 		this._customTools = config.customTools ?? [];
+		this._promptSkillFreeze.skillSearch.setup({
+			skills: () => this._resourceLoader.getSkills().skills,
+			hasReadTool: config.initialActiveToolNames?.includes("read") ?? true,
+		});
 		this._cwd = config.cwd;
 		this._modelRegistry = config.modelRegistry;
 		this._metaRuntime = createAgentSessionMetaRuntime({
@@ -2088,6 +2092,7 @@ export class AgentSession {
 			activeSkillSource: defaultActiveSkills.length > 0 ? "settings" : undefined,
 			contextFiles: selectContextFilesForModel(this._resourceLoader.getAgentsFiles().agentsFiles, model),
 			contextBudget: this._getContextBudgetOptions(undefined, model),
+			skillSearch: this._promptSkillFreeze.skillSearch.active,
 		});
 		this._baseSystemPromptOptions = assembled.options;
 		this._baseSystemPromptCacheBoundary = assembled.cacheBoundary;
@@ -2602,7 +2607,7 @@ export class AgentSession {
 			this._pendingNextTurnMessages = [];
 
 			// Spec 050 R6: the first prompt's skill choice goes into a session-frozen system prompt, later ones into a message.
-			const turnSkills = this._promptSkillFreeze.turn({
+			const turnSkills = await this._promptSkillFreeze.turn({
 				base: this._baseSystemPromptOptions,
 				provider: this.model?.provider,
 				selection: promptSkills,
@@ -2654,6 +2659,7 @@ export class AgentSession {
 				this.agent.state.systemPromptCacheBoundaryBypass = false;
 			}
 			this._recordPromptCachePlan(result?.systemPrompt ? "extension-override" : "turn-plan");
+			await this._promptSkillFreeze.skillSearch.logSession(this.agent.state);
 
 			await this._checkProjectedCompaction(messages);
 			this._runBudget.assertActive();
@@ -4512,9 +4518,10 @@ export class AgentSession {
 			(!allowedToolNames || allowedToolNames.has(name)) && !excludedToolNames?.has(name);
 
 		const registeredTools = this._extensionRunner.getAllRegisteredTools();
+		const registeredNames = registeredTools.map((tool) => tool.definition.name);
 		const allCustomTools = [
 			...registeredTools,
-			...this._customTools.map((definition) => ({
+			...this._promptSkillFreeze.skillSearch.withTool(this._customTools, registeredNames).map((definition) => ({
 				definition,
 				sourceInfo: createSyntheticSourceInfo(`<sdk:${definition.name}>`, { source: "sdk" }),
 			})),
