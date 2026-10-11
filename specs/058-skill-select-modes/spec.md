@@ -34,7 +34,7 @@ description: "OMK_SKILL_SELECT=bm25|metacon으로 스킬 후보를 고르는 방
 ## 결정할 점 (OMK 제안)
 
 - 선택 방식은 둘이다. 둘 다 #122의 고정 도구, 고정 system 줄, 끝 메시지 형식을 그대로 쓴다. 바뀌는 것은 `skill_search` 결과와 작업 시작 후보의 **순서와 구성**뿐이다. 그래서 캐시 안정성(050 AC 2)은 방식과 상관없다.
-- 1.5.0의 기본값은 꺼짐이다. 어느 방식을 기본으로 할지는 Bench Analyst의 A/B 뒤에 정한다.
+- 1.5.0의 기본값은 꺼짐이다. 어느 방식을 기본으로 할지는 Bench Analyst의 오프라인 평가(AC 7) 뒤에 정한다.
 
 ## Requirements
 
@@ -50,6 +50,7 @@ description: "OMK_SKILL_SELECT=bm25|metacon으로 스킬 후보를 고르는 방
 
 - `core/skill-select-rankers.ts`(새 파일, 지연 로드)에 `rankSkills(mode, query, context) → { name, score }[]`를 둔다. `context`는 `{ phase?: string, explicit: string[], limit: number }`다.
 - `skill_search` 도구와 작업 시작 후보(#122 `SkillSearchSession.search`, `suggest`)가 이 함수를 부른다. 결과 렌더(`name — description — location`, `<skill_candidates>`), 중복 제안 금지, 점수 하한은 #122 그대로다.
+- **같은 내용 합치기**: `bm25`와 `metacon` 모두, `skill_search` 결과와 작업 시작 후보에서 `contentHash`(`loadSkills()`의 SKILL.md sha256)가 같은 스킬은 하나만 남긴다. 남기는 것은 순위가 가장 높은 것(같으면 이름순 앞)이다. 빠진 자리는 다음 순위의 다른 스킬로 채워 상위 k개를 서로 다른 스킬로 만든다. 바이트 단위로 같은 파일이 두 경로에 있을 때만 합쳐진다. `name:` 줄만 다른 복사본은 `contentHash`가 달라서 **합치지 않는다**(의도한 동작이다. 이름이 다르면 모델이 부르는 스킬도 다르다).
 - `details`의 `candidates[{name, score, location}]`에 `mode`를 더한다. 이후 TUI 카드가 어떤 방식이 골랐는지 그릴 수 있게 하려는 것이다. TUI는 만들지 않는다.
 
 ### R3 - `bm25` (P0)
@@ -65,20 +66,23 @@ description: "OMK_SKILL_SELECT=bm25|metacon으로 스킬 후보를 고르는 방
    - `id` = 스킬 이름.
    - `contentHash` = `Skill.contentHash`(로더가 낸 sha256), 없으면 `sha256(name + "\n" + description)`.
    - `capabilities` = 이름과 설명의 내용어(`retrievalTokens`에서 길이 1과 불용어를 뺀 것, 중복 제거, 앞 128개).
-   - `phases` = `["task", "plan", "explore", "edit", "debug", "verify"]`(스킬 frontmatter에 단계 정보가 없어서 모든 단계에 쓸 수 있다고 본다).
+   - `phases` = `["task", "plan", "explore", "edit", "debug", "verify"]`(스킬 frontmatter에 단계 정보가 없어서 모든 단계에 쓸 수 있다고 본다). 그래서 지금은 `planSkills`의 단계 필터(`phase-mismatch`)가 **아무것도 걸러 내지 않는다**. 049가 들어와도 결과는 같고, 단계 정보가 스킬에 생길 때 의미가 생긴다.
    - `tokenCost` = `ceil((compact 설명 길이 + 위치 길이) / 4)`. 후보 메시지에 실제로 싣는 크기다.
    - `dependencies`, `conflicts`, `permissions` = `[]`. `packages` = `{}`. `explicitOnly` = `disableModelInvocation`.
 3. **`SkillPlanInput`**:
    - `phase` = 049 `activeTodoKind()`가 있으면 그 값, 없으면 `"task"`. 049가 main에 없는 동안은 늘 `"task"`다.
-   - `needs` = 질의의 내용어(≤128). 각 `weight`는 앞단에서 쓴 코퍼스 기준 IDF(최소 1), `required`는 모두 `false`다. 그래서 `state`는 `covered`나 `explicit-blocked`만 나온다.
-   - `approvedHashes` = 인덱스를 만들 때 읽은 `{이름: contentHash}`. 인덱스 이후 SKILL.md가 바뀌면 그 스킬은 `unapproved-or-changed-content`로 빠진다. 다음 인덱스 재빌드 때 다시 들어온다.
+   - `needs` = 질의의 내용어. 먼저 중복을 없애고 그다음 앞 128개로 자른다(`planSkills`는 `needs`의 중복을 오류로 본다). 각 `weight`는 앞단에서 쓴 코퍼스 기준 IDF(최소 1), `required`는 모두 `false`다. 그래서 `state`는 `covered`나 `explicit-blocked`만 나온다.
+   - `approvedHashes` = 지금 `loadSkills()` 결과의 `{이름: contentHash}`. `catalog`의 `contentHash`와 같은 출처라서 `unapproved-or-changed-content`로 빠지는 스킬은 없다. 인덱스 v2(인덱스에 contentHash 저장)는 만들지 않는다. SKILL.md가 바뀌면 #122의 지문(`fingerprintSkills`: 경로, 크기, mtime, inode)이 달라져 인덱스를 다시 만들기 때문에, 인덱스와 로드 결과가 어긋나는 경우가 없다.
    - `installedVersions` = `{}`, `allowedPermissions` = `[]`.
    - `explicitSkills` = 이번 프롬프트의 `!skill`·`/skill:` 이름 중 앞단 결과에 든 것.
    - `maxSkills` = 요청한 `limit`(후보는 3, 도구는 1..8). `tokenBudget` = `limit × 160`.
-4. **출력**: `selected`를 BM25 점수 순으로 다시 정렬해 돌려준다. 점수는 BM25 점수다(커버리지 값은 로그에만 남긴다). `selected`가 `limit`보다 적으면 남은 자리를 BM25 순위로 채운다(중복 없이).
-5. **실패**: `planSkills`가 예외를 던지거나 50 ms를 넘기면 그 호출만 `bm25` 결과를 쓰고 `fallback: "metacon-error"` 또는 `"metacon-slow"`를 남긴다. 세션의 방식은 바꾸지 않는다.
+4. **출력**: `selected`를 BM25 점수 순으로 다시 정렬해 돌려준다. 점수가 같으면 이름순이다(`searchCorpus`와 같은 규칙). 점수는 BM25 점수다(커버리지 값은 로그에만 남긴다). `selected`가 `limit`보다 적으면 남은 자리를 BM25 순위로 채운다(중복 없이).
+5. **실패**: `planSkills`가 예외를 던질 때만 그 호출에 `bm25` 결과를 쓰고 `fallback: "metacon-error"`를 남긴다. 세션의 방식은 바꾸지 않는다.
+6. **시간 예산**: `planSkills`는 동기 함수라 도중에 끊을 수 없다. 또 부하에 따라 물러나면 같은 질의의 결과가 실행마다 달라져 비교(AC 7)가 흔들린다. 그래서 50 ms는 **끊는 기준이 아니라 기록하는 예산**이다. 걸린 시간을 `planMs`로 남기고, 넘으면 `overBudget: true`를 더한다. 결과는 그대로 쓴다. 지키는 것은 AC 2의 p99 기준이다.
 
-기대 효과: BM25 상위 3개가 같은 단어에 몰린 비슷한 스킬로 채워지는 경우, 커버리지 선택은 질의의 다른 단어를 덮는 스킬을 섞는다. 이것이 bm25와 다른 점이고, A/B에서 볼 점이다.
+기대 효과: BM25 상위 3개가 같은 단어에 몰린 비슷한 스킬로 채워지는 경우, 커버리지 선택은 질의의 다른 단어를 덮는 스킬을 섞는다. 이것이 bm25와 다른 점이고, 오프라인 평가(AC 7)에서 볼 점이다.
+
+읽을 때 주의할 점: greedy 선택은 같은 커버리지라면 `tokenCost`가 작은 스킬, 곧 **설명이 짧은 스킬**을 고르는 쪽으로 기운다. `metacon`이 짧은 설명의 스킬을 자주 고르면 이 치우침 때문일 수 있으므로, 평가 결과를 읽을 때 고른 스킬의 설명 길이 분포를 함께 본다.
 
 ### R5 - 캐시 안정성 (P0, 050 R6 유지)
 
@@ -94,7 +98,8 @@ description: "OMK_SKILL_SELECT=bm25|metacon으로 스킬 후보를 고르는 방
 `OMK_RUN_LOG_DIR`가 있을 때만 `skill-select.jsonl`에 남긴다. **해시와 숫자만** 남기고, 질의, 스킬 이름, 경로 원문은 남기지 않는다(050 AC 7과 같은 방법으로 확인).
 
 - 모든 `search`·`suggest` 레코드에 `mode`, `candidateCount`(순위를 매긴 후보 수), `top[{ nameHash, score }]`(상위 k개, `nameHash`는 sha256 앞 12자, `score`는 소수 셋째 자리), `latencyMs`를 더한다.
-- `metacon`은 `prefilter`(앞단 결과 수), `algorithm`, `state`, `coveredNeeds`, `needs`, `rejected`(이유별 개수), `phase`, `phaseSource`(`todo|default`), `planMs`, `fallback?`를 더한다.
+- `metacon`은 `prefilter`(앞단 결과 수), `algorithm`, `state`, `coveredNeeds`, `needs`, `rejected`(이유별 개수), `phase`, `phaseSource`(`todo|default`), `planMs`, `overBudget?`, `fallback?`를 더한다.
+- `read.suggested`(제안한 스킬을 모델이 실제로 읽은 비율)는 050 R8의 `read` 레코드가 생기면 **보조 신호로만** 남긴다. 판정 지표가 아니다(AC 7).
 - `session` 레코드에 `mode`(`off|bm25|metacon`)와 `invalidMode?`를 더한다.
 
 ### R8 - 지연 로드 (P0)
@@ -107,13 +112,28 @@ description: "OMK_SKILL_SELECT=bm25|metacon으로 스킬 후보를 고르는 방
 - **AC 1 (꺼짐 동일성)**: `OMK_SKILL_SELECT`를 설정하지 않은 `-p` 요청이 main과 바이트 단위로 같다. 050 AC 11의 6케이스(default, xai, budget, bang, xaibang, xaibudget)를 같은 mock 캡처로 돈다. 두 방식 각각을 스킬 24개 이하로 켠 경우(비활성)와 `OMK_SKILL_SELECT=wpl`(알 수 없는 값)도 같아야 한다. 측정은 `OMK_TRUST_PROJECT=0`, 위에 AGENTS.md·CLAUDE.md가 없는 cwd에서 하고 그 조건을 기록한다.
 - **AC 2 (방식별 단위 테스트, 고정 fixture)**: `test/fixtures/skill-select/`의 고정 카탈로그(합성 40개, 이름·설명 고정)와 고정 질의 5개로:
   - `bm25`: 상위 k 이름과 점수가 기대값과 같다.
-  - `metacon`: 같은 단어에 몰린 비슷한 스킬 3개가 있는 질의에서, BM25 상위 3개와 달리 질의의 다른 내용어를 덮는 스킬이 들어간다. 같은 입력은 같은 출력을 낸다. `planSkills` 예외와 50 ms 초과에서 bm25로 물러난다. 인덱스 이후 바뀐 SKILL.md는 `rejected`에 들어간다.
+  - `metacon`: 같은 단어에 몰린 비슷한 스킬 3개가 있는 질의에서, BM25 상위 3개와 달리 질의의 다른 내용어를 덮는 스킬이 들어간다. 같은 입력은 같은 출력을 낸다. 점수가 같으면 이름순이다. `planSkills` 예외에서만 bm25로 물러난다(느린 호출은 결과를 그대로 쓰고 `overBudget`만 남긴다). `needs`에 같은 단어가 여러 번 있어도 오류가 나지 않는다.
+  - `metacon` 시간: 합성 1,191개와 고정 질의로 `planSkills` 호출(앞단 BM25 포함, 모듈 로드 시간 제외)의 p99가 50 ms 미만이다.
+  - 같은 내용 합치기(두 방식 모두): 바이트 단위로 같은 SKILL.md를 두 경로에 두면 결과에 한 번만 나오고, 상위 k개는 서로 다른 스킬로 채워진다. `name:` 줄만 다른 복사본 둘은 둘 다 나온다.
   - 알 수 없는 값(`wpl`, `foo`)은 꺼짐이고, 경고는 프로세스당 한 번이다.
 - **AC 3 (캐시 안정성)**: 050 AC 2 테스트(task 2개, `skill_search`, `/reload`)를 방식마다 돈다. 모든 호출의 `systemHash`·`toolsHash`가 첫 호출과 같고 앞 메시지가 유지된다.
 - **AC 4 (시작 시간과 RSS)**: 합성 1,191개에서 쌍 측정을 하고 `paired_verdict.py --block startup_ms=5 --block idle_rss_mib=5`로 판정한다. 비교는 (a) 꺼짐 대 main, (b) 방식마다 켬 대 꺼짐이다. 명확한 회귀(BLOCK)가 없어야 한다. 측정은 박스 순서에 따라 슬롯을 받아 하고, `OMK_TRUST_PROJECT=0`과 cwd 조건을 기록한다.
 - **AC 5 (log에 원문 없음)**: 고유 문자열을 질의와 스킬 설명에 심고, 방식마다 `skill-select.jsonl` 전체에 그 문자열, 스킬 이름, 경로가 없음을 확인한다.
 - **AC 6 (로컬 전용)**: 방식마다 테스트에서 `fetch`, `net.connect`, `child_process` 호출 수를 세어 0이어야 한다. 정적 검사로 `skill-select-rankers.ts`와 `skill-search.ts`가 `omk-adaptorch-wpl`과 `core/adaptorch-bridge.ts`를 import하지 않음을 확인한다.
-- **AC 7 (A/B 계획, 자리만)**: 방식 간 TB/작업 A/B는 Bench Analyst가 설계하고 판정한다. 1.5.0에서 기본값은 꺼짐이고, 어느 방식도 기본으로 켜지 않는다. 결과에 따라 이후 릴리스에서 기본값을 정한다.
+- **AC 7 (오프라인 품질 평가, Bench Analyst 판정)**: 모델 호출 없이, $0으로 `bm25`와 `metacon`의 순위 품질을 비교한다.
+  - **코퍼스**:
+    - 주 조건은 박스의 실제 스킬을 **본문 기준**으로 중복 없이 모은 247개다. 박스의 `/workspace/omk-skill-baseline/env/s1191`(1,191개)은 실제 스킬을 4~5번씩 복사하고 `name:` 줄만 바꾼 합성 세트다. `name:` 줄을 뺀 본문이 서로 다른 것이 247개다(OMK 확인, 2026-10-11). 이름에서 `-N`을 떼어 묶으면 241개지만, 그중 6개 이름은 본문이 다른 변형을 갖는다.
+    - 본문 기준으로 묶는 이유(Tech Lead 결정, 2026-10-11): 이름이 같아도 본문이 다르면 검색 결과에서는 다른 스킬이다. 제품의 중복 제거(위 "같은 내용 합치기")도 `contentHash` 기준이다. 그래서 판정 단위를 제품 동작과 맞춘다.
+    - 1,191개 조건은 보조다. 같은 본문 묶음(`name:` 줄을 뺀 본문)의 복사본 중 어느 것이 나와도 맞힌 것으로 센다. 상위 3개에 서로 다른 묶음이 몇 개인지도 함께 보고한다. 1,191개 파일은 `name:` 줄 때문에 전부 `contentHash`가 달라서, 제품의 "같은 내용 합치기"로 합쳐지는 것은 없다.
+  - **질의 50개**: 주로 todo 문장과 개발 작업 문장이다. R8 실행의 task 지시문과 todo 문장에서 뽑아 가린(masked) 것이다.
+  - **정답**: 질의마다 0~3개의 정답 스킬을 **두 방식의 출력을 보기 전에** 정한다. Bench Analyst가 질의와 정답 초안을 만들고 OMK가 정답을 검토한다.
+  - **고정된 정답(2026-10-11)**: `/workspace/omk-bench-analyst/skill058/labels_final.tsv`(sha256 `21c6938adec603ade2a0e6280f1479d351f46258bdf544f788c4b8f03fbd6380`). 50개 질의 중 정답이 있는 것이 46개, 없는 것이 4개다. 코퍼스는 같은 폴더의 `corpus247.json`(sha256 `5691f7e11d48569e5fdccaaf245f5396e4a8c942dcc8b5ea50004f035d14404f`)이다. OMK 검토 변경 3건은 `label_review_omk.md`에 있다. 평가는 이 해시의 파일로만 하고, 바꾸려면 새 해시를 이 spec에 적는다.
+  - **지표**: 정답이 1개 이상인 질의에서 hit@3과 MRR을 낸다. 같은 질의에서 두 방식을 짝지어(paired) 비교하고, sign test와 bootstrap CI를 낸다. 정답이 0개인 질의는 hit@k에서 빼고, 점수 하한을 넘는 후보를 낸 비율(엉뚱한 제안 비율)로 따로 보고한다.
+  - **판정**: `metacon`은 주 조건에서 hit@3이 CI로 분명히 나을 때만 "효과 있음"이다. 그렇지 않으면 `bm25`가 기본값 후보로 남는다.
+  - `read.suggested`는 판정에 쓰지 않는다. R8에서는 265개 실행 중 6개만 스킬을 읽었고(읽기 11회), 이 값은 순위 품질이 아니라 모델이 제안을 따르는지를 잰다.
+  - 번들 6개는 동작 문턱(24개) 아래라 두 방식 모두 비활성이다. 그래서 TB A/B를 하더라도 스킬이 많은 조건(예: 1,191개 세트)이 필요하다. TB A/B는 오프라인 평가를 통과한 방식만, 그 뒤에 한다.
+  - **범위**: 결과는 합성 코퍼스 기준이다. 인호의 실제 1,191개는 박스에 없다. 실제 세트와 다를 수 있으므로 1.5.0 릴리스 노트에는 "합성 코퍼스 기준"이라고 적는다.
+  - 1.5.0에서 기본값은 꺼짐이고, 어느 방식도 기본으로 켜지 않는다.
 
 ## Non-goals
 
@@ -129,12 +149,12 @@ description: "OMK_SKILL_SELECT=bm25|metacon으로 스킬 후보를 고르는 방
 
 ## Future
 
-- **`wpl` 방식**: 먼저 `omk-adaptorch-wpl`에 로컬 순수 순위 모듈(I/O와 네트워크 없음)을 만들어야 한다. 그 모듈은 자기 spec과 근거(이 spec의 `bm25`·`metacon` 대비 A/B)가 필요하다(P2 규칙). 초안 때 검토한 안은 Work Packet 상태(`WorkPacketState`)를 단계로 바꿔 `metacon`의 `phase`에 넣는 것이었다. 기본 CLI에는 WPL 루프가 없어서 그 안은 `metacon`과 결과가 같았고, 그래서 1.5.0에서 뺐다.
+- **`wpl` 방식**: 먼저 `omk-adaptorch-wpl`에 로컬 순수 순위 모듈(I/O와 네트워크 없음)을 만들어야 한다. 그 모듈은 자기 spec과 근거(AC 7과 같은 오프라인 평가에서 `bm25`·`metacon` 대비 결과)가 필요하다(P2 규칙). 초안 때 검토한 안은 Work Packet 상태(`WorkPacketState`)를 단계로 바꿔 `metacon`의 `phase`에 넣는 것이었다. 기본 CLI에는 WPL 루프가 없어서 그 안은 `metacon`과 결과가 같았고, 그래서 1.5.0에서 뺐다.
 
 ## 정할 질문
 
-1. `metacon`의 `METACON_PREFILTER`(64)와 `tokenBudget`(`limit × 160`)은 AC 2 fixture와 1,191개 측정으로 맞춘다. A/B 전에 바꿀 수 있다.
-2. 049가 1.5.0에 들어가지 않으면 `phase`는 늘 `"task"`다. 이것으로 충분한지 Tech Lead가 정한다.
+1. `metacon`의 `METACON_PREFILTER`(64)와 `tokenBudget`(`limit × 160`)은 AC 2 fixture와 1,191개 측정으로 맞춘다. 오프라인 평가(AC 7) 전에 바꿀 수 있고, 평가 중에는 고정한다.
+2. ~~049가 1.5.0에 들어가지 않으면 `phase`는 늘 `"task"`다~~: 정했어요. 스킬에 단계 정보가 없어서 지금은 단계 필터가 아무것도 걸러 내지 않으므로, 049가 있든 없든 결과가 같다(R4).
 
 ## Expected Files (구현 PR)
 
