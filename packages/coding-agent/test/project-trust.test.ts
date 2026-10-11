@@ -15,6 +15,7 @@ import {
 	projectTrustStorePath,
 	recordProjectTrustDecision,
 	TRUST_PROJECT_ENV,
+	workerProjectTrustEnv,
 } from "../src/core/project-trust.ts";
 import { type Settings, SettingsManager } from "../src/core/settings-manager.ts";
 
@@ -379,5 +380,55 @@ describe("applyProjectTrustGate", () => {
 		expect(denied.isProjectCodeWithheld()).toBe(true);
 		const store = JSON.parse(readFileSync(projectTrustStorePath(home), "utf8"));
 		expect(store.projects[project].decision).toBe("denied");
+	});
+});
+
+describe("workerProjectTrustEnv (decision 2)", () => {
+	async function trustParent(cwd: string, env: NodeJS.ProcessEnv = { [TRUST_PROJECT_ENV]: "1" }) {
+		await applyProjectTrustGate({
+			cwd,
+			settingsManager: SettingsManager.create(cwd, agentDir),
+			mode: "headless",
+			env,
+			home,
+			writeStderr: () => {},
+			announced: new Set(),
+		});
+	}
+
+	it("passes OMK_TRUST_PROJECT=1 when the parent is trusted and the worker cwd has the same hash", async () => {
+		writeProjectSettings({ packages: ["npm:pkg"] });
+		await trustParent(project);
+		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: {}, home })).toBe("1");
+	});
+
+	it("passes it to a worktree at another path with the same gated items", async () => {
+		writeProjectSettings({ packages: ["npm:pkg"] });
+		await trustParent(project);
+		const worktree = join(root, "worktree");
+		mkdirSync(join(worktree, ".omk"), { recursive: true });
+		writeFileSync(join(worktree, ".omk", "settings.json"), JSON.stringify({ packages: ["npm:pkg"] }));
+		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: worktree, env: {}, home })).toBe("1");
+	});
+
+	it("does not pass it when the worker cwd's hash differs", async () => {
+		writeProjectSettings({ packages: ["npm:pkg"] });
+		await trustParent(project);
+		const other = join(root, "other");
+		mkdirSync(join(other, ".omk"), { recursive: true });
+		writeFileSync(join(other, ".omk", "settings.json"), JSON.stringify({ packages: ["npm:evil"] }));
+		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: other, env: {}, home })).toBeUndefined();
+	});
+
+	it("does not pass it when the parent is not trusted", async () => {
+		writeProjectSettings({ packages: ["npm:untrusted-parent"] });
+		await trustParent(project, {});
+		expect(workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: {}, home })).toBeUndefined();
+	});
+
+	it("passes OMK_TRUST_PROJECT=0 down unchanged", () => {
+		expect(
+			workerProjectTrustEnv({ parentCwd: project, workerCwd: project, env: { [TRUST_PROJECT_ENV]: "0" }, home }),
+		).toBe("0");
 	});
 });

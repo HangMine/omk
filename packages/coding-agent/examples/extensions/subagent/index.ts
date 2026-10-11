@@ -21,7 +21,13 @@ import type { AgentToolResult } from "omk-agent-core";
 import type { Message } from "omk-ai";
 import { StringEnum } from "omk-ai";
 import { Container, Markdown, Spacer, Text } from "omk-tui";
-import { type ExtensionAPI, getAgentDir, getMarkdownTheme, withFileMutationQueue } from "open-multi-agent-kit";
+import {
+	type ExtensionAPI,
+	getAgentDir,
+	getMarkdownTheme,
+	withFileMutationQueue,
+	workerProjectTrustEnv,
+} from "open-multi-agent-kit";
 import { Type } from "typebox";
 import { type RunAttemptInput, runAdaptiveAgent } from "./adaptive-agent-runtime.ts";
 import { deriveCapabilities } from "./agent-capability-router.ts";
@@ -426,7 +432,10 @@ async function runSingleAgentAttempt(
 			command: invocation.command,
 			args: invocation.args,
 			cwd: cwd ?? defaultCwd,
-			env: subagentWorkerEnv(process.env),
+			env: subagentWorkerEnv(
+				process.env,
+				workerProjectTrustEnv({ parentCwd: defaultCwd, workerCwd: cwd ?? defaultCwd }),
+			),
 			cutoffMs,
 			signal,
 			onStdout: stream.stdout,

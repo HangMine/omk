@@ -222,6 +222,35 @@ export function rememberSessionTrust(surface: ProjectCodeSurface): void {
 	sessionTrust().set(surface.projectKey, surface.fingerprint);
 }
 
+function readProjectSettingsFile(cwd: string): Settings {
+	try {
+		const parsed = JSON.parse(readFileSync(path.join(cwd, CONFIG_DIR_NAME, "settings.json"), "utf8")) as unknown;
+		return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Settings) : {};
+	} catch {
+		return {};
+	}
+}
+
+export interface WorkerProjectTrustOptions {
+	readonly parentCwd: string;
+	readonly workerCwd: string;
+	readonly env?: NodeJS.ProcessEnv;
+	readonly home?: string;
+}
+
+/**
+ * The `OMK_TRUST_PROJECT` value for a spawned worker: "0" when the parent runs with `=0`;
+ * "1" only when this process trusted the parent's project and the worker cwd's gated items
+ * hash the same (same project, or a worktree of it at another path); otherwise undefined.
+ */
+export function workerProjectTrustEnv(options: WorkerProjectTrustOptions): "1" | "0" | undefined {
+	if (projectTrustEnv(options.env ?? process.env) === "closed") return "0";
+	const parentFingerprint = sessionTrust().get(canonicalDir(options.parentCwd));
+	if (parentFingerprint === undefined) return undefined;
+	const worker = inspectProjectCode(options.workerCwd, readProjectSettingsFile(options.workerCwd));
+	return worker?.fingerprint === parentFingerprint ? "1" : undefined;
+}
+
 /** The single stderr line printed when `OMK_TRUST_PROJECT=1` opens the gate. */
 export function formatEnvTrustNotice(projectKey: string): string {
 	return `omk: ${TRUST_PROJECT_ENV}=1 trusts project code in ${projectKey}`;
