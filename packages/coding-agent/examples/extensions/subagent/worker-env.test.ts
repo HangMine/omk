@@ -22,6 +22,13 @@ describe("subagentWorkerEnv", () => {
 		expect(subagentWorkerEnv({}).OMK_DELIVERABLE_GUARD).toBe("0");
 	});
 
+	it("keeps OMK_SKILL_SEARCH and turns automatic skill candidates off (spec 050 R7)", () => {
+		const env = subagentWorkerEnv({ OMK_SKILL_SEARCH: "on", OMK_SKILL_SEARCH_SUGGEST: "1" });
+		expect(env.OMK_SKILL_SEARCH).toBe("on");
+		expect(env.OMK_SKILL_SEARCH_SUGGEST).toBe("0");
+		expect(subagentWorkerEnv({}).OMK_SKILL_SEARCH_SUGGEST).toBe("0");
+	});
+
 	it("lets OMK_FINISH_CHECK_WORKERS opt workers in", () => {
 		expect(subagentWorkerEnv({ OMK_FINISH_CHECK_WORKERS: "1" }).OMK_FINISH_CHECK).toBe("1");
 	});

@@ -8,7 +8,8 @@
  * they are not passed down. Workers keep `OMK_RUN_LOG_DIR` and are marked
  * `OMK_RUN_LOG_ROLE=worker` (spec 042) so their lines can be told apart from
  * the lead's. The deliverable guard (spec 034) watches the lead's outputs only,
- * so workers always get it off.
+ * so workers always get it off. Workers inherit `OMK_SKILL_SEARCH` but never
+ * get automatic skill candidate messages (spec 050 R7).
  */
 const LEAD_ONLY_VARS = [
 	"OMK_TIME_BUDGET_SEC",
@@ -23,6 +24,8 @@ export function subagentWorkerEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
 	const optIn = parent.OMK_FINISH_CHECK_WORKERS?.trim();
 	env.OMK_FINISH_CHECK = optIn ? optIn : "0";
 	env.OMK_DELIVERABLE_GUARD = "0";
+	// Spec 050 R7: workers keep OMK_SKILL_SEARCH (the `skill_search` tool) but get no automatic candidates.
+	env.OMK_SKILL_SEARCH_SUGGEST = "0";
 	if (parent.OMK_RUN_LOG_DIR?.trim()) env.OMK_RUN_LOG_ROLE = "worker";
 	return env;
 }
