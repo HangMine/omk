@@ -32,6 +32,7 @@ import { type GitSource, parseGitUrl } from "../utils/git.ts";
 import { canonicalizePath, isLocalPath, markPathIgnoredByCloudSync, resolvePath } from "../utils/paths.ts";
 import { isStdoutTakenOver } from "./output-guard.ts";
 import { extractNpmPackageTarball } from "./package-archive.ts";
+import { buildGitDependencyInstallArgs, buildNpmInstallArgs } from "./package-install-args.ts";
 import {
 	type PackageManifestResolution,
 	type PackageResourceManifest,
@@ -132,6 +133,8 @@ interface PackageManagerOptions {
 	cwd: string;
 	agentDir: string;
 	settingsManager: SettingsManager;
+	/** Run package lifecycle scripts; only an explicit `omk install|update --allow-scripts` sets it. */
+	allowScripts?: boolean;
 }
 
 type SourceScope = "user" | "project" | "temporary";
@@ -651,6 +654,7 @@ export class DefaultPackageManager implements PackageManager {
 	private cwd: string;
 	private agentDir: string;
 	private settingsManager: SettingsManager;
+	private readonly allowScripts: boolean;
 	private globalNpmRoot: string | undefined;
 	private globalNpmRootCommandKey: string | undefined;
 	private progressCallback: ProgressCallback | undefined;
@@ -659,6 +663,7 @@ export class DefaultPackageManager implements PackageManager {
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
 		this.settingsManager = options.settingsManager;
+		this.allowScripts = options.allowScripts === true;
 	}
 
 	setProgressCallback(callback: ProgressCallback | undefined): void {
@@ -1650,11 +1655,7 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private getGitDependencyInstallArgs(): string[] {
-		const configuredCommand = this.settingsManager.getNpmCommand();
-		if (configuredCommand && configuredCommand.length > 0) {
-			return ["install"];
-		}
-		return ["install", "--omit=dev"];
+		return buildGitDependencyInstallArgs((this.settingsManager.getNpmCommand()?.length ?? 0) > 0, this.allowScripts);
 	}
 
 	private runNpmCommandSync(args: string[]): string {
@@ -1663,28 +1664,7 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private getNpmInstallArgs(specs: string[], installRoot: string, ignoreScripts = false): string[] {
-		const packageManagerName = this.getPackageManagerName();
-		const scriptArgs = ignoreScripts ? ["--ignore-scripts"] : [];
-		// Extension packages run inside OMK and resolve OMK APIs through loader aliases/virtual modules.
-		// Disable peer dependency resolution for managed installs (npm's --legacy-peer-deps, and
-		// equivalent bun/pnpm settings) so package managers do not install or solve host-provided
-		// omk-agent-core, omk-ai, and omk-tui peers. Stale auto-installed host peers can otherwise block updates.
-		if (packageManagerName === "bun") {
-			return ["install", ...specs, "--cwd", installRoot, "--omit=peer", ...scriptArgs];
-		}
-		if (packageManagerName === "pnpm") {
-			return [
-				"install",
-				...specs,
-				"--prefix",
-				installRoot,
-				"--config.auto-install-peers=false",
-				"--config.strict-peer-dependencies=false",
-				"--config.strict-dep-builds=false",
-				...scriptArgs,
-			];
-		}
-		return ["install", ...specs, "--prefix", installRoot, "--legacy-peer-deps", ...scriptArgs];
+		return buildNpmInstallArgs(this.getPackageManagerName(), specs, installRoot, this.allowScripts && !ignoreScripts);
 	}
 
 	private async cloneGitForInspection(source: GitSource): Promise<string> {

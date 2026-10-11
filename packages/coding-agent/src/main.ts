@@ -34,6 +34,7 @@ import { scheduleHttpDispatcher } from "./core/http-dispatcher-install.ts";
 import type { ModelRegistry } from "./core/model-registry.ts";
 import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.ts";
 import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
+import { withAllowScriptsHint } from "./core/package-install-args.ts";
 import type { CreateAgentSessionOptions } from "./core/sdk.ts";
 import { getMissingSessionCwdIssue, MissingSessionCwdError } from "./core/session-cwd.ts";
 import { assertValidSessionId, SessionManager } from "./core/session-manager.ts";
@@ -703,7 +704,7 @@ export async function main(args: string[], options?: MainOptions) {
 				type: isExplicitExtensionDiagnostic(path, resolvedExtensionPaths)
 					? ("error" as const)
 					: ("warning" as const),
-				message: `Failed to load extension "${path}": ${error}`,
+				message: withAllowScriptsHint(`Failed to load extension "${path}": ${error}`),
 			})),
 		];
 

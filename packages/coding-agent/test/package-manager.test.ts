@@ -845,6 +845,7 @@ Content`,
 					"--prefix",
 					join(agentDir, "npm"),
 					"--legacy-peer-deps",
+					"--ignore-scripts",
 				],
 				undefined,
 			);
@@ -866,7 +867,18 @@ Content`,
 
 			expect(runCommandSpy).toHaveBeenCalledWith(
 				"mise",
-				["exec", "bun@1", "--", "bun", "install", "@scope/pkg", "--cwd", join(agentDir, "npm"), "--omit=peer"],
+				[
+					"exec",
+					"bun@1",
+					"--",
+					"bun",
+					"install",
+					"@scope/pkg",
+					"--cwd",
+					join(agentDir, "npm"),
+					"--omit=peer",
+					"--ignore-scripts",
+				],
 				undefined,
 			);
 		});
@@ -886,7 +898,9 @@ Content`,
 
 			await packageManager.install(source);
 
-			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev"], { cwd: targetDir });
+			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev", "--ignore-scripts"], {
+				cwd: targetDir,
+			});
 		});
 
 		it("should reconcile an existing git checkout to a pinned ref during install", async () => {
@@ -914,7 +928,9 @@ Content`,
 				cwd: targetDir,
 			});
 			expect(runCommandSpy).toHaveBeenCalledWith("git", ["clean", "-fdx"], { cwd: targetDir });
-			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev"], { cwd: targetDir });
+			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev", "--ignore-scripts"], {
+				cwd: targetDir,
+			});
 		});
 
 		it("should reconcile an existing git checkout to its update target when installing without a ref", async () => {
@@ -973,7 +989,7 @@ Content`,
 
 			await packageManager.install(source);
 
-			expect(runCommandSpy).toHaveBeenCalledWith("pnpm", ["install"], { cwd: targetDir });
+			expect(runCommandSpy).toHaveBeenCalledWith("pnpm", ["install", "--ignore-scripts"], { cwd: targetDir });
 		});
 
 		it("should update git package dependencies with --omit=dev", async () => {
@@ -1000,7 +1016,9 @@ Content`,
 
 			await packageManager.update(source);
 
-			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev"], { cwd: targetDir });
+			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev", "--ignore-scripts"], {
+				cwd: targetDir,
+			});
 		});
 
 		it("should repair missing git package dependencies when the checkout is already current", async () => {
@@ -1025,7 +1043,9 @@ Content`,
 
 			await packageManager.update(source);
 
-			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev"], { cwd: targetDir });
+			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev", "--ignore-scripts"], {
+				cwd: targetDir,
+			});
 			expect(runCommandSpy).not.toHaveBeenCalledWith("git", ["clean", "-fdx"], { cwd: targetDir });
 		});
 
@@ -1057,7 +1077,9 @@ Content`,
 
 			await expect(packageManager.update(source)).rejects.toThrow("simulated clean failure");
 
-			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev"], { cwd: targetDir });
+			expect(runCommandSpy).toHaveBeenCalledWith("npm", ["install", "--omit=dev", "--ignore-scripts"], {
+				cwd: targetDir,
+			});
 		});
 
 		it("should use plain install through npmCommand argv when updating git package dependencies", async () => {
@@ -1093,9 +1115,13 @@ Content`,
 
 			await packageManager.update(source);
 
-			expect(runCommandSpy).toHaveBeenCalledWith("mise", ["exec", "node@20", "--", "pnpm", "install"], {
-				cwd: targetDir,
-			});
+			expect(runCommandSpy).toHaveBeenCalledWith(
+				"mise",
+				["exec", "node@20", "--", "pnpm", "install", "--ignore-scripts"],
+				{
+					cwd: targetDir,
+				},
+			);
 		});
 
 		it("should use npmCommand argv for npm root lookup and invalidate cached root when npmCommand changes", () => {
@@ -1165,6 +1191,7 @@ Content`,
 						"--config.auto-install-peers=false",
 						"--config.strict-peer-dependencies=false",
 						"--config.strict-dep-builds=false",
+						"--ignore-scripts",
 					]);
 					mkdirSync(join(packagePath, "extensions"), { recursive: true });
 					writeFileSync(join(packagePath, "package.json"), JSON.stringify({ name: "pnpm-pkg", version: "1.0.0" }));
@@ -2255,7 +2282,14 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			);
 			expect(runCommandSpy).toHaveBeenCalledWith(
 				"npm",
-				["install", "example@latest", "--prefix", join(tempDir, ".omk", "npm"), "--legacy-peer-deps"],
+				[
+					"install",
+					"example@latest",
+					"--prefix",
+					join(tempDir, ".omk", "npm"),
+					"--legacy-peer-deps",
+					"--ignore-scripts",
+				],
 				undefined,
 			);
 		});
@@ -2300,6 +2334,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 						"--prefix",
 						join(agentDir, "npm"),
 						"--legacy-peer-deps",
+						"--ignore-scripts",
 					]);
 					mkdirSync(managedPath, { recursive: true });
 					writeFileSync(
@@ -2417,6 +2452,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 					"--prefix",
 					join(agentDir, "npm"),
 					"--legacy-peer-deps",
+					"--ignore-scripts",
 				],
 				undefined,
 			);
@@ -2430,6 +2466,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 					"--prefix",
 					join(tempDir, ".omk", "npm"),
 					"--legacy-peer-deps",
+					"--ignore-scripts",
 				],
 				undefined,
 			);
