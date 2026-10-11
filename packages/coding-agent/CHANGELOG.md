@@ -5,6 +5,7 @@
 ### Added
 
 - Experimental `OMK_SKILL_SEARCH=1` (default off) for sessions with more than 24 model-invocable skills and the `read` tool: the system prompt replaces the skill list with one fixed line, a fixed `skill_search` tool ranks skills by name and description (BM25), and up to three new candidates arrive as a hidden message at each task start. The index is built on first use, never at startup, and cached in `cache/skill-index-v1.json` under the agent directory. Subagent workers keep the tool without automatic candidates. With `OMK_RUN_LOG_DIR`, `skill-select.jsonl` gets hash-only records. If another tool is already named `skill_search`, the session stays as without the flag. Off, or with 24 skills or fewer, requests are unchanged. See [skills](docs/skills.md#skill-search-omk_skill_search).
+- Experimental `OMK_SKILL_SELECT=bm25|metacon` (default unset, off) picks how skill search ranks: `bm25` as above, or `metacon`, which narrows to the BM25 top 64 and picks a set of skills covering the query words with local capability-coverage planning, then fills the remaining slots in BM25 order. No model or network call. Skills with byte-identical SKILL.md content appear once. Any other value, including `wpl`, stays off with one warning. `OMK_SKILL_SEARCH=1` stays as an alias of `bm25`. See [skills](docs/skills.md#ranking-mode-omk_skill_select).
 
 ### Changed
 
