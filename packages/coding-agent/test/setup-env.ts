@@ -23,7 +23,17 @@
  * the scrub on purpose. test.sh points it at a throwaway directory, so the
  * suite resolves the agent dir away from the live ~/.omk/agent; scrubbing the
  * variable here would send every spawned child back to the live store.
+ *
+ * Headroom probe (spec 046): the control panel probes `headroom`/`python3` for a version in the
+ * background. Every test starts with a probe spawn that answers "no version" without running anything,
+ * and a fresh probe cache, so tests that build `InteractiveMode` or render the control panel never start
+ * real processes. Probe tests call `setHeadroomProbeSpawnForTesting(undefined)` for the real spawn or pass
+ * their own fake. This replaces the function in this worker only; omk child processes spawned by e2e
+ * tests still run the real probe.
  */
+import { beforeEach } from "vitest";
+import { setHeadroomProbeSpawnForTesting } from "../src/modes/interactive/components/headroom-version-probe.ts";
+
 const LIVE = process.env.LIVE_E2E === "1";
 const PRESERVED_ENV_KEYS = new Set(["OMK_CODING_AGENT_DIR"]);
 
@@ -56,3 +66,9 @@ for (const key of Object.keys(process.env)) {
 		delete process.env[key];
 	}
 }
+
+const noHeadroomInstalled = async (): Promise<string | null> => null;
+setHeadroomProbeSpawnForTesting(noHeadroomInstalled);
+beforeEach(() => {
+	setHeadroomProbeSpawnForTesting(noHeadroomInstalled);
+});

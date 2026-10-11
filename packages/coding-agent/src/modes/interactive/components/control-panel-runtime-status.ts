@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import { getHeadroomRuntimeStatus } from "../../../core/context-budget-headroom.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
@@ -9,6 +8,9 @@ import { readControlPlaneSignals } from "../control-plane-signals.ts";
 import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
 import type { ControlPanelStatusSnapshot } from "./control-panel-layout.ts";
 import { formatCwdForFooter } from "./footer.ts";
+import { getCachedHeadroomVersion, loadHeadroomVersion } from "./headroom-version-probe.ts";
+
+export { parseHeadroomVersionOutput } from "./headroom-version-probe.ts";
 
 const OMK_HUB_SKILL_NAMES = new Set([
 	"omk-skills",
@@ -28,13 +30,6 @@ const OMK_HUB_SKILL_NAMES = new Set([
 
 const INVALID_MCP_NETWORK_RULES = new Set(["mcp.network.invalid_mode", "mcp.network.empty_allowlist"]);
 const PRIVILEGED_MCP_COMMANDS = new Set(["sudo", "su"]);
-const VERSION_COMMAND_TIMEOUT_MS = 750;
-const HEADROOM_PYTHON_DISTRIBUTIONS = ["headroom", "headroom-ai"] as const;
-
-let cachedHeadroomVersion: string | null | undefined;
-let headroomVersionProbe: Promise<string | null> | undefined;
-let headroomVersionProbeAbort: AbortController | undefined;
-let headroomVersionProbeEnabledOverride: boolean | undefined;
 
 interface McpStabilityInput {
 	readonly commandSummary: string;
@@ -49,48 +44,9 @@ interface McpStabilityInput {
  * (once, without waiting) and shows the same policy-id fallback as "headroom not installed".
  */
 export function formatHeadroomStatusLabel(): string {
-	if (cachedHeadroomVersion === undefined) void loadHeadroomVersion();
-	return cachedHeadroomVersion ? `headroom:${cachedHeadroomVersion}` : getHeadroomRuntimeStatus().policyId;
-}
-
-/** Probe the installed headroom version once per process, off the render path; callers share the result. */
-export function loadHeadroomVersion(): Promise<string | null> {
-	if (headroomVersionProbe) return headroomVersionProbe;
-	// Test runners (VITEST) never spawn the real `headroom`/`python3` unless a test opts in, like the skills catalog cache.
-	if (!(headroomVersionProbeEnabledOverride ?? process.env.VITEST !== "true")) {
-		cachedHeadroomVersion = null;
-		headroomVersionProbe = Promise.resolve(null);
-		return headroomVersionProbe;
-	}
-	const abort = new AbortController();
-	headroomVersionProbeAbort = abort;
-	headroomVersionProbe = probeInstalledHeadroomVersion(abort.signal).then((version) => {
-		cachedHeadroomVersion = version;
-		if (headroomVersionProbeAbort === abort) headroomVersionProbeAbort = undefined;
-		return version;
-	});
-	return headroomVersionProbe;
-}
-
-/** Repaint exactly once if the probe finds a version; a missing or aborted headroom needs no repaint. */
-export function repaintWhenHeadroomVersionResolves(requestRender: () => void): Promise<void> {
-	return loadHeadroomVersion().then((version) => {
-		if (version) requestRender();
-	});
-}
-
-/**
- * Kill a probe that is still running (shutdown). The pending probe settles to `null` and is cached,
- * so a hung `headroom` cannot hold shutdown or outlive the process, and nothing restarts it.
- */
-export function abortHeadroomVersionProbe(): void {
-	headroomVersionProbeAbort?.abort();
-	headroomVersionProbeAbort = undefined;
-}
-
-/** Tests only: `true` lets a test run the probe under VITEST, `undefined` restores the default. */
-export function setHeadroomVersionProbeEnabledForTests(enabled: boolean | undefined): void {
-	headroomVersionProbeEnabledOverride = enabled;
+	const version = getCachedHeadroomVersion();
+	if (version === undefined) void loadHeadroomVersion();
+	return version ? `headroom:${version}` : getHeadroomRuntimeStatus().policyId;
 }
 
 export function countRoutableNonHubSkills(skills: readonly { readonly name: string }[]): number {
@@ -119,60 +75,6 @@ export function classifyMcpStability(entry: McpStabilityInput): McpStability {
 	const command = entry.commandSummary.split(/\s+/, 1)[0] ?? "";
 	if (PRIVILEGED_MCP_COMMANDS.has(command)) return "unstable";
 	return "stable";
-}
-
-async function probeInstalledHeadroomVersion(signal: AbortSignal): Promise<string | null> {
-	const version =
-		(await readVersionFromCommand("headroom", ["--version"], signal)) ??
-		(await readVersionFromCommand("headroom", ["version"], signal));
-	if (version) return version;
-	for (const distribution of HEADROOM_PYTHON_DISTRIBUTIONS) {
-		const pythonVersion = await readPythonDistributionVersion(distribution, signal);
-		if (pythonVersion) return pythonVersion;
-	}
-	return null;
-}
-
-function readPythonDistributionVersion(
-	distribution: (typeof HEADROOM_PYTHON_DISTRIBUTIONS)[number],
-	signal: AbortSignal,
-): Promise<string | null> {
-	return readVersionFromCommand(
-		"python3",
-		["-c", `import importlib.metadata as m; print(m.version('${distribution}'))`],
-		signal,
-	);
-}
-
-function readVersionFromCommand(command: string, args: readonly string[], signal: AbortSignal): Promise<string | null> {
-	// After an abort, start nothing new: the remaining fallbacks resolve to null without spawning.
-	if (signal.aborted) return Promise.resolve(null);
-	return new Promise((resolve) => {
-		try {
-			execFile(
-				command,
-				[...args],
-				{
-					encoding: "utf8",
-					timeout: VERSION_COMMAND_TIMEOUT_MS,
-					shell: false,
-					windowsHide: true,
-					env: { PATH: process.env.PATH ?? "" },
-					signal,
-				},
-				(error, stdout, stderr) => {
-					resolve(error || signal.aborted ? null : parseHeadroomVersionOutput(`${stdout}\n${stderr}`));
-				},
-			);
-		} catch {
-			resolve(null);
-		}
-	});
-}
-
-export function parseHeadroomVersionOutput(output: string): string | null {
-	const match = /\bv?(\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?)\b/.exec(output);
-	return match?.[1] ?? null;
 }
 
 export function createControlPanelStatusSnapshot(

@@ -141,11 +141,7 @@ import { BranchSummaryMessageComponent } from "./components/branch-summary-messa
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { ControlPanelComponent, ControlPanelRightPaneComponent } from "./components/control-panel.ts";
 import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
-import {
-	abortHeadroomVersionProbe,
-	createControlPanelStatusSnapshot,
-	repaintWhenHeadroomVersionResolves,
-} from "./components/control-panel-runtime-status.ts";
+import { createControlPanelStatusSnapshot } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
@@ -156,6 +152,7 @@ import { ExtensionEditorComponent } from "./components/extension-editor.ts";
 import { ExtensionInputComponent } from "./components/extension-input.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
 import { FooterComponent } from "./components/footer.ts";
+import { abortHeadroomVersionProbe, repaintWhenHeadroomVersionResolves } from "./components/headroom-version-probe.ts";
 import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";

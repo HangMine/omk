@@ -32,7 +32,8 @@ spawnSync ← readVersionFromCommand ← getInstalledHeadroomVersion ← formatH
 - `formatHeadroomStatusLabel()` (render path) never spawns synchronously. It reads the cache; before the probe has settled it starts the probe (once, without waiting) and returns the label for "no version", which is the existing fallback `getHeadroomRuntimeStatus().policyId`.
 - Interactive mode starts the probe when it builds the control panel and, through `repaintWhenHeadroomVersionResolves()`, calls `requestRender()` exactly once if the probe finds a version (never when it is `null`), so the `headroom:<version>` label appears as soon as it is known.
 - Every probe gets an `AbortController` signal. `InteractiveMode.stop()` calls `abortHeadroomVersionProbe()` first: a running child is killed, no further fallback probe starts, and the result is cached as `null`. Without it, a hung `headroom` would outlive `process.exit`, because the 750 ms timeout is a timer in the parent.
-- Under the test runner (`process.env.VITEST === "true"`, the same switch the skills catalog cache uses) the probe resolves `null` without spawning unless a test opts in with `setHeadroomVersionProbeEnabledForTests(true)`, so tests that construct `InteractiveMode` or render the control panel never start a real `headroom`/`python3`.
+- The probe lives in `headroom-version-probe.ts`, whose only import is `node:child_process`. It runs each command through an injectable spawn function; the default is the real `execFile` one, and the 750 ms `timeout`, the abort `signal` and the `PATH`-only env are passed in that function's options, so an injected function sees the same contract. `setHeadroomProbeSpawnForTesting(fn | undefined)` swaps it (`undefined` restores the real one), aborts a running probe and clears the cache. Production code has no test branch.
+- The coding-agent vitest setup file (`test/setup-env.ts`) installs a spawn that answers "no version" without running anything, before every test, with a fresh cache. Tests that construct `InteractiveMode` or render the control panel therefore never start a real `headroom`/`python3`. The swap is in-process only: omk child processes spawned by e2e tests run the real probe. Probe tests restore the real spawn or inject their own.
 
 User-visible result: unchanged where headroom is not installed. Where it is installed, the label shows the policy id until the probe returns (typically well under a second; on large sessions it is already back when the first frame finishes), then `headroom:<version>`, as before.
 
@@ -47,9 +48,9 @@ User-visible result: unchanged where headroom is not installed. Where it is inst
 5. A version found → `requestRender` called exactly once; `null` → not called.
 6. A hung command (fake timers, Node's timeout error shape) ends at 750 ms per probe and falls through; after four probes the result is `null` and the label stayed the policy id throughout.
 7. Abort: the running probe's signal is aborted, the probe settles to `null`, no further probe starts, and no timer is left.
-8. Under VITEST without opt-in, no command is spawned.
+8. An injected spawn receives `timeout: 750`, the abort `signal` (aborted by `abortHeadroomVersionProbe()`) and a `PATH`-only env; the real `execFile` is not called.
 
-`packages/coding-agent/test/control-panel-headroom-probe-stop.test.ts` (real process, skipped on Windows): a fake `headroom` on `PATH` that records its pid and sleeps; `InteractiveMode.stop()` kills it, the probe settles to `null` in well under 750 ms, and the pid is gone.
+`packages/coding-agent/test/control-panel-headroom-probe-stop.test.ts` (real process, skipped on Windows): a fake `headroom` on `PATH` that records its pid and sleeps; `InteractiveMode.stop()` kills it, the probe settles to `null` in well under 750 ms, and the pid is gone (this case restores the real spawn). A second case keeps the setup's default spawn with a `headroom` on `PATH` that writes a marker file: the probe resolves `null` and the marker is never written.
 
 Unchanged and passing: `control-panel-runtime-status.test.ts`, `control-plane-rail.test.ts` (its hermetic `child_process` mock also stubs `execFile`).
 
@@ -64,10 +65,12 @@ Timing (informal background only — not an A/B result and not a merge criterion
 ## Expected Files
 
 - `specs/046-headroom-probe-off-render/spec.md`: this spec (first commit)
-- `packages/coding-agent/src/modes/interactive/components/control-panel-runtime-status.ts`: async, cached probe; render path reads the cache
+- `packages/coding-agent/src/modes/interactive/components/headroom-version-probe.ts`: async, cached, abortable probe with an injectable spawn (review m3/m4)
+- `packages/coding-agent/src/modes/interactive/components/control-panel-runtime-status.ts`: render-path label reads the probe cache
 - `packages/coding-agent/src/modes/interactive/interactive-mode.ts`: start the probe with the control panel, re-render when a version arrives, abort it in `stop()`
 - `packages/coding-agent/test/control-panel-headroom-probe.test.ts`: new
 - `packages/coding-agent/test/control-panel-headroom-probe-stop.test.ts`: new (review m4)
 - `packages/coding-agent/test/control-plane-rail.test.ts`: hermetic mock also stubs `execFile`
+- `packages/coding-agent/test/setup-env.ts`: default "no version" probe spawn and a fresh probe cache for every test
 - `packages/coding-agent/CHANGELOG.md`: one Changed entry
 - `specs/046-headroom-probe-off-render/bench/`: timing script (`run.sh`, `first-label.mts`) and raw output (`raw.tsv`)

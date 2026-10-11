@@ -2,11 +2,11 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { formatHeadroomStatusLabel } from "../src/modes/interactive/components/control-panel-runtime-status.ts";
 import {
-	formatHeadroomStatusLabel,
 	loadHeadroomVersion,
-	setHeadroomVersionProbeEnabledForTests,
-} from "../src/modes/interactive/components/control-panel-runtime-status.ts";
+	setHeadroomProbeSpawnForTesting,
+} from "../src/modes/interactive/components/headroom-version-probe.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 
 /** Only the fields `stop()` touches, for an InteractiveMode that never ran `init()`. */
@@ -54,7 +54,6 @@ describe.skipIf(process.platform === "win32")("InteractiveMode.stop() and a hung
 
 	afterEach(() => {
 		process.env.PATH = originalPath;
-		setHeadroomVersionProbeEnabledForTests(undefined);
 		if (dir) rmSync(dir, { recursive: true, force: true });
 		dir = undefined;
 	});
@@ -66,7 +65,8 @@ describe.skipIf(process.platform === "win32")("InteractiveMode.stop() and a hung
 		writeFileSync(join(dir, "headroom"), `#!/bin/sh\necho $$ > '${pidFile}'\nexec /bin/sleep 30\n`);
 		chmodSync(join(dir, "headroom"), 0o755);
 		process.env.PATH = dir;
-		setHeadroomVersionProbeEnabledForTests(true);
+		// The test setup installs a "no version" spawn; this case needs the real one.
+		setHeadroomProbeSpawnForTesting(undefined);
 
 		const probe = loadHeadroomVersion();
 		const pid = Number(await waitForFile(pidFile, 2_000));
@@ -79,5 +79,17 @@ describe.skipIf(process.platform === "win32")("InteractiveMode.stop() and a hung
 		expect(Date.now() - stoppedAt).toBeLessThan(500);
 		expect(isAlive(pid)).toBe(false);
 		expect(formatHeadroomStatusLabel()).not.toMatch(/^headroom:/);
+	});
+
+	it("the test setup's default spawn starts no process, even with a `headroom` on PATH", async () => {
+		dir = mkdtempSync(join(tmpdir(), "omk-headroom-setup-"));
+		const markerFile = join(dir, "ran");
+		writeFileSync(join(dir, "headroom"), `#!/bin/sh\necho ran > '${markerFile}'\necho 3.0.1\n`);
+		chmodSync(join(dir, "headroom"), 0o755);
+		process.env.PATH = dir;
+
+		await expect(loadHeadroomVersion()).resolves.toBeNull();
+		expect(formatHeadroomStatusLabel()).not.toMatch(/^headroom:/);
+		expect(existsSync(markerFile)).toBe(false);
 	});
 });

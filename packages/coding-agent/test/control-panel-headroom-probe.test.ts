@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getHeadroomRuntimeStatus } from "../src/core/context-budget-headroom.ts";
+import type { HeadroomProbeSpawnOptions } from "../src/modes/interactive/components/headroom-version-probe.ts";
 
 type ExecFileCallback = (error: Error | null, stdout: string, stderr: string) => void;
 type ExecFileOptions = { readonly timeout: number; readonly signal: AbortSignal };
@@ -51,14 +52,16 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 /**
- * The module caches the probe for the process lifetime, so every case loads a fresh copy. Under VITEST the
- * probe is off by default; these cases opt in because `node:child_process` is mocked here.
+ * The probe caches its result for the process lifetime, so every case loads fresh copies of the label and
+ * probe modules. The test setup installs a "no version" spawn; these cases restore the real `execFile`
+ * spawn explicitly, which runs against the `node:child_process` mock above.
  */
 async function loadModule() {
 	vi.resetModules();
-	const module = await import("../src/modes/interactive/components/control-panel-runtime-status.ts");
-	module.setHeadroomVersionProbeEnabledForTests(true);
-	return module;
+	const probe = await import("../src/modes/interactive/components/headroom-version-probe.ts");
+	const status = await import("../src/modes/interactive/components/control-panel-runtime-status.ts");
+	probe.setHeadroomProbeSpawnForTesting(undefined);
+	return { ...probe, formatHeadroomStatusLabel: status.formatHeadroomStatusLabel };
 }
 
 const policyLabel = getHeadroomRuntimeStatus().policyId;
@@ -209,14 +212,23 @@ describe("headroom version probe off the render path (spec 046)", () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
-	it("never spawns under the test runner unless a test opts in", async () => {
-		answerProbes(() => "3.0.1\n");
-		const { formatHeadroomStatusLabel, loadHeadroomVersion, setHeadroomVersionProbeEnabledForTests } =
-			await loadModule();
-		setHeadroomVersionProbeEnabledForTests(undefined);
+	it("passes the 750 ms timeout, the abort signal and a PATH-only env to an injected spawn", async () => {
+		const { abortHeadroomVersionProbe, loadHeadroomVersion, setHeadroomProbeSpawnForTesting } = await loadModule();
+		const calls: { command: string; args: readonly string[]; options: HeadroomProbeSpawnOptions }[] = [];
+		setHeadroomProbeSpawnForTesting((command, args, options) => {
+			calls.push({ command, args, options });
+			return new Promise((resolve) => options.signal.addEventListener("abort", () => resolve(null)));
+		});
 
-		await expect(loadHeadroomVersion()).resolves.toBeNull();
-		expect(formatHeadroomStatusLabel()).toBe(policyLabel);
+		const probe = loadHeadroomVersion();
+		abortHeadroomVersionProbe();
+
+		await expect(probe).resolves.toBeNull();
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toMatchObject({ command: "headroom", args: ["--version"] });
+		expect(calls[0]?.options.timeout).toBe(750);
+		expect(calls[0]?.options.signal.aborted).toBe(true);
+		expect(calls[0]?.options.env).toEqual({ PATH: process.env.PATH ?? "" });
 		expect(childProcess.execFile).not.toHaveBeenCalled();
 	});
 });
