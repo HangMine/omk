@@ -132,7 +132,7 @@ describe("package commands", () => {
 
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			expect(stderr).toContain('Unknown option --unknown for "install".');
-			expect(stderr).toContain('Use "omk --help" or "omk install <source> [-l]".');
+			expect(stderr).toContain('Use "omk --help" or "omk install <source> [-l] [--allow-scripts]".');
 			expect(process.exitCode).toBe(1);
 		} finally {
 			errorSpy.mockRestore();

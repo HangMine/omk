@@ -119,6 +119,17 @@ function userTexts(context: Context): string[] {
 	});
 }
 
+function secondPromptCall(calls: readonly CapturedCall[]): CapturedCall {
+	const second = calls.find((call, i) => i > 0 && call.userPromptStart);
+	if (!second) throw new Error("no second user prompt captured");
+	return second;
+}
+
+/** Spec 050 R6 `<prompt_skills>` messages sent with a call. */
+function promptSkillMessages(call: CapturedCall): string[] {
+	return call.userTexts.filter((text) => text.startsWith("<prompt_skills>"));
+}
+
 /** Mismatches of the three prefix assertions, one line each; empty when the prefix is stable. */
 function prefixBreaks(calls: readonly CapturedCall[]): string[] {
 	const breaks: string[] = [];
@@ -145,6 +156,8 @@ interface SessionOptions {
 	readonly settings?: HarnessOptions["settings"];
 	/** Extra extensions, loaded after the built-in harness ones (for the detector self-test). */
 	readonly extensions?: ExtensionFactory[];
+	/** Text of the second user prompt (default `TASK_B`). */
+	readonly secondPrompt?: string;
 }
 
 async function runSession(
@@ -248,7 +261,7 @@ async function runSession(
 		at(0.84, () => fauxAssistantMessage("check turn: b.txt ok")),
 	]);
 	promptStarted = true;
-	await harness.session.prompt(TASK_B);
+	await harness.session.prompt(options.secondPrompt ?? TASK_B);
 	return calls;
 }
 
@@ -292,17 +305,17 @@ describe("prompt cache prefix stability (spec 051)", () => {
 		expect(prefixBreaks(calls)).toEqual([]);
 	});
 
-	// Expected failure, owned by spec 050 (OMK): with `contextBudget.enabled` the skills section of the
-	// system prompt is re-ranked against each user prompt (`_getContextBudgetOptions(expandedText)` in
-	// agent-session.ts → `renderSystemPromptBudgetedResources` in system-prompt.ts), so task B's system
-	// prompt lists the skills in a different order. Spec 050 moves per-task skills into an appended message;
-	// the day that lands this test turns red — then replace `it.fails` with `it`.
-	it.fails("keeps the prefix with contextBudget on (stable once spec 050 lands)", async () => {
+	// Spec 050 R6 (AC 9): the contextBudget skill ranking of the first user prompt is frozen into the system
+	// prompt; task B's ranking goes into a `<prompt_skills>` message after its user message.
+	it("keeps the prefix with contextBudget on (spec 050 R6)", async () => {
 		const calls = await runSession(FLAGS_ON, harnesses, {
 			skills: bundledSkills(),
 			settings: { contextBudget: { enabled: true } } as HarnessOptions["settings"],
 		});
 		expect(prefixBreaks(calls)).toEqual([]);
+		const second = secondPromptCall(calls);
+		expect(promptSkillMessages(second)).toHaveLength(1);
+		expect(promptSkillMessages(calls[0])).toEqual([]);
 	});
 
 	it("detects a per-turn system prompt and an edited earlier message (self-test)", async () => {
@@ -322,19 +335,34 @@ describe("prompt cache prefix stability (spec 051)", () => {
 		]);
 	});
 
+	// Spec 050 R6 (AC 10): the harness pick of the first user prompt stays in the system prompt for the whole
+	// session; a second prompt that picks other skills gets them in a `<prompt_skills>` message instead.
 	it.each([
-		["flags on", FLAGS_ON],
-		["flags off", FLAGS_OFF],
-	])("native xai harness skills: stable within one user prompt, %s", async (_label, env) => {
-		const calls = await runSession(env, harnesses, { provider: "xai", skills: harnessSkills() });
-		const firstTask = calls.filter((call) => call.index < calls.findIndex((c, i) => i > 0 && c.userPromptStart));
-		expect(prefixBreaks(firstTask)).toEqual([]);
-		// Known break, reported in spec 051 (not fixed here): the grok-harness active-skill set is re-selected
-		// for every user prompt and rendered into the system prompt, so a second prompt whose selection
-		// differs changes the system prompt bytes. When that is fixed, this expectation becomes `[]`.
-		const second = calls.find((call, i) => i > 0 && call.userPromptStart);
-		expect(second).toBeDefined();
-		expect(prefixBreaks(calls)).toContain(`call ${second?.index}: system prompt hash changed`);
-		expect(prefixBreaks(calls).every((line) => line.endsWith("system prompt hash changed"))).toBe(true);
+		["xai, flags on", "xai", FLAGS_ON],
+		["xai, flags off", "xai", FLAGS_OFF],
+		["devin, flags on", "devin", FLAGS_ON],
+	])("native harness skills: system stable across user prompts, %s", async (_label, provider, env) => {
+		// Task A picks `debugging`, this second prompt picks `programming`.
+		const secondPrompt = "Refactor the parser code and write it to b.txt.";
+		const calls = await runSession(env, harnesses, { provider, skills: harnessSkills(), secondPrompt });
+		expect(prefixBreaks(calls)).toEqual([]);
+		expect(calls[0].system).toBe(calls.at(-1)?.system);
+		const message = promptSkillMessages(secondPromptCall(calls));
+		expect(message).toHaveLength(1);
+		expect(message[0]).toContain(`<active_skills source="${provider === "xai" ? "grok-harness" : "devin-harness"}">`);
+		expect(message[0]).toContain("<name>programming</name>");
+		expect(message[0]).not.toContain("<name>debugging</name>");
+		expect(promptSkillMessages(calls[0])).toEqual([]);
+	});
+
+	it("moves an explicit `!skill` of the second user prompt into the message (spec 050 R6, AC 10)", async () => {
+		const calls = await runSession(FLAGS_OFF, harnesses, {
+			skills: harnessSkills(),
+			secondPrompt: `!skill:debugging ${TASK_B}`,
+		});
+		expect(prefixBreaks(calls)).toEqual([]);
+		const message = promptSkillMessages(secondPromptCall(calls));
+		expect(message).toHaveLength(1);
+		expect(message[0]).toContain("<name>debugging</name>");
 	});
 });

@@ -96,12 +96,7 @@ import {
 import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-cache-provider.ts";
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
-import {
-	devinHarnessAutoApplyEnabled,
-	devinPlaybookAppendForProvider,
-	isDevinProvider,
-	selectDevinHarnessSkills,
-} from "./devin-harness.ts";
+import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
 import type { ToolHtmlRenderer } from "./export-html/index.ts";
 import {
 	type ContextUsage,
@@ -129,12 +124,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
-import {
-	assertTextChatModelForCompletion,
-	grokHarnessAutoApplyEnabled,
-	isGrokOAuthProvider,
-	selectGrokHarnessSkills,
-} from "./grok-harness.ts";
+import { assertTextChatModelForCompletion } from "./grok-harness.ts";
 import { grokPlaybookAppendForProvider } from "./grok-playbook.ts";
 import { loadHookInventory } from "./hook-inventory.ts";
 import { captureHostResourceSnapshot, type HostResourceSnapshot } from "./host-resource-snapshot.ts";
@@ -212,6 +202,7 @@ import { findExactModelReferenceMatch } from "./model-resolver.ts";
 import { classifyPromptCacheTransition } from "./prompt-cache.ts";
 import type { PromptOptions } from "./prompt-options.ts";
 import * as promptSettlement from "./prompt-settlement.ts";
+import { PromptSkillFreeze } from "./prompt-skill-message.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import {
 	isQuotaExhaustionMessage,
@@ -643,6 +634,7 @@ export class AgentSession {
 	private _followUpMessages: string[] = [];
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
+	private readonly _promptSkillFreeze = new PromptSkillFreeze();
 	private readonly _deferredTurnInput = new DeferredTurnInput();
 
 	// Compaction state
@@ -2609,26 +2601,20 @@ export class AgentSession {
 			}
 			this._pendingNextTurnMessages = [];
 
-			if (isGrokOAuthProvider(this.model?.provider) && grokHarnessAutoApplyEnabled(process.env)) {
-				const skillQuery = isBangSkillInvocation ? currentText : expandedText;
-				const grokSkills = selectGrokHarnessSkills(skillQuery, this._resourceLoader.getSkills().skills, {
-					contextPressure: this._computePressureBucket(messages) > 0,
-				});
-				promptSkills = addActiveSkills(promptSkills, grokSkills, "grok-harness");
-			} else if (isDevinProvider(this.model?.provider) && devinHarnessAutoApplyEnabled(process.env)) {
-				const skillQuery = isBangSkillInvocation ? currentText : expandedText;
-				const devinSkills = selectDevinHarnessSkills(skillQuery, this._resourceLoader.getSkills().skills, {
-					contextPressure: this._computePressureBucket(messages) > 0,
-				});
-				promptSkills = addActiveSkills(promptSkills, devinSkills, "devin-harness");
-			}
-
-			const turnSystemPromptOptions = {
-				...this._baseSystemPromptOptions,
-				contextBudget: this._getContextBudgetOptions(expandedText),
-				activeSkillNames: promptSkills.names,
-				activeSkillSource: promptSkills.source,
-			};
+			// Spec 050 R6: the first prompt's skill choice goes into a session-frozen system prompt, later ones into a message.
+			const turnSkills = this._promptSkillFreeze.turn({
+				base: this._baseSystemPromptOptions,
+				provider: this.model?.provider,
+				selection: promptSkills,
+				defaults: defaultActiveSkills,
+				skills: this._resourceLoader.getSkills().skills,
+				harnessQuery: isBangSkillInvocation ? currentText : expandedText,
+				budgetQuery: expandedText,
+				contextPressure: () => this._computePressureBucket(messages) > 0,
+				contextBudget: (query) => this._getContextBudgetOptions(query),
+			});
+			messages.push(...turnSkills.messages);
+			const turnSystemPromptOptions = turnSkills.options;
 			const admissionTokenCounter =
 				turnSystemPromptOptions.contextBudget?.tokenCounter ??
 				createTokenCounterForMode(turnSystemPromptOptions.contextBudget?.tokenizerMode ?? "fallback");

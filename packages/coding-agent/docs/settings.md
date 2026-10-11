@@ -437,6 +437,8 @@ See [packages.md](packages.md) for package management details.
 
 Project settings (`.omk/settings.json`) override global settings. Nested objects are merged. Settings marked global-only, including `contextBudget` and `defaultActiveSkills`, are read from global settings only.
 
+Until you trust the project, its `packages`, `extensions`, `npmCommand`, `shellPath` and `shellCommandPrefix` are ignored and the global values apply. See [Project trust](packages.md#project-trust).
+
 ```json
 // ~/.omk/agent/settings.json (global)
 {
