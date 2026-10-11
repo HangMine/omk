@@ -39,6 +39,7 @@ import {
 	readPackageManifest as readPackageManifestFile,
 } from "./package-manifest.ts";
 import { applyPatterns, isEnabledByOverrides } from "./package-resource-patterns.ts";
+import { collectProjectAutoExtensionEntries, trustedProjectSettings } from "./project-code-settings.ts";
 import type { PackageSource, SettingsManager } from "./settings-manager.ts";
 
 const NETWORK_TIMEOUT_MS = 10000;
@@ -761,7 +762,7 @@ export class DefaultPackageManager implements PackageManager {
 	async resolve(onMissing?: (source: string) => Promise<MissingSourceAction>): Promise<ResolvedPaths> {
 		const accumulator = this.createAccumulator();
 		const globalSettings = this.settingsManager.getGlobalSettings();
-		const projectSettings = this.settingsManager.getProjectSettings();
+		const projectSettings = trustedProjectSettings(this.settingsManager);
 
 		// Collect all packages with scope (project first so cwd resources win collisions)
 		const allPackages: Array<{ pkg: PackageSource; scope: SourceScope }> = [];
@@ -1071,7 +1072,7 @@ export class DefaultPackageManager implements PackageManager {
 		}
 
 		const globalSettings = this.settingsManager.getGlobalSettings();
-		const projectSettings = this.settingsManager.getProjectSettings();
+		const projectSettings = trustedProjectSettings(this.settingsManager);
 		const allPackages: Array<{ pkg: PackageSource; scope: SourceScope }> = [];
 		for (const pkg of projectSettings.packages ?? []) {
 			allPackages.push({ pkg, scope: "project" });
@@ -2356,7 +2357,7 @@ export class DefaultPackageManager implements PackageManager {
 		// Project extensions from .omk/
 		addResources(
 			"extensions",
-			collectAutoExtensionEntries(projectDirs.extensions),
+			collectProjectAutoExtensionEntries(this.settingsManager, projectDirs.extensions, collectAutoExtensionEntries),
 			projectMetadata,
 			projectOverrides.extensions,
 			projectBaseDir,

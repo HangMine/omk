@@ -16,6 +16,7 @@ import { buildInitialMessage } from "./cli/initial-message.ts";
 import { attachSessionTransports } from "./cli/mcp-attach.ts";
 import { loadModelContractOrExit } from "./cli/model-contract.ts";
 import { isPackageCliCommand, isPackageDoctorCommand } from "./cli/package-commands.ts";
+import { applyProjectTrustGate, interactiveProjectTrustPrompt } from "./cli/project-trust-gate.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
 import { isQuotaCommand, mayBeRunCommand } from "./cli/subcommand-words.ts";
 import { runInitCli } from "./commands/init-cli.ts";
@@ -665,16 +666,27 @@ export async function main(args: string[], options?: MainOptions) {
 	const resolvedPromptTemplatePaths = resolveCliPaths(cwd, parsed.promptTemplates);
 	const resolvedThemePaths = resolveCliPaths(cwd, parsed.themes);
 	const authStorage = AuthStorage.create();
+	// The trust prompt can only be shown before the TUI starts; later session switches withhold instead.
+	let canPromptForProjectTrust = appMode === "interactive";
 	const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 		cwd,
 		agentDir,
 		sessionManager,
 		sessionStartEvent,
 	}) => {
+		// Spec 053: a cloned repo's packages/extensions/shell settings load only once the project is trusted.
+		const settingsManager = SettingsManager.create(cwd, agentDir);
+		const trustDiagnostics = await applyProjectTrustGate({
+			cwd,
+			settingsManager,
+			mode: appMode === "interactive" ? "interactive" : "headless",
+			prompt: canPromptForProjectTrust ? interactiveProjectTrustPrompt(settingsManager) : undefined,
+		});
 		const services = await createAgentSessionServices({
 			cwd,
 			agentDir,
 			authStorage,
+			settingsManager,
 			extensionFlagValues: parsed.unknownFlags,
 			resourceLoaderOptions: {
 				additionalExtensionPaths: resolvedExtensionPaths,
@@ -691,13 +703,14 @@ export async function main(args: string[], options?: MainOptions) {
 				extensionFactories: options?.extensionFactories,
 			},
 		});
-		const { settingsManager, modelRegistry, resourceLoader } = services;
+		const { modelRegistry, resourceLoader } = services;
 		// A discovered package extension that fails to load must not kill the process.
 		// Any "error" diagnostic exits 1 below, and headless runs (subagents, review and
 		// QA lanes) go through this same path — so one stale third-party package takes
 		// down every spawned agent while the interactive session looks healthy. Only an
 		// extension the user asked for by hand (-e/--extension) stays fatal.
 		const diagnostics: AgentSessionRuntimeDiagnostic[] = [
+			...trustDiagnostics,
 			...services.diagnostics,
 			...collectSettingsDiagnostics(settingsManager, "runtime creation"),
 			...resourceLoader.getExtensions().errors.map(({ path, error }) => ({
@@ -772,6 +785,7 @@ export async function main(args: string[], options?: MainOptions) {
 		agentDir,
 		sessionManager,
 	});
+	canPromptForProjectTrust = false;
 	time("createAgentSessionRuntime");
 	const { services, session, modelFallbackMessage } = runtime;
 	const { settingsManager, modelRegistry, resourceLoader } = services;

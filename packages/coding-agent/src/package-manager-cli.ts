@@ -3,6 +3,7 @@ import { Markdown, type MarkdownTheme } from "omk-tui";
 import { selectConfig } from "./cli/config-selector.ts";
 import { getPackageCommandUsage, printPackageCommandHelp } from "./cli/package-command-help.ts";
 import { CONFIG_COMMAND, type PackageCommand, resolvePackageCommand } from "./cli/package-commands.ts";
+import { applyProjectTrustGate } from "./cli/project-trust-gate.ts";
 import {
 	APP_NAME,
 	detectInstallMethod,
@@ -326,6 +327,7 @@ export async function handleConfigCommand(args: string[]): Promise<boolean> {
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	reportSettingsErrors(settingsManager, "config command");
+	await applyProjectTrustGate({ cwd, settingsManager, mode: "interactive" });
 	const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
 	const resolvedPaths = await packageManager.resolve();
 
@@ -390,6 +392,8 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	reportSettingsErrors(settingsManager, "package command");
+	// Spec 053: an untrusted project's npmCommand must not run here; stored trust or OMK_TRUST_PROJECT=1 opens it.
+	await applyProjectTrustGate({ cwd, settingsManager, mode: "interactive" });
 	const selfUpdateNpmCommand = settingsManager.getGlobalSettings().npmCommand;
 
 	const packageManager = new DefaultPackageManager({
