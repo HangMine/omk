@@ -426,16 +426,15 @@ async function runSingleAgentAttempt(
 		}
 
 		args.push(`Task: ${task}`);
+		const workerCwd = cwd ?? defaultCwd;
+		const projectTrust = await workerProjectTrustEnv({ parentCwd: defaultCwd, workerCwd });
 		const stream = createSubagentStream(currentResult, onUpdate ? emitUpdate : undefined, signal);
 		const invocation = getOmkInvocation(args);
 		const processResult = await runManagedProcess({
 			command: invocation.command,
 			args: invocation.args,
-			cwd: cwd ?? defaultCwd,
-			env: subagentWorkerEnv(
-				process.env,
-				workerProjectTrustEnv({ parentCwd: defaultCwd, workerCwd: cwd ?? defaultCwd }),
-			),
+			cwd: workerCwd,
+			env: subagentWorkerEnv(process.env, projectTrust),
 			cutoffMs,
 			signal,
 			onStdout: stream.stdout,
