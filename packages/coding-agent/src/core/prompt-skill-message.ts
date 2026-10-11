@@ -7,17 +7,23 @@
  * prompt on, the system prompt is rebuilt from the frozen choice and the prompt's own choice is sent as
  * one custom message after the user message, so the cacheable system prefix stays stable.
  */
+
 import { createHash } from "node:crypto";
+import type { Context } from "omk-ai";
+import { getAgentDir } from "../config.ts";
 import { type ActiveSkillState, addActiveSkills } from "./active-skill-state.ts";
 import { scoreSkillRelevance } from "./context-budget-relevance.ts";
 import { escapeXml } from "./context-budget-system-prompt-items.ts";
 import { devinHarnessAutoApplyEnabled, isDevinProvider, selectDevinHarnessSkills } from "./devin-harness.ts";
 import { grokHarnessAutoApplyEnabled, isGrokOAuthProvider, selectGrokHarnessSkills } from "./grok-harness.ts";
 import type { CustomMessage } from "./messages.ts";
-import { appendRunLog } from "./run-log.ts";
+import { appendRunLog, RUN_LOG_DIR_ENV } from "./run-log.ts";
+import type { SkillSearchSession } from "./skill-search.ts";
+import { type SkillSearchActivation, skillSearchActivation, skillSearchSuggestOn } from "./skill-search-mode.ts";
 import type { Skill } from "./skills.ts";
 import { compactSkillDescription } from "./skills-prompt.ts";
 import type { BuildSystemPromptOptions } from "./system-prompt.ts";
+import { createSkillSearchToolDefinition } from "./tools/skill-search-tool.ts";
 
 export const PROMPT_SKILLS_CUSTOM_TYPE = "prompt-skills";
 /** Most relevant skills listed in the message when contextBudget is on (the system list keeps the first ranking). */
@@ -58,22 +64,90 @@ interface FrozenChoice {
 
 type HarnessSource = "grok-harness" | "devin-harness";
 
+export interface SkillSearchSetup {
+	/** The loaded skills; read again on each search so `/reload` is picked up (the mode itself stays). */
+	readonly skills: () => readonly Skill[];
+	readonly hasReadTool: boolean;
+	readonly agentDir?: string;
+	readonly env?: NodeJS.ProcessEnv;
+}
+
 /**
  * One per session: the first `turn()` freezes the skill choice that later system prompts are built from.
  * When the session rebuilds its base system prompt (tool, model or settings change, `/reload`) or the
  * operator's default active skills change, the system prompt changes anyway, so the next prompt's choice is
- * frozen again instead of sent as a message.
+ * frozen again instead of sent as a message. A skill-search session (spec 050 AC 2) keeps its choice across a
+ * base rebuild, so a `/reload` with the same resources rebuilds the same system prompt.
  */
 export class PromptSkillFreeze {
 	private frozen: FrozenChoice | undefined;
+	private activation: SkillSearchActivation = { active: false, inactiveReason: "flag_off" };
+	private setup: SkillSearchSetup | undefined;
+	private searchSession: Promise<SkillSearchSession> | undefined;
+	private sessionLogged = false;
 
-	turn(input: PromptSkillTurnInput): PromptSkillTurn {
+	/**
+	 * Spec 050 R1/R2, at session start: decide the skill-search mode once and add the fixed `skill_search`
+	 * tool when it is on. Off or inactive returns the tools unchanged and loads nothing.
+	 */
+	withSkillSearchTool<T>(tools: readonly T[], setup: SkillSearchSetup): T[] {
+		this.setup = setup;
+		this.activation = skillSearchActivation(setup.env ?? process.env, setup.skills(), setup.hasReadTool);
+		if (!this.activation.active) return [...tools];
+		const tool = createSkillSearchToolDefinition(async (query, limit) => (await this.search()).search(query, limit));
+		return [...tools, tool as T];
+	}
+
+	/** R8 `session` record, once, after the first system prompt is set. Hashes only; nothing without a log dir. */
+	async logSession(context: Pick<Context, "systemPrompt" | "tools">): Promise<void> {
+		const env = this.setup?.env ?? process.env;
+		if (this.sessionLogged || !env[RUN_LOG_DIR_ENV]?.trim()) return;
+		this.sessionLogged = true;
+		const { systemHash, toolsHash } = await import("omk-ai/prompt-hash");
+		const record = {
+			type: "session",
+			active: this.activation.active,
+			inactiveReason: this.activation.inactiveReason,
+			systemHash: systemHash(context),
+			toolsHash: toolsHash(context),
+		};
+		appendRunLog("skill-select", record, { env });
+	}
+
+	/** R3 task start: the R6 plan plus, in an active session, one candidate message (not in workers, R7). */
+	async turn(input: PromptSkillTurnInput): Promise<PromptSkillTurn> {
+		const plan = this.planTurn(input);
+		if (!this.activation.active || !skillSearchSuggestOn(input.env ?? process.env)) return plan;
+		const candidates = (await this.search()).suggest(input.budgetQuery);
+		return candidates ? { ...plan, messages: [...plan.messages, candidates] } : plan;
+	}
+
+	/** First search or candidate computation imports the index module (never on the startup path, R5). */
+	private search(): Promise<SkillSearchSession> {
+		const setup = this.setup;
+		if (!setup) return Promise.reject(new Error("skill search is not set up"));
+		this.searchSession ??= import("./skill-search.ts").then(
+			({ SkillSearchSession }) =>
+				new SkillSearchSession({
+					skills: setup.skills,
+					agentDir: setup.agentDir ?? getAgentDir(),
+					env: setup.env ?? process.env,
+				}),
+		);
+		return this.searchSession;
+	}
+
+	private planTurn(input: PromptSkillTurnInput): PromptSkillTurn {
 		const env = input.env ?? process.env;
 		const harness = selectProviderHarnessSkills(input, env);
 		const current = harness ? addActiveSkills(input.selection, harness.names, harness.source) : input.selection;
+		const keep =
+			this.frozen !== undefined &&
+			(this.frozen.base === input.base || this.activation.active) &&
+			sameNames(this.frozen.defaults, input.defaults);
 		const frozen: FrozenChoice =
-			this.frozen?.base === input.base && sameNames(this.frozen.defaults, input.defaults)
-				? this.frozen
+			keep && this.frozen
+				? { ...this.frozen, base: input.base }
 				: {
 						base: input.base,
 						defaults: input.defaults,
@@ -81,7 +155,7 @@ export class PromptSkillFreeze {
 						source: current.source,
 						budgetQuery: input.budgetQuery,
 					};
-		const first = frozen !== this.frozen;
+		const first = !keep;
 		this.frozen = frozen;
 		const options: BuildSystemPromptOptions = {
 			...input.base,
@@ -91,9 +165,11 @@ export class PromptSkillFreeze {
 		};
 		if (first) return { options, messages: [] };
 		const activeChanged = !sameChoice(frozen, current);
-		const relevant = budgetSkillsVisible(input.base)
-			? relevantSkills(input.skills, input.budgetQuery, current.names)
-			: [];
+		// In skill-search mode the budget renders no skill list, so there is nothing to supersede (R6).
+		const relevant =
+			budgetSkillsVisible(input.base) && !this.activation.active
+				? relevantSkills(input.skills, input.budgetQuery, current.names)
+				: [];
 		if (!activeChanged && relevant.length === 0) return { options, messages: [] };
 		const active = activeChanged ? resolveSkills(input.skills, current.names) : undefined;
 		if (active) logMove(harness?.source ?? "explicit", active, env);

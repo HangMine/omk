@@ -58,9 +58,9 @@ describe("PromptSkillFreeze (spec 050 R6)", () => {
 		while (dirs.length > 0) rmSync(dirs.pop() as string, { recursive: true, force: true });
 	});
 
-	it("puts the first prompt's choice into the system options exactly as before and sends no message", () => {
+	it("puts the first prompt's choice into the system options exactly as before and sends no message", async () => {
 		const queries: string[] = [];
-		const turn = new PromptSkillFreeze().turn(
+		const turn = await new PromptSkillFreeze().turn(
 			input({
 				provider: "xai",
 				selection: createActiveSkillState(["programming"], [], undefined),
@@ -78,11 +78,11 @@ describe("PromptSkillFreeze (spec 050 R6)", () => {
 		expect(queries).toEqual(["Fix the failing parser bug in parse.py"]);
 	});
 
-	it("freezes the system options and moves a different later choice into one message", () => {
+	it("freezes the system options and moves a different later choice into one message", async () => {
 		const freeze = new PromptSkillFreeze();
-		const first = freeze.turn(input({ provider: "xai" }));
+		const first = await freeze.turn(input({ provider: "xai" }));
 		const queries: string[] = [];
-		const second = freeze.turn(
+		const second = await freeze.turn(
 			input({
 				provider: "xai",
 				query: "Write the summary file in python code",
@@ -108,85 +108,88 @@ describe("PromptSkillFreeze (spec 050 R6)", () => {
 		);
 	});
 
-	it("freezes again, without a message, after the session rebuilt its base options", () => {
+	it("freezes again, without a message, after the session rebuilt its base options", async () => {
 		const freeze = new PromptSkillFreeze();
-		freeze.turn(input({ provider: "xai" }));
+		await freeze.turn(input({ provider: "xai" }));
 		const rebuilt = { ...BASE };
-		const turn = freeze.turn(
+		const turn = await freeze.turn(
 			input({ provider: "xai", base: rebuilt, query: "Write the summary file in python code" }),
 		);
 		expect(turn.messages).toEqual([]);
 		expect(turn.options.activeSkillNames).toEqual(["programming"]);
-		const next = freeze.turn(input({ provider: "xai", base: rebuilt }));
+		const next = await freeze.turn(input({ provider: "xai", base: rebuilt }));
 		expect(next.options.activeSkillNames).toEqual(["programming"]);
 		expect(String(next.messages[0]?.content)).toContain("<name>debugging</name>");
 	});
 
-	it("freezes again when the operator's default active skills change", () => {
+	it("freezes again when the operator's default active skills change", async () => {
 		const freeze = new PromptSkillFreeze();
-		freeze.turn(
+		await freeze.turn(
 			input({ selection: createActiveSkillState(["programming"], [], undefined), defaults: ["programming"] }),
 		);
-		const turn = freeze.turn(input());
+		const turn = await freeze.turn(input());
 		expect(turn.messages).toEqual([]);
 		expect(turn.options.activeSkillNames).toEqual([]);
 	});
 
-	it("sends no message when a later prompt makes the same choice", () => {
+	it("sends no message when a later prompt makes the same choice", async () => {
 		const freeze = new PromptSkillFreeze();
-		freeze.turn(input({ provider: "xai" }));
-		expect(freeze.turn(input({ provider: "xai", query: "Fix another failing bug" })).messages).toEqual([]);
+		await freeze.turn(input({ provider: "xai" }));
+		expect((await freeze.turn(input({ provider: "xai", query: "Fix another failing bug" }))).messages).toEqual([]);
 	});
 
-	it("says so when a later prompt has no active skills", () => {
+	it("says so when a later prompt has no active skills", async () => {
 		const freeze = new PromptSkillFreeze();
-		freeze.turn(input({ selection: createActiveSkillState([], ["debugging"], "bang") }));
-		const content = String(freeze.turn(input()).messages[0]?.content);
+		await freeze.turn(input({ selection: createActiveSkillState([], ["debugging"], "bang") }));
+		const content = String((await freeze.turn(input())).messages[0]?.content);
 		expect(content).toContain(
 			'<active_skills source="prompt">\nNo skills are active for this prompt.\n</active_skills>',
 		);
 		const harness = new PromptSkillFreeze();
-		harness.turn(input({ provider: "xai" }));
+		await harness.turn(input({ provider: "xai" }));
 		const none = String(
-			harness.turn(input({ provider: "xai", query: "Now write the summary to b.txt." })).messages[0]?.content,
+			(await harness.turn(input({ provider: "xai", query: "Now write the summary to b.txt." }))).messages[0]
+				?.content,
 		);
 		expect(none).toContain('<active_skills source="grok-harness">\nNo skills are active for this prompt.');
 	});
 
-	it("moves an explicit `!skill` of a later prompt into the message", () => {
+	it("moves an explicit `!skill` of a later prompt into the message", async () => {
 		const freeze = new PromptSkillFreeze();
-		freeze.turn(input());
-		const turn = freeze.turn(input({ selection: createActiveSkillState([], ["headroom"], "bang") }));
+		await freeze.turn(input());
+		const turn = await freeze.turn(input({ selection: createActiveSkillState([], ["headroom"], "bang") }));
 		expect(turn.options.activeSkillNames).toEqual([]);
 		expect(String(turn.messages[0]?.content)).toContain('<active_skills source="bang">\n  <name>headroom</name>');
 	});
 
-	it("lists the most relevant model-invocable skills when contextBudget renders skills", () => {
+	it("lists the most relevant model-invocable skills when contextBudget renders skills", async () => {
 		const many = [
 			...Array.from({ length: 8 }, (_, i) => skill(`parser-${i}`, "parser tools for parse.py bugs")),
 			skill("parser-hidden", "parser parse.py bugs", true),
 		];
 		const freeze = new PromptSkillFreeze();
 		const budgeted = { base: { cwd: "/w", skills: many, contextBudget: BUDGET }, skills: many };
-		freeze.turn(input({ ...budgeted, contextBudget: () => BUDGET }));
-		const content = String(freeze.turn(input({ ...budgeted, contextBudget: () => BUDGET })).messages[0]?.content);
+		await freeze.turn(input({ ...budgeted, contextBudget: () => BUDGET }));
+		const content = String(
+			(await freeze.turn(input({ ...budgeted, contextBudget: () => BUDGET }))).messages[0]?.content,
+		);
 		expect(content.match(/<skill>/g)).toHaveLength(PROMPT_SKILLS_RELEVANT_LIMIT);
 		expect(content).toContain("<location>/skills/parser-0/SKILL.md</location>");
 		expect(content).not.toContain("parser-hidden");
 		expect(content).not.toContain("<active_skills source");
 		const noRead = { ...budgeted, base: { ...budgeted.base, selectedTools: ["bash"] } };
 		const other = new PromptSkillFreeze();
-		other.turn(input(noRead));
-		expect(other.turn(input(noRead)).messages).toEqual([]);
+		await other.turn(input(noRead));
+		expect((await other.turn(input(noRead))).messages).toEqual([]);
 	});
 
-	it("logs harness-move records with hashes and counts only", () => {
+	it("logs harness-move records with hashes and counts only", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "omk-prompt-skills-"));
 		dirs.push(dir);
 		const env = { OMK_RUN_LOG_DIR: dir };
 		const freeze = new PromptSkillFreeze();
-		freeze.turn(input({ provider: "xai", env }));
-		freeze.turn(input({ provider: "xai", env, query: "Write the summary file in python code" }));
+		await freeze.turn(input({ provider: "xai", env }));
+		await freeze.turn(input({ provider: "xai", env, query: "Write the summary file in python code" }));
 		const text = readFileSync(join(dir, "skill-select.jsonl"), "utf8");
 		const records = text
 			.trim()

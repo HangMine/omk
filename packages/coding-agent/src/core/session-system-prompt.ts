@@ -1,4 +1,5 @@
 import type { ContextFile } from "./context-file.ts";
+import { SKILL_SEARCH_TOOL_NAME } from "./skill-search-mode.ts";
 import type { Skill } from "./skills.ts";
 import { type BuildSystemPromptOptions, type BuiltSystemPrompt, buildSystemPromptPlan } from "./system-prompt.ts";
 
@@ -75,6 +76,8 @@ export function assembleSessionSystemPrompt(input: SessionSystemPromptInput): Se
 		toolSnippets,
 		promptGuidelines,
 		contextBudget: input.contextBudget,
+		// Spec 050: the fixed tool is registered only in a skill-search session (`PromptSkillFreeze`).
+		...(validToolNames.includes(SKILL_SEARCH_TOOL_NAME) ? { skillSearch: true } : {}),
 	};
 	const built: BuiltSystemPrompt = buildSystemPromptPlan(options);
 	return { options, prompt: built.prompt, cacheBoundary: built.cacheBoundary };

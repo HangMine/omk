@@ -767,7 +767,10 @@ export class AgentSession {
 		this._scopedModels = config.scopedModels ?? [];
 		this._modelPinned = config.modelPinned === true;
 		this._resourceLoader = config.resourceLoader;
-		this._customTools = config.customTools ?? [];
+		this._customTools = this._promptSkillFreeze.withSkillSearchTool(config.customTools ?? [], {
+			skills: () => this._resourceLoader.getSkills().skills,
+			hasReadTool: config.initialActiveToolNames?.includes("read") ?? true,
+		});
 		this._cwd = config.cwd;
 		this._modelRegistry = config.modelRegistry;
 		this._metaRuntime = createAgentSessionMetaRuntime({
@@ -2602,7 +2605,7 @@ export class AgentSession {
 			this._pendingNextTurnMessages = [];
 
 			// Spec 050 R6: the first prompt's skill choice goes into a session-frozen system prompt, later ones into a message.
-			const turnSkills = this._promptSkillFreeze.turn({
+			const turnSkills = await this._promptSkillFreeze.turn({
 				base: this._baseSystemPromptOptions,
 				provider: this.model?.provider,
 				selection: promptSkills,
@@ -2654,6 +2657,7 @@ export class AgentSession {
 				this.agent.state.systemPromptCacheBoundaryBypass = false;
 			}
 			this._recordPromptCachePlan(result?.systemPrompt ? "extension-override" : "turn-plan");
+			await this._promptSkillFreeze.logSession(this.agent.state);
 
 			await this._checkProjectedCompaction(messages);
 			this._runBudget.assertActive();

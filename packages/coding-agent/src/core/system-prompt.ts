@@ -9,6 +9,7 @@ import {
 } from "./context-budget-system-prompt.ts";
 import { escapeXml, escapeXmlText } from "./context-budget-system-prompt-items.ts";
 import type { ContextFile } from "./context-file.ts";
+import { SKILL_SEARCH_PROMPT_LINE } from "./skill-search-mode.ts";
 import type { Skill } from "./skills.ts";
 import { formatSkillsForPrompt } from "./skills-prompt.ts";
 
@@ -42,6 +43,8 @@ export interface BuildSystemPromptOptions {
 	activeSkillSource?: string;
 	/** Optional prompt resource budget. Omitted by default to preserve legacy behavior. */
 	contextBudget?: SystemPromptContextBudgetOptions;
+	/** Spec 050 skill-search session: one fixed line instead of the `<available_skills>` list. */
+	skillSearch?: boolean;
 }
 
 export interface BuiltSystemPrompt {
@@ -65,6 +68,7 @@ export function buildSystemPromptPlan(options: BuildSystemPromptOptions): BuiltS
 		activeSkillNames,
 		activeSkillSource,
 		contextBudget,
+		skillSearch,
 	} = options;
 	const resolvedCwd = cwd;
 	const promptCwd = resolvedCwd.replace(/\\/g, "/");
@@ -98,16 +102,17 @@ export function buildSystemPromptPlan(options: BuildSystemPromptOptions): BuiltS
 				basePrompt: prompt,
 				contextFiles: contextFiles as ContextFile[],
 				skills,
-				includeSkills: customPromptHasRead,
+				includeSkills: customPromptHasRead && !skillSearch,
 				options: budgetOptions,
 			});
 			prompt += `\n\n${budgeted.text}`;
+			if (customPromptHasRead && skillSearch) prompt += SKILL_SEARCH_PROMPT_LINE;
 		} else {
 			prompt = appendLegacyContext(prompt, contextFiles);
 
 			// Append skills section (only if read tool is available)
 			if (customPromptHasRead && skills.length > 0) {
-				prompt += formatSkillsForPrompt(skills);
+				prompt += skillSearch ? SKILL_SEARCH_PROMPT_LINE : formatSkillsForPrompt(skills);
 			}
 		}
 
@@ -202,16 +207,17 @@ OMK documentation (read only when the user asks about OMK itself, its SDK, exten
 			basePrompt: prompt,
 			contextFiles: typedContext,
 			skills,
-			includeSkills: hasRead,
+			includeSkills: hasRead && !skillSearch,
 			options: budgetOptions,
 		});
 		prompt += `\n\n${budgeted.text}`;
+		if (hasRead && skillSearch) prompt += SKILL_SEARCH_PROMPT_LINE;
 	} else {
 		prompt = appendLegacyContext(prompt, typedContext);
 
 		// Append skills section (only if read tool is available)
 		if (hasRead && skills.length > 0) {
-			prompt += formatSkillsForPrompt(skills);
+			prompt += skillSearch ? SKILL_SEARCH_PROMPT_LINE : formatSkillsForPrompt(skills);
 		}
 	}
 
