@@ -106,11 +106,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private hasRendererDefinition(): boolean {
-		return (
-			this.builtInToolDefinition !== undefined ||
-			this.toolDefinition !== undefined ||
-			this.builtinRenderers !== undefined
-		);
+		return Boolean(this.builtInToolDefinition || this.toolDefinition || this.builtinRenderers);
 	}
 
 	private getRenderShell(): "default" | "self" {
@@ -127,6 +123,7 @@ export class ToolExecutionComponent extends Container {
 			args: this.args,
 			toolCallId: this.toolCallId,
 			invalidate: () => {
+				if (this.disposed) return;
 				this.invalidate();
 				this.ui.requestRender();
 			},
@@ -189,6 +186,9 @@ export class ToolExecutionComponent extends Container {
 	dispose(): void {
 		this.disposed = true;
 		this.images.dispose();
+		// Renderers keep live timers in `state.interval` (bash's elapsed-time ticker); they die with the row.
+		clearInterval(this.rendererState.interval);
+		this.rendererState.interval = undefined;
 	}
 
 	setExpanded(expanded: boolean): void {

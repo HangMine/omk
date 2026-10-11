@@ -32,6 +32,11 @@ describe("subagentWorkerEnv", () => {
 		expect(metacon.OMK_SKILL_SEARCH_SUGGEST).toBe("0");
 	});
 
+	it("turns typed todo checks off for workers (spec 049 R4)", () => {
+		expect(subagentWorkerEnv({ OMK_TODO_VERIFY: "on" }).OMK_TODO_VERIFY).toBe("0");
+		expect(subagentWorkerEnv({}).OMK_TODO_VERIFY).toBe("0");
+	});
+
 	it("lets OMK_FINISH_CHECK_WORKERS opt workers in", () => {
 		expect(subagentWorkerEnv({ OMK_FINISH_CHECK_WORKERS: "1" }).OMK_FINISH_CHECK).toBe("1");
 	});
@@ -41,6 +46,14 @@ describe("subagentWorkerEnv", () => {
 		expect(env.OMK_RUN_LOG_DIR).toBe("/logs/run-1");
 		expect(env.OMK_RUN_LOG_ROLE).toBe("worker");
 		expect(subagentWorkerEnv({ PATH: "/bin" }).OMK_RUN_LOG_ROLE).toBeUndefined();
+	});
+
+	it("passes OMK_WORKER_EXTENSIONS through unchanged (spec 057 R8)", () => {
+		expect(subagentWorkerEnv({ OMK_WORKER_EXTENSIONS: " my-mcp-adapter, /x/a.ts " }).OMK_WORKER_EXTENSIONS).toBe(
+			" my-mcp-adapter, /x/a.ts ",
+		);
+		expect(subagentWorkerEnv({ OMK_WORKER_EXTENSIONS: "all" }).OMK_WORKER_EXTENSIONS).toBe("all");
+		expect(subagentWorkerEnv({}).OMK_WORKER_EXTENSIONS).toBeUndefined();
 	});
 
 	it("does not modify the parent environment", () => {

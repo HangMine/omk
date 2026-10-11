@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getOAuthProviders } from "../src/utils/oauth/index.ts";
 import {
 	loginMeta,
@@ -54,6 +54,8 @@ function callbacks(overrides: Partial<OAuthLoginCallbacks> = {}): OAuthLoginCall
 		...overrides,
 	};
 }
+
+beforeEach(resetProxyEnv);
 
 afterEach(() => {
 	vi.unstubAllGlobals();

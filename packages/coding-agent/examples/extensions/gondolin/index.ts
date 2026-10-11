@@ -43,6 +43,7 @@ import {
 	truncateLine,
 	type WriteOperations,
 } from "open-multi-agent-kit";
+import { installGondolinSignatureGuard } from "./signature-guard.ts";
 
 const GUEST_WORKSPACE = "/workspace";
 const DEFAULT_GREP_LIMIT = 100;
@@ -377,6 +378,7 @@ export default function (omk: ExtensionAPI) {
 	let shellPath = "/bin/sh";
 
 	async function startVm(ctx?: ExtensionContext): Promise<VM> {
+		installGondolinSignatureGuard();
 		ctx?.ui.setStatus("gondolin", ctx.ui.theme.fg("accent", `Gondolin: starting ${GUEST_WORKSPACE}`));
 		const created = await VM.create({
 			sessionLabel: `omk ${path.basename(localCwd)}`,

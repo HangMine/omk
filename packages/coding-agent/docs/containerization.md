@@ -104,6 +104,14 @@ File changes under `/workspace` write through to the host.
 
 Requirements: Node.js >= 23.6.0 for `@earendil-works/gondolin`, plus QEMU (requires installation through your package manager).
 
+OMK's Gondolin example applies a runtime signature guard before starting a VM.
+It rejects the malformed nested RSA digest structure in CVE-2026-85393 and
+refuses startup if the reviewed dependency implementation changes. Copy the
+whole example directory, including `signature-guard.ts`; the raw Gondolin CLI
+does not receive this guard. The registry dependency still appears in `npm
+audit`. See [Gondolin signature security](gondolin-security.md) for the exact
+scope, regression evidence and upstream-patch maintenance requirement.
+
 ## Plain Docker
 
 Run the whole `omk` process in Docker when you want the simplest local container boundary.
