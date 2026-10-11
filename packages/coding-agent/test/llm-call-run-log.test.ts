@@ -164,7 +164,7 @@ describe("llm-call run log (spec 059)", () => {
 			effort: null,
 			effortSent: null,
 			requestedAtMs: 1_290,
-			responseId: null,
+			responseId: "chatcmpl-059",
 			messageCount: 2,
 			durationMs: 250,
 			gapMs: 40,
