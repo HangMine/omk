@@ -28,6 +28,7 @@ import {
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { type Theme, theme } from "../interactive/theme/theme.ts";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
+import { parseRpcInput } from "./rpc-input.ts";
 import { error, success } from "./rpc-response.ts";
 import type {
 	RpcCommand,
@@ -126,7 +127,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 		confirm: (title, message, opts) =>
 			createDialogPromise(opts, false, { method: "confirm", title, message, timeout: opts?.timeout }, (r) =>
-				"cancelled" in r && r.cancelled ? false : "confirmed" in r ? r.confirmed : false,
+				r.cancelled ? false : r.confirmed === true,
 			),
 
 		input: (title, placeholder, opts) =>
@@ -677,7 +678,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 			default: {
 				const unknownCommand = command as { type: string };
-				return error(undefined, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);
+				return error(id, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);
 			}
 		}
 	};
@@ -713,29 +714,14 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 	}
 
 	const handleInputLine = async (line: string) => {
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(line);
-		} catch (parseError: unknown) {
-			output(
-				error(
-					undefined,
-					"parse",
-					`Failed to parse command: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
-				),
-			);
+		const parsed = parseRpcInput(line);
+		if (parsed.type === "response") {
+			output(parsed);
 			await waitForRawStdoutBackpressure();
 			return;
 		}
-
-		// Handle extension UI responses
-		if (
-			typeof parsed === "object" &&
-			parsed !== null &&
-			"type" in parsed &&
-			parsed.type === "extension_ui_response"
-		) {
-			const response = parsed as RpcExtensionUIResponse;
+		if (parsed.type === "extension_ui_response") {
+			const response = parsed;
 			const pending = pendingExtensionRequests.get(response.id);
 			if (pending) {
 				pendingExtensionRequests.delete(response.id);
@@ -744,7 +730,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			return;
 		}
 
-		const command = parsed as RpcCommand;
+		const command = parsed;
 		const commandSession = session;
 		const previousTermination = commandSession.lastTermination;
 		try {

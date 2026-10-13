@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- RPC validates command envelopes, required fields, enum values and extension UI responses before dispatch. Malformed records no longer crash the process or mutate settings, and errors for unsupported commands preserve their request id. Parse diagnostics omit private input snippets. See [RPC input validation](docs/rpc.md#input-validation).
 - Repeated screenshots reuse one draft attachment even at count/byte limits; stored bytes are copied from acquisition buffers. Non-vision models, compaction and rejected steering/follow-up submissions preserve text and images. Clear/new-session/stop invalidate pending acquisition, and image-only follow-ups include their image payload.
 - Prompt previews now use small decoded RGBA thumbnails instead of compressed image bytes, preserve aspect ratio, request a repaint on decode completion, and suppress late repaints after disposal. Weakly keyed caches no longer retain every prior screenshot for the process lifetime.
 - Long-session first frames render the live tail plus `terminal.scrollbackSeedScreens` screens of history (default 50, also `OMK_SCROLLBACK_SCREENS`) at component boundaries. Older settled children skip rendering, but still undergo identity and settledness checks. `0` seeds only the live tail; seed changes and height-only resizes rebuild the boundary, and blank or non-finite settings fall back safely. The explicit exit log renders and emits the complete transcript, including virtual history beyond the ordinary repaint budget. Terminal scrollback capacity still limits retained history.

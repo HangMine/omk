@@ -6,68 +6,87 @@
  */
 
 import type { AgentMessage, ThinkingLevel } from "omk-agent-core";
-import type { ImageContent, Model } from "omk-ai";
+import type { Model } from "omk-ai";
+import { type Static, Type } from "typebox";
 import type { SessionStats } from "../../core/agent-session.ts";
 import type { BashResult } from "../../core/bash-executor.ts";
 import type { CompactionResult } from "../../core/compaction/index.ts";
 import type { SessionTermination } from "../../core/session-termination.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 
-// ============================================================================
-// RPC Commands (stdin)
-// ============================================================================
+export const RPC_ENVELOPE_SCHEMA = Type.Object({ id: Type.Optional(Type.String()), type: Type.String() });
+const images = Type.Optional(
+	Type.Array(Type.Object({ type: Type.Literal("image"), data: Type.String(), mimeType: Type.String() })),
+);
+const mode = Type.Union([Type.Literal("all"), Type.Literal("one-at-a-time")]);
+const thinking = Type.Union([
+	Type.Literal("off"),
+	Type.Literal("minimal"),
+	Type.Literal("low"),
+	Type.Literal("medium"),
+	Type.Literal("high"),
+	Type.Literal("xhigh"),
+	Type.Literal("max"),
+	Type.Literal("ultra"),
+]);
+export const RPC_COMMAND_BODY_SCHEMA = Type.Union([
+	Type.Object({
+		type: Type.Literal("prompt"),
+		message: Type.String(),
+		images,
+		streamingBehavior: Type.Optional(Type.Union([Type.Literal("steer"), Type.Literal("followUp")])),
+	}),
+	Type.Object({ type: Type.Literal("steer"), message: Type.String(), images }),
+	Type.Object({ type: Type.Literal("follow_up"), message: Type.String(), images }),
+	Type.Object({ type: Type.Literal("abort") }),
+	Type.Object({ type: Type.Literal("new_session"), parentSession: Type.Optional(Type.String()) }),
+	Type.Object({ type: Type.Literal("get_state") }),
+	Type.Object({ type: Type.Literal("set_model"), provider: Type.String(), modelId: Type.String() }),
+	Type.Object({ type: Type.Literal("cycle_model") }),
+	Type.Object({ type: Type.Literal("get_available_models") }),
+	Type.Object({ type: Type.Literal("set_thinking_level"), level: thinking }),
+	Type.Object({ type: Type.Literal("cycle_thinking_level") }),
+	Type.Object({ type: Type.Literal("set_steering_mode"), mode }),
+	Type.Object({ type: Type.Literal("set_follow_up_mode"), mode }),
+	Type.Object({ type: Type.Literal("compact"), customInstructions: Type.Optional(Type.String()) }),
+	Type.Object({ type: Type.Literal("set_auto_compaction"), enabled: Type.Boolean() }),
+	Type.Object({ type: Type.Literal("set_auto_retry"), enabled: Type.Boolean() }),
+	Type.Object({ type: Type.Literal("abort_retry") }),
+	Type.Object({
+		type: Type.Literal("bash"),
+		command: Type.String(),
+		excludeFromContext: Type.Optional(Type.Boolean()),
+	}),
+	Type.Object({ type: Type.Literal("abort_bash") }),
+	Type.Object({ type: Type.Literal("get_session_stats") }),
+	Type.Object({ type: Type.Literal("export_html"), outputPath: Type.Optional(Type.String()) }),
+	Type.Object({ type: Type.Literal("switch_session"), sessionPath: Type.String() }),
+	Type.Object({ type: Type.Literal("fork"), entryId: Type.String() }),
+	Type.Object({ type: Type.Literal("clone") }),
+	Type.Object({ type: Type.Literal("get_fork_messages") }),
+	Type.Object({ type: Type.Literal("get_last_assistant_text") }),
+	Type.Object({ type: Type.Literal("set_session_name"), name: Type.String() }),
+	Type.Object({ type: Type.Literal("get_messages") }),
+	Type.Object({ type: Type.Literal("get_commands") }),
+]);
+export const RPC_COMMAND_SCHEMA = Type.Intersect([RPC_ENVELOPE_SCHEMA, RPC_COMMAND_BODY_SCHEMA]);
+export const RPC_UI_RESPONSE_SCHEMA = Type.Intersect([
+	Type.Object({
+		type: Type.Literal("extension_ui_response"),
+		id: Type.String(),
+		value: Type.Optional(Type.String()),
+		confirmed: Type.Optional(Type.Boolean()),
+		cancelled: Type.Optional(Type.Literal(true)),
+	}),
+	Type.Union([
+		Type.Object({ value: Type.String() }),
+		Type.Object({ confirmed: Type.Boolean() }),
+		Type.Object({ cancelled: Type.Literal(true) }),
+	]),
+]);
 
-export type RpcCommand =
-	// Prompting
-	| { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" }
-	| { id?: string; type: "steer"; message: string; images?: ImageContent[] }
-	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
-	| { id?: string; type: "abort" }
-	| { id?: string; type: "new_session"; parentSession?: string }
-
-	// State
-	| { id?: string; type: "get_state" }
-
-	// Model
-	| { id?: string; type: "set_model"; provider: string; modelId: string }
-	| { id?: string; type: "cycle_model" }
-	| { id?: string; type: "get_available_models" }
-
-	// Thinking
-	| { id?: string; type: "set_thinking_level"; level: ThinkingLevel }
-	| { id?: string; type: "cycle_thinking_level" }
-
-	// Queue modes
-	| { id?: string; type: "set_steering_mode"; mode: "all" | "one-at-a-time" }
-	| { id?: string; type: "set_follow_up_mode"; mode: "all" | "one-at-a-time" }
-
-	// Compaction
-	| { id?: string; type: "compact"; customInstructions?: string }
-	| { id?: string; type: "set_auto_compaction"; enabled: boolean }
-
-	// Retry
-	| { id?: string; type: "set_auto_retry"; enabled: boolean }
-	| { id?: string; type: "abort_retry" }
-
-	// Bash
-	| { id?: string; type: "bash"; command: string; excludeFromContext?: boolean }
-	| { id?: string; type: "abort_bash" }
-
-	// Session
-	| { id?: string; type: "get_session_stats" }
-	| { id?: string; type: "export_html"; outputPath?: string }
-	| { id?: string; type: "switch_session"; sessionPath: string }
-	| { id?: string; type: "fork"; entryId: string }
-	| { id?: string; type: "clone" }
-	| { id?: string; type: "get_fork_messages" }
-	| { id?: string; type: "get_last_assistant_text" }
-	| { id?: string; type: "set_session_name"; name: string }
-
-	// Messages
-	| { id?: string; type: "get_messages" }
-
-	// Commands (available for invocation via prompt)
-	| { id?: string; type: "get_commands" };
+export type RpcCommand = Static<typeof RPC_COMMAND_SCHEMA>;
+export type RpcExtensionUIResponse = Static<typeof RPC_UI_RESPONSE_SCHEMA>;
 
 // ============================================================================
 // RPC Slash Command (for get_commands response)
@@ -255,16 +274,6 @@ export type RpcExtensionUIRequest =
 	  }
 	| { type: "extension_ui_request"; id: string; method: "setTitle"; title: string }
 	| { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string };
-
-// ============================================================================
-// Extension UI Commands (stdin)
-// ============================================================================
-
-/** Response to an extension UI request */
-export type RpcExtensionUIResponse =
-	| { type: "extension_ui_response"; id: string; value: string }
-	| { type: "extension_ui_response"; id: string; confirmed: boolean }
-	| { type: "extension_ui_response"; id: string; cancelled: true };
 
 // ============================================================================
 // Helper type for extracting command types

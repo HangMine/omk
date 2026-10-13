@@ -25,6 +25,14 @@ Common options:
 
 All commands support an optional `id` field for request/response correlation. If provided, the corresponding response will include the same `id`.
 
+### Input validation
+
+Each input record must be a JSON object with a string `type` and an optional string `id`. RPC validates required fields, booleans, images, and enum values before dispatch. Invalid records return `success: false` without invoking the command handler, and the connection remains available for subsequent commands. Unknown commands also retain a valid request `id` in their error response.
+
+Malformed JSON and invalid envelopes use `command: "parse"`; invalid command fields use the supplied command name. Parse diagnostics do not echo input payloads. Additional fields remain allowed for forward compatibility. Extension UI responses require a string `id` and a valid `value`, `confirmed`, or `cancelled` variant.
+
+This validation does not impose a byte limit on JSONL frames or accumulated events. Clients must bound their own input and retained event data for long-running sessions.
+
 ### Framing
 
 RPC mode uses strict JSONL semantics with LF (`\n`) as the only record delimiter.
