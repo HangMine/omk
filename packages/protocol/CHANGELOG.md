@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-13
+
+### Changed
+
+- Lockstep version alignment with OMK 1.4.1. Serialized protocol contracts are unchanged.
+
 ## [1.4.0] - 2026-10-11
 
 ## [1.3.2] - 2026-10-10

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-13
+
 ### Added
 
 - Searchable skill picker via `/skills [query]` and configurable `Alt+S` (`app.skills.select`). Search names and descriptions, preview source/location and explicit-only status, and insert one invocation without submitting or losing text/images. Selection replaces an existing leading skill; cancellation preserves the draft. Uses discovered metadata and existing TUI components, without changing persistent activation or adding dependencies. See [skill picker](docs/skills.md#searchable-skill-picker).
@@ -10,6 +12,7 @@
 ### Fixed
 
 - RPC validates command envelopes, required fields, enum values and extension UI responses before dispatch. Malformed records no longer crash the process or mutate settings, and errors for unsupported commands preserve their request id. Parse diagnostics omit private input snippets. See [RPC input validation](docs/rpc.md#input-validation).
+- Regression fixtures no longer depend on the checkout path length or real elapsed time when testing compact resource reads and authority-store restart behavior. Runtime rendering, authorization deadlines and the default monotonic clock are unchanged.
 - Repeated screenshots reuse one draft attachment even at count/byte limits; stored bytes are copied from acquisition buffers. Non-vision models, compaction and rejected steering/follow-up submissions preserve text and images. Clear/new-session/stop invalidate pending acquisition, and image-only follow-ups include their image payload.
 - Prompt previews now use small decoded RGBA thumbnails instead of compressed image bytes, preserve aspect ratio, request a repaint on decode completion, and suppress late repaints after disposal. Weakly keyed caches no longer retain every prior screenshot for the process lifetime.
 - Long-session first frames render the live tail plus `terminal.scrollbackSeedScreens` screens of history (default 50, also `OMK_SCROLLBACK_SCREENS`) at component boundaries. Older settled children skip rendering, but still undergo identity and settledness checks. `0` seeds only the live tail; seed changes and height-only resizes rebuild the boundary, and blank or non-finite settings fall back safely. The explicit exit log renders and emits the complete transcript, including virtual history beyond the ordinary repaint budget. Terminal scrollback capacity still limits retained history.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-13
+
 ### Added
 
 - Optional `Editor.onPaste(text): boolean` intercepts complete bracketed pastes once, including chunked input; returning true consumes the paste while false retains ordinary text insertion/undo. `EditorComponent` exposes the optional callback for custom editor adapters.

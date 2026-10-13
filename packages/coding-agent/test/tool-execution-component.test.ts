@@ -444,10 +444,12 @@ describe("ToolExecutionComponent parity", () => {
 		expect(expanded).toContain("hidden content");
 	});
 
+	// Keep compact-content checks independent of the host checkout's absolute path length.
+	const compactCwd = resolve("/repo/project");
 	for (const scenario of [
 		{
 			title: "SKILL.md",
-			path: join(process.cwd(), "attio", "SKILL.md"),
+			path: join(compactCwd, "attio", "SKILL.md"),
 			content: "---\nname: attio\ndescription: CRM helper\n---\n\n# Hidden skill instructions",
 			compact: "[skill] attio",
 			hidden: "Hidden skill instructions",
@@ -455,7 +457,7 @@ describe("ToolExecutionComponent parity", () => {
 		},
 		{
 			title: "AGENTS.md",
-			path: join(process.cwd(), ".omk", "AGENTS.md"),
+			path: join(compactCwd, ".omk", "AGENTS.md"),
 			content: "Hidden resource instructions",
 			compact: "read resource .omk/AGENTS.md",
 			hidden: "Hidden resource instructions",
@@ -463,9 +465,9 @@ describe("ToolExecutionComponent parity", () => {
 		},
 		{
 			title: "outside AGENTS.md",
-			path: resolve(process.cwd(), "..", "AGENTS.md"),
+			path: resolve(compactCwd, "..", "AGENTS.md"),
 			content: "Hidden outside resource instructions",
-			compact: `read resource ${resolve(process.cwd(), "..", "AGENTS.md").replace(/\\/g, "/")}`,
+			compact: `read resource ${resolve(compactCwd, "..", "AGENTS.md").replace(/\\/g, "/")}`,
 			hidden: "Hidden outside resource instructions",
 			absent: undefined,
 		},
@@ -484,9 +486,9 @@ describe("ToolExecutionComponent parity", () => {
 				`tool-compact-${scenario.title}`,
 				{ path: scenario.path },
 				{},
-				createReadToolDefinition(process.cwd()),
+				createReadToolDefinition(compactCwd),
 				createFakeTui(),
-				process.cwd(),
+				compactCwd,
 			);
 			component.updateResult(
 				{ content: [{ type: "text", text: scenario.content }], details: undefined, isError: false },

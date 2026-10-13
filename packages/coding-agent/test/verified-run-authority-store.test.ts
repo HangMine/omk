@@ -69,7 +69,7 @@ function appendDurably(path: string, bytes: Uint8Array): void {
 }
 
 async function openReconciled(options: Parameters<typeof AuthorityStore.open>[1] = { capacity: 4 }) {
-	const store = AuthorityStore.open(storePath, options);
+	const store = AuthorityStore.open(storePath, { clock: () => Date.now(), ...options });
 	store.reconcile();
 	return store;
 }

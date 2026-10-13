@@ -1,3 +1,4 @@
+import { HttpsProxyAgent } from "https-proxy-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getOAuthProviders } from "../src/utils/oauth/index.ts";
 import {
@@ -135,11 +136,13 @@ describe("Muse Code device login", () => {
 
 	it("honors HTTPS_PROXY instead of the global fetch stub", async () => {
 		process.env.HTTPS_PROXY = "http://127.0.0.1:1";
+		const connect = vi.spyOn(HttpsProxyAgent.prototype, "connect").mockRejectedValue(new Error("proxy unavailable"));
 		const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(loginMeta(callbacks())).rejects.toThrow();
+		await expect(loginMeta(callbacks())).rejects.toThrow("proxy unavailable");
 		expect(fetchMock).not.toHaveBeenCalled();
+		expect(connect).toHaveBeenCalledOnce();
 	});
 
 	it("rejects an untrusted verification URI", async () => {

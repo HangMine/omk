@@ -1,3 +1,4 @@
+import { HttpsProxyAgent } from "https-proxy-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { proxyAwareFetch } from "../src/utils/proxy-fetch.ts";
 
@@ -48,10 +49,12 @@ describe("proxyAwareFetch", () => {
 	it("does not use global fetch when HTTPS_PROXY is set", async () => {
 		resetProxyEnv();
 		process.env.HTTPS_PROXY = "http://127.0.0.1:1";
+		const connect = vi.spyOn(HttpsProxyAgent.prototype, "connect").mockRejectedValue(new Error("proxy unavailable"));
 		const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("ok"));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(proxyAwareFetch("https://api.meta.ai/muse-code/key")).rejects.toThrow();
+		await expect(proxyAwareFetch("https://api.meta.ai/muse-code/key")).rejects.toThrow("proxy unavailable");
 		expect(fetchMock).not.toHaveBeenCalled();
+		expect(connect).toHaveBeenCalledOnce();
 	});
 });

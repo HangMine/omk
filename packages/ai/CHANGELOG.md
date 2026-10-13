@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-13
+
+### Changed
+
+- Lockstep version alignment with OMK 1.4.1. Provider behavior and external dependency versions are unchanged.
+
+### Fixed
+
+- Proxy-routing regression tests inject a connection failure instead of assuming a host immediately rejects a fixed local port. They still verify proxy-agent dispatch, failure propagation and absence of a direct-fetch fallback.
+
 ## [1.4.0] - 2026-10-11
 
 ### Fixed
