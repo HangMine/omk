@@ -1237,7 +1237,9 @@ export class TUI extends Container {
 			// beginning). Rows older than the budget keep their existing copy.
 			// Without fromRow the clamp collapses to tailStart, i.e. tail-only.
 			const repairStart = newLines.length - height * REPAINT_BUDGET_SCREENS;
-			const firstPrinted = clear ? Math.min(Math.max(fromRow ?? tailStart, repairStart), tailStart) : 0;
+			// Explicit exit transcripts include virtual history never written into scrollback.
+			const firstPrinted =
+				clear && finalLines === undefined ? Math.min(Math.max(fromRow ?? tailStart, repairStart), tailStart) : 0;
 			for (let i = firstPrinted; i < newLines.length; i++) {
 				if (i > firstPrinted) buffer += "\r\n";
 				buffer += clear ? `\x1b[2K${newLines[i]}` : newLines[i];

@@ -88,8 +88,9 @@ describe("InteractiveMode final session log", () => {
 			sessionManager: { buildSessionContext: () => ({ messages }) },
 			chatContainer: {
 				clear: () => calls.push("clear"),
-				render: (width: number) => {
-					calls.push(`render:${width}`);
+				// The exit log needs the full transcript, not the windowed tail.
+				renderAll: (width: number) => {
+					calls.push(`renderAll:${width}`);
 					return ["user message", "assistant response", "tool output"];
 				},
 			},
@@ -103,7 +104,7 @@ describe("InteractiveMode final session log", () => {
 		) => string[];
 
 		expect(buildFinalSessionLog.call(fakeThis)).toEqual(["user message", "assistant response", "tool output"]);
-		expect(calls).toEqual(["clear", "messages:user,assistant,toolResult,bashExecution", "render:120"]);
+		expect(calls).toEqual(["clear", "messages:user,assistant,toolResult,bashExecution", "renderAll:120"]);
 	});
 
 	test("passes final session lines to TUI stop", () => {

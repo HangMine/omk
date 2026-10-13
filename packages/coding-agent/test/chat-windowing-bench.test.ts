@@ -4,6 +4,7 @@
  *
  *   TUI_BENCH=1 nice -n 19 ../../node_modules/.bin/vitest run test/chat-windowing-bench.test.ts
  *   TUI_BENCH_LINES=20000 (default) TUI_BENCH_FRAMES=60 (default)
+ *   TUI_BENCH_SEED=2000 (optional; 0 seeds only the live tail, unset keeps all history)
  *
  * Transcript of user / Markdown assistant / finished bash tool cards inside the
  * interactive ChatContainer, real Editor below, 120×40 byte-sink terminal.
@@ -30,7 +31,7 @@ class SinkTerminal {
 	kittyProtocolActive = false;
 	bytes = 0;
 	write(data: string) {
-		this.bytes += data.length;
+		this.bytes += Buffer.byteLength(data, "utf8");
 	}
 	start() {}
 	stop() {}
@@ -133,11 +134,14 @@ describe.skipIf(!enabled)("chat windowing bench", () => {
 		}
 		const tail = new AssistantMessageComponent(undefined);
 		chat.addChild(tail);
+		const transcriptLines = chat.render(118).length;
+		if (process.env.TUI_BENCH_SEED !== undefined) chat.setPrefixSeed(Number(process.env.TUI_BENCH_SEED));
 		const doRender = () => (tui as unknown as { doRender(): void }).doRender();
 		const firstStart = performance.now();
 		doRender();
 		const firstFrame = performance.now() - firstStart;
 		const heapAfterFirst = process.memoryUsage().heapUsed;
+		const firstFrameBytes = terminal.bytes;
 		const lines = chat.render(118).length;
 		const input = (tui as unknown as { handleInput(data: string): void }).handleInput.bind(tui);
 		const run = (mutate: (f: number) => void) => {
@@ -158,6 +162,8 @@ describe.skipIf(!enabled)("chat windowing bench", () => {
 		const result = {
 			impl: "getFrozenChildCount" in chat ? "windowed" : "full",
 			lines,
+			transcriptLines,
+			firstFrameBytes,
 			children: chat.children.length,
 			firstFrameMs: +firstFrame.toFixed(1),
 			heapAfterFirstMB: +(heapAfterFirst / 1048576).toFixed(1),
@@ -169,6 +175,7 @@ describe.skipIf(!enabled)("chat windowing bench", () => {
 			early: run((f) => tools[3].setExpanded(f % 2 === 0)),
 		};
 		console.log(`BENCH ${JSON.stringify(result)}`);
-		expect(result.lines).toBeGreaterThanOrEqual(targetLines);
+		expect(result.transcriptLines).toBeGreaterThanOrEqual(targetLines);
+		expect(result.lines).toBeLessThanOrEqual(result.transcriptLines);
 	});
 });

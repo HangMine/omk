@@ -472,6 +472,142 @@ describe("WindowedContainer", () => {
 		}
 		assert.ok(trials >= 144);
 	});
+	it("virtual prefix: first frame renders only live+seed, prefix children never render", () => {
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		windowed.setPrefixSeed(20);
+		const cards: SettlingMessage[] = [];
+		for (let i = 0; i < 100; i++) {
+			const m = new SettlingMessage(`v${i}-`.repeat(5), true);
+			windowed.addChild(m);
+			cards.push(m);
+		}
+		const out = windowed.render(40);
+		// live(10) + seed(20) lines; every card emits exactly 1 line
+		assert.equal(out.length, 30);
+		assert.equal(windowed.getVirtualChildCount(), 70);
+		assert.equal(windowed.getLastRenderStats().virtualChildren, 70);
+		// The 70 prefix children were never rendered
+		for (let i = 0; i < 70; i++) assert.equal(cards[i].renderCount, 0, `child ${i} must stay unrendered`);
+		for (let i = 70; i < 100; i++) assert.equal(cards[i].renderCount, 1);
+		// The emitted tail is the real tail
+		const full = new Container();
+		for (let i = 0; i < 100; i++) full.addChild(new SettlingMessage(`v${i}-`.repeat(5), true));
+		const fullOut = full.render(40);
+		assert.deepEqual(out, fullOut.slice(-30));
+	});
+
+	it("virtual prefix stays virtual across frames; live tail keeps updating", () => {
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		windowed.setPrefixSeed(20);
+		const cards: SettlingMessage[] = [];
+		for (let i = 0; i < 100; i++) {
+			const m = new SettlingMessage(`v${i}-`.repeat(5), true);
+			windowed.addChild(m);
+			cards.push(m);
+		}
+		windowed.render(40);
+		const before = cards.map((c) => c.renderCount);
+		windowed.render(40);
+		windowed.render(40);
+		for (let i = 0; i < 70; i++) assert.equal(cards[i].renderCount, before[i], `virtual child ${i} re-rendered`);
+		// Mutate a frozen (seed) child and a live child; both must update in output
+		cards[80].setText("SEED-EDIT");
+		cards[95].setText("LIVE-EDIT");
+		const out = windowed.render(40);
+		assert.ok(out.some((l) => l.includes("SEED-EDIT")));
+		assert.ok(out.some((l) => l.includes("LIVE-EDIT")));
+	});
+
+	it("virtual prefix materializes the transcript via renderAll only", () => {
+		const full = new Container();
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		windowed.setPrefixSeed(20);
+		for (let i = 0; i < 60; i++) {
+			const body = `all-${i}-`.repeat(4);
+			full.addChild(new SettlingMessage(body, true));
+			windowed.addChild(new SettlingMessage(body, true));
+		}
+		windowed.render(40);
+		assert.equal(windowed.render(40).length, 30);
+		assert.deepEqual(windowed.renderAll(40), full.render(40));
+		// renderAll does not disturb the virtual state
+		assert.equal(windowed.getVirtualChildCount(), 30);
+		assert.equal(windowed.render(40).length, 30);
+	});
+
+	it("an unsettled child inside the virtual prefix materializes on the next render", () => {
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		windowed.setPrefixSeed(20);
+		const cards: SettlingMessage[] = [];
+		for (let i = 0; i < 60; i++) {
+			const m = new SettlingMessage(`u${i}-`.repeat(4), true);
+			windowed.addChild(m);
+			cards.push(m);
+		}
+		const out1 = windowed.render(40);
+		assert.equal(out1.length, 30);
+		assert.equal(cards[10].renderCount, 0);
+		cards[10].markUnsettled();
+		const out2 = windowed.render(40);
+		// Virtual prefix truncates at child 10; children 10..59 emit (50 lines)
+		assert.equal(windowed.getVirtualChildCount(), 10);
+		assert.ok(out2.length >= 40);
+		assert.equal(cards[10].renderCount, 1);
+		assert.ok(out2.some((l) => l.includes("u10")));
+		cards[10].complete("done-10");
+		const out3 = windowed.render(40);
+		assert.ok(out3.some((l) => l.includes("done-10")));
+	});
+
+	it("removeChild inside the virtual prefix keeps indices aligned", () => {
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		windowed.setPrefixSeed(10);
+		for (let i = 0; i < 50; i++) windowed.addChild(new SettlingMessage(`r${i}-`.repeat(3), true));
+		windowed.render(40);
+		assert.equal(windowed.getVirtualChildCount(), 30);
+		windowed.removeChild(windowed.children[5]);
+		const out = windowed.render(40);
+		// 49 children left: 29 virtual + 20 emitted (10 seed + 10 live)
+		assert.equal(windowed.getVirtualChildCount(), 29);
+		assert.equal(out.length, 20);
+		assert.ok(!out.some((l) => l.includes("r5-")));
+	});
+
+	it("opting out of the seed materializes the whole prefix", () => {
+		const full = new Container();
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		windowed.setPrefixSeed(10);
+		for (let i = 0; i < 40; i++) {
+			const body = `o${i}-`.repeat(3);
+			full.addChild(new SettlingMessage(body, true));
+			windowed.addChild(new SettlingMessage(body, true));
+		}
+		assert.equal(windowed.render(40).length, 20);
+		windowed.setPrefixSeed();
+		assert.deepEqual(windowed.render(40), full.render(40));
+		assert.equal(windowed.getVirtualChildCount(), 0);
+	});
+
+	it("foreign splice inside the virtual prefix truncates it, not misplaces lines", () => {
+		const windowed = new WindowedContainer();
+		windowed.setLiveLineBudget(10);
+		windowed.setPrefixSeed(10);
+		for (let i = 0; i < 50; i++) windowed.addChild(new SettlingMessage(`f${i}-`.repeat(3), true));
+		windowed.render(40);
+		windowed.children.splice(2, 3); // bypass removeChild inside the virtual run
+		const out = windowed.render(40);
+		// children[2] mismatches → prefix truncates at 2; children 2..46 emit live once
+		assert.equal(windowed.getVirtualChildCount(), 2);
+		assert.equal(out.length, 45);
+		assert.equal(out[0].includes("f5-"), true);
+	});
+
 	it("refreshes only the changed segment, reporting it in render stats", () => {
 		const full = new Container();
 		const windowed = new WindowedContainer();

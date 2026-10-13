@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Long-session first frames render the live tail plus `terminal.scrollbackSeedScreens` screens of history (default 50, also `OMK_SCROLLBACK_SCREENS`) at component boundaries. Older settled children skip rendering, but still undergo identity and settledness checks. `0` seeds only the live tail; seed changes and height-only resizes rebuild the boundary, and blank or non-finite settings fall back safely. The explicit exit log renders and emits the complete transcript, including virtual history beyond the ordinary repaint budget. Terminal scrollback capacity still limits retained history.
+
 - Skill search removes content-identical aliases and already-offered skills before capping the distinct BM25 pool at 64. Duplicates no longer hide remaining matches or get suggested again under another name; scores, highest-ranked representatives and both ranking modes are preserved.
 
 - Worker trust checks no longer reuse permanent positive Git answers. Later spawns revalidate registration, common repository identity and linked-worktree back-pointers; removed/recreated directories and replaced `.git` pointers receive no inherited grant. Concurrent Git queries remain shared only while in flight. Already-aborted same-project spawns also receive no grant.

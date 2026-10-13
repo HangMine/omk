@@ -8,6 +8,7 @@ import type { NotificationSettings } from "./completion-sound.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-idle-timeout.ts";
 import type { ResourceGovernorSettings } from "./resource-governor-settings.ts";
 import { deepMergeSettings, mergeLayeredSettings } from "./settings-merge.ts";
+import { resolveScrollbackSeedScreens } from "./terminal-settings.ts";
 
 const MAX_DEFAULT_ACTIVE_SKILLS = 64;
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -82,6 +83,7 @@ export interface TerminalSettings {
 	imageWidthCells?: number; // default: 60 (preferred inline image width in terminal cells)
 	clearOnShrink?: boolean; // default: false (clear empty rows when content shrinks)
 	showTerminalProgress?: boolean; // default: false (OSC 9;4 terminal progress indicators)
+	scrollbackSeedScreens?: number; // default: 50 (terminal-height screens of transcript history materialized above the live tail; 0 keeps the first paint O(live tail) at the cost of seeded scrollback)
 }
 
 export interface ImageSettings {
@@ -1199,6 +1201,10 @@ export class SettingsManager {
 		this.globalSettings.terminal.clearOnShrink = enabled;
 		this.markModified("terminal", "clearOnShrink");
 		this.save();
+	}
+
+	getScrollbackSeedScreens(): number {
+		return resolveScrollbackSeedScreens(this.settings.terminal?.scrollbackSeedScreens);
 	}
 
 	getShowTerminalProgress(): boolean {

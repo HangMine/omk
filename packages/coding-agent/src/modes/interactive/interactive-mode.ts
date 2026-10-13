@@ -425,6 +425,10 @@ export class InteractiveMode {
 		this.ui = new TUI(new ProcessTerminal(), this.settingsManager.getShowHardwareCursor());
 		this.ui.setClearOnShrink(this.settingsManager.getClearOnShrink());
 		this.chatContainer.setViewportRows(() => this.ui.terminal.rows);
+		this.chatContainer.setPrefixSeedViewport(
+			this.settingsManager.getScrollbackSeedScreens(),
+			() => this.ui.terminal.rows,
+		);
 		this.headerContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();
@@ -3830,7 +3834,9 @@ export class InteractiveMode {
 				message.role === "bashExecution",
 		);
 		this.renderSessionContext({ ...context, messages });
-		return this.chatContainer.render(this.ui.terminal.columns);
+		// The full transcript, not the windowed tail: the exit log is a consumer
+		// of every line, so virtualization must not apply here.
+		return this.chatContainer.renderAll(this.ui.terminal.columns);
 	}
 
 	// =========================================================================
