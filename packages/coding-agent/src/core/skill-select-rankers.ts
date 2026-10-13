@@ -2,11 +2,11 @@
  * Spec 058 R2–R4: the two skill rankers behind `skill_search` and the task-start candidates.
  *
  * Loaded only with `skill-search.ts` (first search or candidate computation, never at startup). Both modes are
- * local pure functions: `bm25` is `searchCorpus`; `metacon` narrows with BM25 and then picks a covering set
+ * local pure functions: `bm25` uses the shared corpus ranking; `metacon` narrows with BM25 and picks a covering set
  * with `planSkills`. Neither imports `omk-adaptorch-wpl` or any network client (AC 6).
  */
 import { createHash } from "node:crypto";
-import { retrievalTokens, searchCorpus } from "../metacognition/retrieval.ts";
+import { rankCorpus, retrievalTokens } from "../metacognition/retrieval.ts";
 import { type CapabilityNeed, planSkills, type SkillDescriptor, type SkillPlan } from "../metacognition/skills.ts";
 
 export type SkillSelectRankMode = "bm25" | "metacon";
@@ -42,7 +42,7 @@ export interface MetaconStats {
 
 export interface RankOptions {
 	readonly limit: number;
-	/** Names never returned (skills already offered this session). */
+	/** Names never returned, along with their content-identical aliases (already offered skills). */
 	readonly exclude?: ReadonlySet<string>;
 	/** `!skill` / `/skill:` names of this prompt (R4 `explicitSkills`). */
 	readonly explicit?: readonly string[];
@@ -57,7 +57,7 @@ export interface RankResult {
 	readonly metacon?: MetaconStats;
 }
 
-/** `searchCorpus` limit cap, also the BM25 candidate pool. */
+/** Distinct eligible BM25 candidate cap, after de-duplication and exclusions. */
 export const BM25_MATCH_CAP = 64;
 /** R4.1: metacon plans over the BM25 top 64 (`planSkills` takes at most 500). */
 export const METACON_PREFILTER = 64;
@@ -93,7 +93,7 @@ export function rankSkills(
 	return { ...metacon(query, docs, pool, options), matchCount: pool.length };
 }
 
-/** BM25 order with ties by name (`searchCorpus`), one entry per `contentHash` (R2), excluded names removed. */
+/** Preserve BM25 scores/order, then remove aliases and exclusions before capping distinct candidates. */
 function bm25Pool(
 	query: string,
 	docs: readonly RankDoc[],
@@ -102,20 +102,24 @@ function bm25Pool(
 	const bounded = query.slice(0, MAX_QUERY_CHARS);
 	if (bounded.trim() === "" || docs.length === 0) return [];
 	const byName = new Map(docs.map((doc) => [doc.name, doc]));
+	const excludedHashes = new Set(
+		docs.filter((doc) => exclude?.has(doc.name) && doc.contentHash).map((doc) => doc.contentHash),
+	);
+	const seen = new Set<string>();
 	const corpus = [...byName.values()].map((doc) => ({
 		id: doc.name,
 		uri: doc.location,
 		body: `${doc.name} ${doc.description}`,
 	}));
-	const seen = new Set<string>();
 	const pool: Omit<RankedSkill, "source">[] = [];
-	for (const hit of searchCorpus(bounded, corpus, BM25_MATCH_CAP)) {
+	for (const hit of rankCorpus(bounded, corpus)) {
 		const doc = byName.get(hit.id);
-		if (!doc || exclude?.has(doc.name)) continue;
+		if (!doc || exclude?.has(doc.name) || (doc.contentHash && excludedHashes.has(doc.contentHash))) continue;
 		const key = doc.contentHash ?? `name:${doc.name}`;
 		if (seen.has(key)) continue;
 		seen.add(key);
 		pool.push({ ...doc, score: hit.score });
+		if (pool.length === BM25_MATCH_CAP) break;
 	}
 	return pool;
 }

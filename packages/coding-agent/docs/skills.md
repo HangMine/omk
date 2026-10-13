@@ -135,7 +135,7 @@ With many skills the `<available_skills>` list grows the system prompt by every 
 
 - `bm25`: the BM25 order above.
 - `metacon`: narrows to the BM25 top 64, then picks a set of skills that together cover the words of the query (local capability-coverage planning, no model or network call). Remaining slots are filled in BM25 order. Each result is marked `metacon` or `bm25-fill` in the tool details and the run log.
-- In both modes, skills whose SKILL.md content is byte-identical (same content hash) appear once.
+- In both modes, skills whose SKILL.md content is byte-identical (same content hash) appear once. Duplicates and already-offered skills, including their content-identical aliases, are removed before the 64-candidate cap, so they cannot crowd out remaining matches. The highest-ranked name represents each identical-content group, with ties broken by name. BM25 scores still use the complete searched corpus.
 - Any other value (including `wpl`) leaves skill search off and prints one warning.
 
 With 24 skills or fewer, without `read`, or with the flag off, prompts are unchanged.

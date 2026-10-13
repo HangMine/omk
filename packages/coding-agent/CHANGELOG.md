@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Skill search removes content-identical aliases and already-offered skills before capping the distinct BM25 pool at 64. Duplicates no longer hide remaining matches or get suggested again under another name; scores, highest-ranked representatives and both ranking modes are preserved.
+
 - Worker trust checks no longer reuse permanent positive Git answers. Later spawns revalidate registration, common repository identity and linked-worktree back-pointers; removed/recreated directories and replaced `.git` pointers receive no inherited grant. Concurrent Git queries remain shared only while in flight. Already-aborted same-project spawns also receive no grant.
 
 ## [1.4.0] - 2026-10-11
