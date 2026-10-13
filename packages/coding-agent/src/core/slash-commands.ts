@@ -17,6 +17,7 @@ export interface BuiltinSlashCommand {
 
 export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "settings", description: "Open settings menu" },
+	{ name: "attach", description: "Attach images: add <paths>, paste, list, remove [n], clear" },
 	{
 		name: "think",
 		description: "Select thinking level (auto routes per task through v4)",

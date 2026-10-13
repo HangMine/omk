@@ -10,12 +10,11 @@ import * as path from "node:path";
 import { spawn, spawnSync } from "child_process";
 import type { AgentMessage, ThinkingLevel } from "omk-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, OAuthProviderId, OAuthSelectPrompt } from "omk-ai";
-import { AttachmentStore } from "../../core/attachment-store.ts";
-import { describePromptImageAttachment, type PromptImageAttachment } from "../../core/prompt-attachment.ts";
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
 import { planFirstRun } from "./first-run.ts";
+import { PromptAttachmentDraft } from "./prompt-attachment-draft.ts";
 import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
 
 export { formatResumeCommand } from "./interactive-resume-command.ts";
@@ -127,7 +126,6 @@ import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/changelog.ts";
 import { copyToClipboard } from "../../utils/clipboard.ts";
-import { readClipboardImage } from "../../utils/clipboard-image.ts";
 import { parseGitUrl } from "../../utils/git.ts";
 import { openBrowser } from "../../utils/open-browser.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
@@ -284,8 +282,12 @@ export class InteractiveMode {
 	private isInitialized = false;
 	private onInputCallback?: (payload: InteractivePromptPayload) => void;
 	private pendingPromptPayloads: InteractivePromptPayload[] = [];
-	private readonly attachmentStore = new AttachmentStore();
-	private draftAttachmentIds: string[] = [];
+	private readonly attachmentDraft = new PromptAttachmentDraft({
+		cwd: () => this.sessionManager.getCwd(),
+		changed: () => this.refreshAttachmentStrip(),
+		status: (message) => this.showStatus(message),
+		warning: (message) => this.showWarning(message),
+	});
 	private readonly attachmentStripContainer = new Container();
 	private interactiveLoopActive = true;
 	private loadingAnimation: Loader | undefined = undefined;
@@ -1011,7 +1013,8 @@ export class InteractiveMode {
 				// Acceptance: release exactly the attachments that were sent.
 				if (payload.imageIds && payload.imageIds.length > 0) this.consumeDraftAttachments(payload.imageIds);
 			} catch (error: unknown) {
-				// Preflight/model failure: attachments stay attached for retry.
+				// Preserve the image draft and its text after a rejected submission.
+				if (payload.imageIds?.length && !this.editor.getText()) this.editor.setText(payload.text);
 				this.showPromptError(error, previousTermination);
 			}
 		}
@@ -1806,6 +1809,7 @@ export class InteractiveMode {
 					try {
 						const result = await this.runtimeHost.newSession(options);
 						if (!result.cancelled) {
+							this.attachmentDraft?.clear();
 							this.renderCurrentSessionState();
 							this.ui.requestRender();
 						}
@@ -1818,6 +1822,7 @@ export class InteractiveMode {
 					try {
 						const result = await this.runtimeHost.fork(entryId, options);
 						if (!result.cancelled) {
+							this.attachmentDraft?.clear();
 							this.renderCurrentSessionState();
 							this.editor.setText(result.selectedText ?? "");
 							this.showStatus("Forked to new session");
@@ -2541,6 +2546,7 @@ export class InteractiveMode {
 			// Wire up callbacks from the default editor
 			newEditor.onSubmit = this.defaultEditor.onSubmit;
 			newEditor.onChange = this.defaultEditor.onChange;
+			newEditor.onPaste = this.defaultEditor.onPaste;
 
 			// Copy text from previous editor
 			newEditor.setText(currentText);
@@ -2559,7 +2565,7 @@ export class InteractiveMode {
 			}
 
 			// If extending CustomEditor, copy app-level handlers
-			// Use duck typing since instanceof fails across jiti module boundaries
+			// SAFETY: duck-typed record access; instanceof fails across jiti module boundaries, and every field read below is guarded by `in` checks.
 			const customEditor = newEditor as unknown as Record<string, unknown>;
 			if ("actionHandlers" in customEditor && customEditor.actionHandlers instanceof Map) {
 				if (!customEditor.onEscape) {
@@ -2772,113 +2778,50 @@ export class InteractiveMode {
 			}
 		};
 
-		// Handle the configured clipboard image shortcut (Ctrl+V or Alt+V).
-		this.defaultEditor.onPasteImage = () => {
-			this.handleClipboardImagePaste();
-		};
+		// File-only bracketed pastes attach images; normal text follows the editor's paste path.
+		this.defaultEditor.onPaste = (text) => this.attachmentDraft.paste(text);
+		this.defaultEditor.onPasteImage = () => void this.handleClipboardImagePaste();
 	}
 
 	private async handleClipboardImagePaste(): Promise<void> {
-		try {
-			const image = await readClipboardImage();
-			if (!image) {
-				this.showStatus(
-					"No image in clipboard. Copy a screenshot, then press Alt+V (or Ctrl+V if forwarded by your terminal).",
-				);
-				return;
-			}
-			const attachment = this.attachmentStore.put(new Uint8Array(image.bytes), "clipboard");
-			this.draftAttachmentIds.push(attachment.id);
-			this.refreshAttachmentStrip();
-			this.showStatus("Image attached to the prompt. Submit when ready.");
-		} catch (error) {
-			this.showWarning(`Clipboard paste failed: ${error instanceof Error ? error.message : String(error)}`);
-		}
+		await this.attachmentDraft.clipboard();
 	}
 
 	/** Rebuild the preview strip above the editor from the current draft ids. */
 	private refreshAttachmentStrip(): void {
+		for (const child of this.attachmentStripContainer.children) disposeComponent(child);
 		this.attachmentStripContainer.clear();
-		const items = this.draftAttachmentIds
-			.map((id) => this.attachmentStore.get(id))
-			.filter((item): item is PromptImageAttachment => item !== undefined);
+		const items = this.attachmentDraft.store.list();
 		if (items.length > 0) {
 			this.attachmentStripContainer.addChild(
-				createAttachmentStrip(items, (id) => this.attachmentStore.getBytes(id)),
+				createAttachmentStrip(
+					items,
+					(id) => this.attachmentDraft.store.getBytes(id),
+					() => this.ui.requestRender(),
+				),
 			);
 		}
+		if (this.attachmentDraft.busy)
+			this.attachmentStripContainer.addChild(new Text("Loading image attachments…", 0, 0));
 		this.ui.requestRender();
 	}
 
 	private materializeDraftImages(ids: readonly string[]): ImageContent[] {
-		return this.attachmentStore.materializeImages(ids);
+		return this.attachmentDraft.materialize(ids);
 	}
 
 	/** Release exactly the attachments that were accepted with a sent prompt. */
 	private consumeDraftAttachments(ids: readonly string[]): void {
-		for (const id of ids) {
-			this.attachmentStore.remove(id);
-			const index = this.draftAttachmentIds.indexOf(id);
-			if (index >= 0) this.draftAttachmentIds.splice(index, 1);
-		}
-		this.refreshAttachmentStrip();
-	}
-
-	private clearDraftAttachments(): void {
-		this.draftAttachmentIds = [];
-		this.attachmentStore.clear();
-		this.refreshAttachmentStrip();
-	}
-
-	private removeLastDraftAttachment(): void {
-		const id = this.draftAttachmentIds.pop();
-		if (id) this.attachmentStore.remove(id);
-		this.refreshAttachmentStrip();
+		this.attachmentDraft.consume(ids);
 	}
 
 	private isVisionCapable(): boolean {
-		const model = this.session.model as Model<any> | undefined;
+		const model = this.session.model;
 		return Array.isArray(model?.input) ? model.input.includes("image") : true;
 	}
 
-	private handleAttachCommand(argument: string): void {
-		const [verb, rest] = argument.split(/\s+/);
-		switch (verb ?? "") {
-			case "":
-			case "list": {
-				const items = this.draftAttachmentIds
-					.map((id) => this.attachmentStore.get(id))
-					.filter((item): item is PromptImageAttachment => item !== undefined);
-				if (items.length === 0) {
-					this.showStatus("No image attachments.");
-				} else {
-					this.showStatus(
-						items.map((item, index) => `${index + 1}. ${describePromptImageAttachment(item)}`).join(" · "),
-					);
-				}
-				break;
-			}
-			case "clear":
-				this.clearDraftAttachments();
-				this.showStatus("Image attachments cleared.");
-				break;
-			case "remove":
-			case "rm": {
-				const position = Number.parseInt(rest ?? "", 10);
-				if (Number.isFinite(position) && position >= 1 && position <= this.draftAttachmentIds.length) {
-					const id = this.draftAttachmentIds.splice(position - 1, 1)[0];
-					if (id) this.attachmentStore.remove(id);
-				} else {
-					this.removeLastDraftAttachment();
-				}
-				this.refreshAttachmentStrip();
-				this.showStatus("Image attachment removed.");
-				break;
-			}
-			default:
-				this.showStatus("Usage: /attach [list|clear|remove [n]]");
-				break;
-		}
+	private async handleAttachCommand(argument: string): Promise<void> {
+		await this.attachmentDraft.command(argument);
 	}
 
 	private parseBangInput(text: string): BangInvocation {
@@ -2898,14 +2841,14 @@ export class InteractiveMode {
 	private setupEditorSubmitHandler(): void {
 		this.defaultEditor.onSubmit = async (text: string) => {
 			text = text.trim();
-			const draftImageIds = [...(this.draftAttachmentIds ?? [])];
+			const draftImageIds = [...(this.attachmentDraft?.ids ?? [])];
 			const hasAttachments = draftImageIds.length > 0;
 			if (!text && !hasAttachments) return;
 
 			// Handle commands
 			if (text === "/attach" || text.startsWith("/attach ")) {
 				this.editor.setText("");
-				this.handleAttachCommand(text.slice("/attach".length).trim());
+				await this.handleAttachCommand(text.slice("/attach".length).trim());
 				return;
 			}
 			if (text === "/settings") {
@@ -3082,15 +3025,22 @@ export class InteractiveMode {
 				}
 			}
 
+			if (this.attachmentDraft?.busy) {
+				this.editor.setText(text);
+				this.showWarning("Image attachments are still loading. Wait for the preview, then submit again.");
+				return;
+			}
 			let draftImages: ImageContent[] | undefined;
 			if (hasAttachments) {
 				try {
 					draftImages = this.materializeDraftImages(draftImageIds);
 				} catch (error) {
+					this.editor.setText(text);
 					this.showWarning(error instanceof Error ? error.message : String(error));
 					return;
 				}
 				if (!this.isVisionCapable()) {
+					this.editor.setText(text);
 					this.showWarning("The selected model cannot accept images. Switch model (/model) or run /attach clear.");
 					return;
 				}
@@ -3099,6 +3049,7 @@ export class InteractiveMode {
 			// Queue input during compaction (extension commands execute immediately)
 			if (this.session.isCompacting) {
 				if (hasAttachments) {
+					this.editor.setText(text);
 					this.showWarning("Attachments are held while compaction finishes — resubmit after it completes.");
 					return;
 				}
@@ -3117,10 +3068,16 @@ export class InteractiveMode {
 			if (this.session.isStreaming) {
 				this.editor.addToHistory?.(text);
 				this.editor.setText("");
-				await this.session.prompt(
-					text,
-					draftImages ? { images: draftImages, streamingBehavior: "steer" } : { streamingBehavior: "steer" },
-				);
+				try {
+					await this.session.prompt(
+						text,
+						draftImages ? { images: draftImages, streamingBehavior: "steer" } : { streamingBehavior: "steer" },
+					);
+				} catch (error) {
+					if (!this.editor.getText()) this.editor.setText(text);
+					this.showWarning(error instanceof Error ? error.message : String(error));
+					return;
+				}
 				// Queued without throwing: acceptance — release exactly what was sent.
 				if (draftImageIds.length > 0) this.consumeDraftAttachments(draftImageIds);
 				this.updatePendingMessagesDisplay();
@@ -4038,10 +3995,19 @@ export class InteractiveMode {
 
 	private async handleFollowUp(): Promise<void> {
 		const text = (this.editor.getExpandedText?.() ?? this.editor.getText()).trim();
-		if (!text) return;
+		const imageIds = [...(this.attachmentDraft?.ids ?? [])];
+		if (!text && !imageIds.length) return;
+		if (this.attachmentDraft?.busy) {
+			this.showWarning("Image attachments are still loading. Wait for the preview, then submit again.");
+			return;
+		}
 
 		// Queue input during compaction (extension commands execute immediately)
 		if (this.session.isCompacting) {
+			if (imageIds.length) {
+				this.showWarning("Attachments are held while compaction finishes — resubmit after it completes.");
+				return;
+			}
 			if (this.isExtensionCommand(text)) {
 				this.editor.addToHistory?.(text);
 				this.editor.setText("");
@@ -4056,8 +4022,20 @@ export class InteractiveMode {
 		// This handles extension commands (execute immediately), prompt template expansion, and queueing
 		if (this.session.isStreaming) {
 			this.editor.addToHistory?.(text);
+			if (imageIds.length && !this.isVisionCapable()) {
+				this.showWarning("The selected model cannot accept images. Switch model (/model) or run /attach clear.");
+				return;
+			}
+			const images = imageIds.length ? this.materializeDraftImages(imageIds) : undefined;
 			this.editor.setText("");
-			await this.session.prompt(text, { streamingBehavior: "followUp" });
+			try {
+				await this.session.prompt(text, { streamingBehavior: "followUp", ...(images ? { images } : {}) });
+				if (imageIds.length) this.consumeDraftAttachments(imageIds);
+			} catch (error) {
+				if (!this.editor.getText()) this.editor.setText(text);
+				this.showWarning(error instanceof Error ? error.message : String(error));
+				return;
+			}
 			this.updatePendingMessagesDisplay();
 			this.ui.requestRender();
 		}
@@ -4941,6 +4919,7 @@ export class InteractiveMode {
 							return;
 						}
 
+						this.attachmentDraft?.clear();
 						this.renderCurrentSessionState();
 						this.editor.setText(result.selectedText ?? "");
 						done();
@@ -4974,6 +4953,7 @@ export class InteractiveMode {
 				return;
 			}
 
+			this.attachmentDraft?.clear();
 			this.renderCurrentSessionState();
 			this.editor.setText("");
 			this.showStatus("Cloned to new session");
@@ -5160,6 +5140,7 @@ export class InteractiveMode {
 			if (result.cancelled) {
 				return result;
 			}
+			this.attachmentDraft?.clear();
 			this.renderCurrentSessionState();
 			this.showStatus("Resumed session");
 			return result;
@@ -5177,6 +5158,7 @@ export class InteractiveMode {
 				if (result.cancelled) {
 					return result;
 				}
+				this.attachmentDraft?.clear();
 				this.renderCurrentSessionState();
 				this.showStatus("Resumed session in current cwd");
 				return result;
@@ -6311,6 +6293,7 @@ export class InteractiveMode {
 			if (result.cancelled) {
 				return;
 			}
+			this.attachmentDraft?.clear();
 			this.renderCurrentSessionState();
 			this.chatContainer.addChild(new Spacer(1));
 			this.chatContainer.addChild(new Text(`${theme.fg("accent", "✓ New session started")}`, 1, 1));
@@ -6493,6 +6476,8 @@ export class InteractiveMode {
 			this.loadingAnimation = undefined;
 		}
 		this.clearExtensionTerminalInputListeners();
+		this.attachmentDraft?.dispose();
+		for (const child of this.attachmentStripContainer?.children ?? []) disposeComponent(child);
 
 		let finalLines: string[] | undefined;
 		if (options.finalSessionLog) {

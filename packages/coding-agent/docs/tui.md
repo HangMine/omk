@@ -503,6 +503,12 @@ class CachedComponent {
 
 Call `invalidate()` when state changes, then `handle.requestRender()` to trigger re-render.
 
+### Prompt attachment paste interception
+
+`Editor` exposes optional `onPaste(text): boolean`. It is called once with a complete bracketed paste, even when terminal input arrives in chunks. Return `true` to consume it (for example, to attach dropped image paths); return `false` to keep ordinary text insertion and undo behavior. OMK forwards this callback when replacing its editor, but a custom editor implementation must invoke it itself. Pasted control bytes are content rather than application shortcuts.
+
+Prompt previews decode into small owned RGBA thumbnails, request a repaint on completion, and release their rendered projection when replaced or stopped. Decode failures show metadata. Original attachment bytes remain in the draft until accepted; thumbnails are never sent in place of the original images.
+
 ### Assistant streaming blocks
 
 `AssistantMessageComponent` reuses text/thinking components at unchanged content

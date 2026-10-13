@@ -44,24 +44,23 @@ export class AttachmentStore {
 
 	/** Validate + store bytes; returns the attachment record. Throws PromptAttachmentError. */
 	put(bytes: Uint8Array, source: PromptAttachmentSource): PromptImageAttachment {
+		const attachment = createPromptImageAttachment(bytes, source, {
+			maxImageBytes: this.maxImageBytes,
+			maxPixels: this.maxPixels,
+		});
+		// Identical bytes consume no additional count or draft-byte budget.
+		const existing = [...this.entries.values()].find((entry) => entry.attachment.sha256 === attachment.sha256);
+		if (existing) return existing.attachment;
 		if (this.entries.size >= this.maxAttachments) {
 			throw new PromptAttachmentError("limit-reached", `Attachment limit reached (${this.maxAttachments}).`);
 		}
-		const draftBytes = this.totalBytes() + bytes.length;
-		if (draftBytes > this.maxDraftBytes) {
+		if (this.totalBytes() + bytes.length > this.maxDraftBytes) {
 			throw new PromptAttachmentError(
 				"too-large",
 				`Draft would exceed ${(this.maxDraftBytes / (1024 * 1024)).toFixed(0)} MiB of attachments.`,
 			);
 		}
-		const attachment = createPromptImageAttachment(bytes, source, {
-			maxImageBytes: this.maxImageBytes,
-			maxPixels: this.maxPixels,
-		});
-		// Content-addressed dedupe: identical bytes reuse one entry.
-		const existing = [...this.entries.values()].find((entry) => entry.attachment.sha256 === attachment.sha256);
-		if (existing) return existing.attachment;
-		this.entries.set(attachment.id, { attachment, bytes });
+		this.entries.set(attachment.id, { attachment, bytes: new Uint8Array(bytes) });
 		return attachment;
 	}
 

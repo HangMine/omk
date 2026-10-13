@@ -22,13 +22,33 @@ The editor can be replaced temporarily by built-in UI such as `/settings` or by 
 | File reference | Type `@` to fuzzy-search project files |
 | Path completion | Press Tab to complete paths |
 | Multi-line input | Shift+Enter, or Ctrl+Enter on Windows Terminal |
-| Images | Paste with Ctrl+V (Alt+V on Windows) or drag into the terminal; pastes attach as preview chips above the editor and send with your next prompt |
+| Images | Paste screenshots with Ctrl+V / Alt+V, drop local image paths into the terminal, or use `/attach add <paths>`; previews appear above the editor |
 | Skill/bash launcher | `!` opens skill completion; `!skill:name prompt` invokes a skill; `!omk <role-or-request>` routes through OMK role hubs |
 | Shell command | `! command` runs and sends output to the model |
 | Hidden shell command | `!! command` runs without sending output to the model |
 | External editor | Ctrl+G opens `$VISUAL` or `$EDITOR` |
 
 See [Keybindings](keybindings.md) for all shortcuts and customization.
+
+### Images and screenshots in the prompt
+
+```text
+/attach add "./Screen Shot.png" ./second.jpg
+/attach paste
+/attach list
+/attach remove 2
+/attach clear
+```
+
+Copy a screenshot, return to OMK and press **Alt+V** (or **Ctrl+V** when the terminal forwards it). On macOS, capture to the clipboard with **Ctrl+Cmd+Shift+4**; on Windows/WSL, use **Win+Shift+S**. OMK never changes your terminal shortcuts automatically.
+
+Terminals normally drop files as quoted or escaped paths. A bracketed paste containing only explicit local PNG, JPEG, WebP or GIF paths attaches those files without changing existing prompt text. Multiple paths and `file://` URIs are supported. Text mixed with paths stays ordinary text; use `/attach add` for filenames without an explicit path prefix. Remote URLs are not downloaded.
+
+Press **Enter** to send text and images together, or submit an image-only prompt. **Alt+Enter** also includes images when queueing a follow-up. A loading indicator blocks submission until acquisition completes. A text-only model, compaction or rejected queue submission retains the draft for retry. `/attach clear` and a successful `/new` invalidate pending reads; late results cannot attach to the new draft.
+
+Identical images appear once. Limits are eight images, 10 MiB per image, 32 MiB per draft and 40 million header-declared pixels. File reads are bounded and image container signatures are checked instead of trusting extensions or clipboard MIME labels. A failed multi-file batch leaves the existing draft intact. Previews use small cached RGBA thumbnails; decoding failures show metadata instead. The model receives the original image bytes, not the thumbnail.
+
+File drops require bracketed paste from the terminal; custom editors must support the optional `onPaste` callback or forward the image shortcut. Clipboard access is local: a remote SSH process cannot read your desktop clipboard. See [Terminal setup](terminal-setup.md) for terminal-specific forwarding.
 
 ## Slash Commands
 
@@ -46,6 +66,7 @@ this display change enables no foreign tools or compatibility guarantees.
 | `/think` | Choose thinking level, or `auto` to route per task through v4 |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
 | `/settings` | Thinking level, theme, message delivery, transport |
+| `/attach [add <paths>\|paste\|list\|remove [n]\|clear]` | Add image files, paste a screenshot, inspect or remove prompt attachments |
 | `/resume` | Pick from previous sessions |
 | `/new` | Start a new session |
 | `/name <name>` | Set session display name |

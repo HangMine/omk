@@ -28,6 +28,11 @@ export class CustomEditor extends Editor {
 	}
 
 	handleInput(data: string): void {
+		// Pasted control bytes are content, never app shortcuts.
+		if (this.isInPaste || data.includes("\x1b[200~")) {
+			super.handleInput(data);
+			return;
+		}
 		// Check extension-registered shortcuts first
 		if (this.onExtensionShortcut?.(data)) {
 			return;

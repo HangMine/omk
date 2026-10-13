@@ -4,6 +4,7 @@
 
 ### Added
 
+- Optional `Editor.onPaste(text): boolean` intercepts complete bracketed pastes once, including chunked input; returning true consumes the paste while false retains ordinary text insertion/undo. `EditorComponent` exposes the optional callback for custom editor adapters.
 - `WindowedContainer` virtual prefix (`setPrefixSeed`/`setPrefixSeedViewport`): settled children above the live + seed budget skip rendering at component boundaries. Prefix identity and settledness checks still visit skipped children. Off by default; zero seeds only the live tail, while `setPrefixSeed()` restores full-history rendering. Seed changes and height-only resizes recompute the boundary. `renderAll(width)` renders the complete transcript without changing windowed state. `WindowedRenderStats.virtualChildren` and `getVirtualChildCount()` report the skipped prefix size.
 
 ### Fixed

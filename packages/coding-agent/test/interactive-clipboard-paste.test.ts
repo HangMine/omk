@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AttachmentStore } from "../src/core/attachment-store.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
+import { PromptAttachmentDraft } from "../src/modes/interactive/prompt-attachment-draft.ts";
 
 const mocks = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock("../src/utils/clipboard-image.ts", () => ({ readClipboardImage: mocks.read }));
@@ -12,13 +12,24 @@ async function paste(context: object) {
 }
 
 function context() {
-	const draftAttachmentIds: string[] = [];
+	const refreshAttachmentStrip = vi.fn();
+	const showWarning = vi.fn();
+	const showStatus = vi.fn();
+	const attachmentDraft = new PromptAttachmentDraft({
+		cwd: () => process.cwd(),
+		changed: refreshAttachmentStrip,
+		warning: showWarning,
+		status: showStatus,
+	});
 	return {
-		attachmentStore: new AttachmentStore(),
-		draftAttachmentIds,
-		refreshAttachmentStrip: vi.fn(),
-		showWarning: vi.fn(),
-		showStatus: vi.fn(),
+		attachmentDraft,
+		attachmentStore: attachmentDraft.store,
+		get draftAttachmentIds() {
+			return attachmentDraft.ids;
+		},
+		refreshAttachmentStrip,
+		showWarning,
+		showStatus,
 	};
 }
 
@@ -44,11 +55,23 @@ describe("interactive screenshot paste", () => {
 		const target = context();
 		await paste(target);
 		expect(target.draftAttachmentIds).toHaveLength(1);
-		expect(target.refreshAttachmentStrip).toHaveBeenCalledOnce();
+		expect(target.refreshAttachmentStrip).toHaveBeenCalled();
 		expect(target.attachmentStore.materializeImages(target.draftAttachmentIds)).toEqual([
 			{ type: "image", data: png.toString("base64"), mimeType: "image/png" },
 		]);
 		expect(target.showWarning).not.toHaveBeenCalled();
+	});
+
+	it("keeps only one draft id when the same screenshot is pasted twice", async () => {
+		const png = Buffer.from(
+			"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6v6EAAAAASUVORK5CYII=",
+			"base64",
+		);
+		mocks.read.mockResolvedValue({ bytes: png, mimeType: "image/png" });
+		const target = context();
+		await paste(target);
+		await paste(target);
+		expect(target.draftAttachmentIds).toHaveLength(1);
 	});
 
 	it("reports acquisition errors without adding a broken attachment", async () => {
