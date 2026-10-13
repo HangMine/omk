@@ -70,11 +70,12 @@ export interface WorkerProjectTrustOptions {
  * "1" only when this process trusted the parent's project, the worker cwd belongs to it
  * (same path, a subdirectory, or a worktree registered by the project's repository, the
  * project being that repository's top level), and the worker cwd's gated items hash the same;
- * otherwise undefined. Async so the git check never blocks the event loop; positive git answers
- * are cached per process. Breaking for callers of the #124 version: this now returns a Promise.
+ * otherwise undefined. Async so the git check never blocks the event loop; concurrent callers
+ * share in-flight git lookups, but later spawns revalidate. Returns a Promise.
  */
 export async function workerProjectTrustEnv(options: WorkerProjectTrustOptions): Promise<"1" | "0" | undefined> {
 	if ((options.env ?? process.env)[TRUST_PROJECT_ENV] === "0") return "0";
+	if (options.signal?.aborted) return undefined;
 	const projectKey = canonicalDir(options.parentCwd);
 	const parentFingerprint = sessionTrust().get(projectKey);
 	if (parentFingerprint === undefined) return undefined;
@@ -82,5 +83,13 @@ export async function workerProjectTrustEnv(options: WorkerProjectTrustOptions):
 	if (!worker || worker.overCap || worker.fingerprint !== parentFingerprint) return undefined;
 	// Hash first (cheap, no process), then the path / git check.
 	const belongs = await belongsToProject(projectKey, worker.projectKey, options.git ?? runGit, options.signal);
-	return belongs ? "1" : undefined;
+	if (!belongs || options.signal?.aborted) return undefined;
+	// Git is asynchronous: do not promote the fingerprint captured before that wait.
+	const current = inspectProjectCode(options.workerCwd, readProjectSettingsFile(options.workerCwd));
+	return current &&
+		!current.overCap &&
+		current.projectKey === worker.projectKey &&
+		current.fingerprint === parentFingerprint
+		? "1"
+		: undefined;
 }
