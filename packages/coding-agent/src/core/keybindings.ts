@@ -22,6 +22,7 @@ export interface AppKeybindings {
 	"app.model.cycleForward": true;
 	"app.model.cycleBackward": true;
 	"app.model.select": true;
+	"app.skills.select": true;
 	"app.tools.expand": true;
 	"app.sidebar.toggle": true;
 	"app.thinking.toggle": true;
@@ -86,6 +87,7 @@ export const KEYBINDINGS = {
 		description: "Cycle to previous model",
 	},
 	"app.model.select": { defaultKeys: "ctrl+l", description: "Open model selector" },
+	"app.skills.select": { defaultKeys: "alt+s", description: "Open skill picker" },
 	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Toggle tool output" },
 	"app.sidebar.toggle": {
 		defaultKeys: "ctrl+q",

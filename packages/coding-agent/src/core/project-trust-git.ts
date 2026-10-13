@@ -14,12 +14,12 @@
  * git runs asynchronously (no event-loop stall) with a 2 s timeout, every `GIT_*` variable
  * removed, `core.fsmonitor=false`, and from a fixed cwd (`os.tmpdir()`) with the target passed
  * as `-C <dir>`, so no git binary inside the model-chosen directory can be picked up. Any
- * failure, timeout or abort means no trust; an abort only stops that caller's wait. Only
- * positive answers are cached per process; a failure is asked again next time, and a worker
- * missing from a cached worktree list makes the list be read once more, so worktrees added
- * later are found.
+ * failure, timeout or abort means no trust; an abort only stops that caller's wait. Concurrent
+ * callers share in-flight lookups, but settled answers are discarded. Each later spawn checks
+ * the current repository and registration again, including removed or replaced worktrees.
  */
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { canonicalDir } from "./project-code-fingerprint.ts";
@@ -53,26 +53,35 @@ export const runGit: GitRunner = (dir, args) =>
 		);
 	});
 
+interface RepositoryIdentity {
+	readonly top: string;
+	readonly gitDir: string;
+	readonly commonDir: string;
+}
+
+interface RegisteredRepository {
+	readonly identity: RepositoryIdentity;
+	readonly worktrees: ReadonlySet<string>;
+}
+
 interface GitTrustCache {
-	/** Real path of a directory → real path of its git top level. Positive answers only. */
-	readonly toplevels: Map<string, Promise<string | undefined>>;
-	/** Trusted project → real paths of its registered worktrees. Positive answers only. */
-	readonly worktrees: Map<string, Promise<ReadonlySet<string> | undefined>>;
+	readonly repositories: Map<string, Promise<RepositoryIdentity | undefined>>;
+	readonly worktrees: Map<string, Promise<RegisteredRepository | undefined>>;
 }
 
 // On a global symbol, like the session trust map, so a separately loaded copy shares it.
-const GIT_CACHE_KEY = Symbol.for("omk.projectTrust.gitCache");
+const GIT_CACHE_KEY = Symbol.for("omk.projectTrust.gitInFlight");
 
 function gitCache(): GitTrustCache {
 	const holder = globalThis as { [GIT_CACHE_KEY]?: GitTrustCache };
-	holder[GIT_CACHE_KEY] ??= { toplevels: new Map(), worktrees: new Map() };
+	holder[GIT_CACHE_KEY] ??= { repositories: new Map(), worktrees: new Map() };
 	return holder[GIT_CACHE_KEY];
 }
 
 /** @internal Tests only: forget cached git answers. */
 export function resetWorkerTrustGitCache(): void {
 	const cache = gitCache();
-	cache.toplevels.clear();
+	cache.repositories.clear();
 	cache.worktrees.clear();
 }
 
@@ -81,12 +90,8 @@ function forget<T>(map: Map<string, Promise<T>>, key: string, pending: Promise<T
 	if (map.get(key) === pending) map.delete(key);
 }
 
-/**
- * Shares one in-flight lookup between concurrent callers and keeps the answer only when it is
- * positive: an undefined answer (failure, timeout, abort, not a repository) is removed once
- * settled, so the next call asks git again.
- */
-function memoPositive<T>(
+/** Shares concurrent lookups only: a previous grant must never authorize a replaced repository. */
+function memoInFlight<T>(
 	map: Map<string, Promise<T | undefined>>,
 	key: string,
 	load: () => Promise<T | undefined>,
@@ -95,9 +100,7 @@ function memoPositive<T>(
 	if (cached) return cached;
 	const pending = load().catch(() => undefined);
 	map.set(key, pending);
-	void pending.then((value) => {
-		if (value === undefined) forget(map, key, pending);
-	});
+	void pending.then(() => forget(map, key, pending));
 	return pending;
 }
 
@@ -109,23 +112,33 @@ async function safeGit(git: GitRunner, dir: string, args: readonly string[]): Pr
 	}
 }
 
-function toplevel(dir: string, git: GitRunner): Promise<string | undefined> {
-	return memoPositive(gitCache().toplevels, dir, async () => {
-		const output = (await safeGit(git, dir, ["rev-parse", "--show-toplevel"]))?.trim();
-		return output ? canonicalDir(path.resolve(dir, output)) : undefined;
+function repositoryIdentity(dir: string, git: GitRunner): Promise<RepositoryIdentity | undefined> {
+	return memoInFlight(gitCache().repositories, dir, async () => {
+		const output = await safeGit(git, dir, [
+			"rev-parse",
+			"--show-toplevel",
+			"--absolute-git-dir",
+			"--git-common-dir",
+		]);
+		const fields = output?.trimEnd().split(/\r?\n/);
+		// Ambiguous output (including paths with embedded newlines) fails closed.
+		if (!fields || fields.length !== 3 || fields.some((field) => field.length === 0)) return undefined;
+		const [top, gitDir, commonDir] = fields.map((field) => canonicalDir(path.resolve(dir, field)));
+		return { top, gitDir, commonDir };
 	});
 }
 
-function registeredWorktrees(projectKey: string, git: GitRunner): Promise<ReadonlySet<string> | undefined> {
-	return memoPositive(gitCache().worktrees, projectKey, async () => {
-		if ((await toplevel(projectKey, git)) !== projectKey) return undefined;
+function registeredWorktrees(projectKey: string, git: GitRunner): Promise<RegisteredRepository | undefined> {
+	return memoInFlight(gitCache().worktrees, projectKey, async () => {
+		const identity = await repositoryIdentity(projectKey, git);
+		if (identity?.top !== projectKey) return undefined;
 		const output = await safeGit(git, projectKey, ["worktree", "list", "--porcelain", "-z"]);
 		if (output === undefined) return undefined;
 		const worktrees = new Set<string>();
 		for (const field of output.split("\0")) {
 			if (field.startsWith("worktree ")) worktrees.add(canonicalDir(field.slice("worktree ".length)));
 		}
-		return worktrees;
+		return { identity, worktrees };
 	});
 }
 
@@ -134,16 +147,23 @@ function isInside(dir: string, parent: string): boolean {
 }
 
 async function checkRegisteredWorktree(projectKey: string, workerKey: string, git: GitRunner): Promise<boolean> {
-	const listedBefore = gitCache().worktrees.has(projectKey);
-	const listing = registeredWorktrees(projectKey, git);
-	const worktrees = await listing;
-	if (!worktrees) return false;
-	const workerTop = await toplevel(workerKey, git);
-	if (workerTop === undefined || !isInside(workerKey, workerTop)) return false;
-	if (worktrees.has(workerTop)) return true;
-	if (!listedBefore) return false; // this call just read the list
-	forget(gitCache().worktrees, projectKey, listing);
-	return (await registeredWorktrees(projectKey, git))?.has(workerTop) ?? false;
+	const registered = await registeredWorktrees(projectKey, git);
+	if (!registered) return false;
+	const worker = await repositoryIdentity(workerKey, git);
+	if (!worker || worker.commonDir !== registered.identity.commonDir) return false;
+	// A forged .git file pointing at the main .git must not borrow a stale registration.
+	if (worker.gitDir === worker.commonDir) {
+		if (worker.top !== registered.worktrees.values().next().value) return false;
+	} else {
+		if (!isInside(worker.gitDir, path.join(worker.commonDir, "worktrees"))) return false;
+		try {
+			const backPointer = (await readFile(path.join(worker.gitDir, "gitdir"), "utf8")).trimEnd();
+			if (canonicalDir(path.dirname(path.resolve(worker.gitDir, backPointer))) !== worker.top) return false;
+		} catch {
+			return false; // Missing or unreadable registration metadata never authorizes code.
+		}
+	}
+	return isInside(workerKey, worker.top) && registered.worktrees.has(worker.top);
 }
 
 /** Resolves to `false` as soon as `signal` aborts; `work` itself keeps running for other callers. */
@@ -163,11 +183,11 @@ function raceAbort(work: Promise<boolean>, signal: AbortSignal | undefined): Pro
 
 /**
  * Whether `workerKey` (a real path) lies in a worktree registered by the repository whose top
- * level is `projectKey` (a real path). Both arguments must already be canonical. A worker top
- * level missing from a list cached by an earlier call re-reads the list once (a worktree may
- * have been added since). The git lookups are shared between concurrent callers and carry no
- * caller's signal (each is bounded by its timeout); `signal` only makes this caller stop waiting
- * and get `false`. An already aborted signal runs no git.
+ * level is `projectKey` (a real path). Both arguments must already be canonical. Settled answers
+ * are never reused: a removed worktree or changed git configuration revokes the next grant.
+ * Concurrent callers share in-flight git lookups with no caller's signal (each is bounded by
+ * its timeout); `signal` only makes this caller stop waiting and get `false`. An already aborted
+ * signal runs no git.
  */
 export function isInRegisteredWorktree(
 	projectKey: string,

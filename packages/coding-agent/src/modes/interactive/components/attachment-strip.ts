@@ -8,7 +8,11 @@
  */
 
 import { truncateToWidth } from "omk-tui";
-import { describePromptImageAttachment, type PromptImageAttachment } from "../../../core/prompt-attachment.ts";
+import {
+	describePromptImageAttachment,
+	PROMPT_ATTACHMENT_LIMITS,
+	type PromptImageAttachment,
+} from "../../../core/prompt-attachment.ts";
 import { loadPhoton } from "../../../utils/photon.ts";
 import { theme } from "../theme/theme.ts";
 
@@ -18,6 +22,7 @@ const MAX_TILES = 3;
 export interface AttachmentStripHandle {
 	render(width: number): string[];
 	invalidate(): void;
+	dispose(): void;
 }
 
 interface DecodedImage {
@@ -26,10 +31,13 @@ interface DecodedImage {
 	rgba: Uint8Array;
 }
 
-const decodeCache = new Map<string, DecodedImage | null>();
+let decodeCache = new WeakMap<PromptImageAttachment, DecodedImage | null>();
 
-async function decodeToRgba(id: string, bytes: Uint8Array | undefined): Promise<DecodedImage | null> {
-	const cached = decodeCache.get(id);
+async function decodeToRgba(
+	attachment: PromptImageAttachment,
+	bytes: Uint8Array | undefined,
+): Promise<DecodedImage | null> {
+	const cached = decodeCache.get(attachment);
 	if (cached !== undefined) return cached;
 	let decoded: DecodedImage | null = null;
 	if (bytes && bytes.length > 0) {
@@ -40,12 +48,23 @@ async function decodeToRgba(id: string, bytes: Uint8Array | undefined): Promise<
 				try {
 					const width = image.get_width();
 					const height = image.get_height();
-					const raw =
-						typeof (image as { get_image_data?: unknown }).get_image_data === "function"
-							? (image as unknown as { get_image_data: () => Uint8Array }).get_image_data()
-							: image.get_bytes();
-					if (width > 0 && height > 0 && raw.length >= width * height * 4) {
-						decoded = { width, height, rgba: new Uint8Array(raw.buffer, raw.byteOffset, raw.length) };
+					if (width > 0 && height > 0 && width * height <= PROMPT_ATTACHMENT_LIMITS.maxPixels) {
+						const scale = Math.min(1, 80 / width, (PREVIEW_ROWS * 2) / height);
+						const small = photon.resize(
+							image,
+							Math.max(1, Math.round(width * scale)),
+							Math.max(1, Math.round(height * scale)),
+							1,
+						);
+						try {
+							decoded = {
+								width: small.get_width(),
+								height: small.get_height(),
+								rgba: small.get_raw_pixels().slice(),
+							};
+						} finally {
+							small.free();
+						}
 					}
 				} finally {
 					image.free();
@@ -55,7 +74,7 @@ async function decodeToRgba(id: string, bytes: Uint8Array | undefined): Promise<
 			decoded = null;
 		}
 	}
-	decodeCache.set(id, decoded);
+	decodeCache.set(attachment, decoded);
 	return decoded;
 }
 
@@ -71,7 +90,7 @@ function renderTile(index: number, attachment: PromptImageAttachment, tileWidth:
 		muted(`└ ${footerText}${"─".repeat(Math.max(0, tileWidth - footerText.length - 3))}┘`),
 	);
 
-	const inner = tileWidth - 2;
+	const inner = Math.max(0, tileWidth - 2);
 	const lines: string[] = [top];
 
 	if (inner < 8) {
@@ -79,7 +98,7 @@ function renderTile(index: number, attachment: PromptImageAttachment, tileWidth:
 		return lines;
 	}
 
-	const decoded = decodeCache.get(attachment.id);
+	const decoded = decodeCache.get(attachment);
 	if (!decoded) {
 		// Metadata-only fallback (decode unavailable or still pending).
 		for (let row = 0; row < PREVIEW_ROWS; row += 1) {
@@ -91,14 +110,21 @@ function renderTile(index: number, attachment: PromptImageAttachment, tileWidth:
 	}
 
 	const cellRows = PREVIEW_ROWS * 2;
+	const scale = Math.min(inner / decoded.width, cellRows / decoded.height);
+	const offsetX = (inner - decoded.width * scale) / 2;
+	const offsetY = (cellRows - decoded.height * scale) / 2;
+	const pixel = (x: number, y: number): [number, number, number] => {
+		const sx = Math.floor((x - offsetX) / scale);
+		const sy = Math.floor((y - offsetY) / scale);
+		return sx < 0 || sy < 0 || sx >= decoded.width || sy >= decoded.height
+			? [0, 0, 0]
+			: samplePixelAt(decoded, sx, sy);
+	};
 	for (let row = 0; row < PREVIEW_ROWS; row += 1) {
 		let line = "";
 		for (let col = 0; col < inner; col += 1) {
-			const sy = Math.floor(((row * 2 + 0.5) / cellRows) * decoded.height);
-			const syBottom = Math.min(decoded.height - 1, Math.floor(((row * 2 + 1.5) / cellRows) * decoded.height));
-			const sx = Math.floor(((col + 0.5) / inner) * decoded.width);
-			const top_ = samplePixelAt(decoded, sx, sy);
-			const bottom = samplePixelAt(decoded, sx, syBottom);
+			const top_ = pixel(col + 0.5, row * 2 + 0.5);
+			const bottom = pixel(col + 0.5, row * 2 + 1.5);
 			line += `\x1b[38;2;${top_[0]};${top_[1]};${top_[2]}m\x1b[48;2;${bottom[0]};${bottom[1]};${bottom[2]}m▀\x1b[0m`;
 		}
 		lines.push(fitToTileWidth(muted("│") + line + muted("│")));
@@ -111,26 +137,35 @@ function samplePixelAt(decoded: DecodedImage, x: number, y: number): [number, nu
 	const clampedX = Math.min(x, decoded.width - 1);
 	const clampedY = Math.min(y, decoded.height - 1);
 	const offset = (clampedY * decoded.width + clampedX) * 4;
-	return [decoded.rgba[offset], decoded.rgba[offset + 1], decoded.rgba[offset + 2]];
+	const alpha = decoded.rgba[offset + 3] / 255;
+	return [
+		Math.round(decoded.rgba[offset] * alpha),
+		Math.round(decoded.rgba[offset + 1] * alpha),
+		Math.round(decoded.rgba[offset + 2] * alpha),
+	];
 }
 
 /**
  * Build the strip component. `getBytes` supplies raw bytes for decoding;
- * `onHintAction` is reserved for future interactive removal.
+ * `onReady` requests a paint after asynchronous decode; disposed strips never request one.
  */
 export function createAttachmentStrip(
 	attachments: readonly PromptImageAttachment[],
 	getBytes: (id: string) => Uint8Array | undefined,
-	_onHintAction?: () => void,
+	onReady?: () => void,
 ): AttachmentStripHandle {
 	let cachedWidth: number | undefined;
 	let cachedLines: string[] | undefined;
+	let disposed = false;
 
 	void (async () => {
-		for (const attachment of attachments) {
-			await decodeToRgba(attachment.id, getBytes(attachment.id));
+		for (const attachment of attachments.slice(0, MAX_TILES)) {
+			if (disposed) return;
+			await decodeToRgba(attachment, getBytes(attachment.id));
 		}
-		cachedWidth = undefined; // force re-render once decodes settle
+		if (disposed) return;
+		cachedWidth = undefined;
+		onReady?.();
 	})();
 
 	return {
@@ -138,7 +173,7 @@ export function createAttachmentStrip(
 			if (cachedLines && cachedWidth === width) return cachedLines;
 			const lines: string[] = [];
 			const shown = attachments.slice(0, MAX_TILES);
-			const tileWidth = Math.min(44, Math.max(16, width - 6));
+			const tileWidth = Math.min(44, Math.max(0, width));
 			shown.forEach((attachment, index) => {
 				lines.push(...renderTile(index + 1, attachment, tileWidth));
 			});
@@ -156,10 +191,14 @@ export function createAttachmentStrip(
 			cachedWidth = undefined;
 			cachedLines = undefined;
 		},
+		dispose(): void {
+			disposed = true;
+			cachedLines = undefined;
+		},
 	};
 }
 
 /** Test hook: drop memoized decodes. */
 export function resetAttachmentDecodeCache(): void {
-	decodeCache.clear();
+	decodeCache = new WeakMap();
 }

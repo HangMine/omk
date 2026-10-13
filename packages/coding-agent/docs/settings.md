@@ -333,6 +333,7 @@ At the agent level, recognized quota and billing-cycle failures are retryable so
 | `terminal.showImages` | boolean | `true` | Show images in terminal (if supported) |
 | `terminal.imageWidthCells` | number | `60` | Preferred inline image width in terminal cells |
 | `terminal.clearOnShrink` | boolean | `false` | Clear empty rows when content shrinks (can cause flicker) |
+| `terminal.scrollbackSeedScreens` | number | `50` | Terminal-height screens of transcript history rendered above the live tail when a session opens or rebuilds (`--continue`, `/resume`, compaction). `0` renders only the live tail. Prefix identity checks still visit skipped children, but older lines are not rendered on load. A finite setting wins over `OMK_SCROLLBACK_SCREENS`; blank or invalid values fall back to the environment or default. Values are floored and clamped to zero. The explicit exit log renders the complete transcript |
 | `images.autoResize` | boolean | `true` | Resize images to 2000x2000 max |
 | `images.blockImages` | boolean | `false` | Block all images from being sent to LLM |
 

@@ -1,7 +1,7 @@
 /**
  * Spec 053 R6b, PR #124 re-review: a worker outside the trusted project gets
  * `OMK_TRUST_PROJECT=1` only from a worktree registered by the project's own repository, the
- * project being that repository's top level. git runs async; only positive answers are cached.
+ * project being that repository's top level. git runs async; concurrent lookups are shared only until settlement.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -112,7 +112,7 @@ describe("workerProjectTrustEnv git checks (PR #124 re-review)", () => {
 		expect(await trustFor(evil)).toBeUndefined();
 	});
 
-	it("a real git worktree gets 1, and a second spawn does not run git again", async () => {
+	it("a real git worktree gets 1, and a later spawn revalidates its registration", async () => {
 		initProjectRepo();
 		const worktree = join(root, "worktree");
 		git(project, "worktree", "add", "-q", worktree);
@@ -123,7 +123,95 @@ describe("workerProjectTrustEnv git checks (PR #124 re-review)", () => {
 		// parent top level, parent worktree list, worker top level
 		expect(calls).toHaveLength(3);
 		expect(await trustFor(worktree, counting)).toBe("1");
-		expect(calls).toHaveLength(3);
+		expect(calls).toHaveLength(6);
+	});
+
+	it("does not trust a removed worktree rebuilt as an unrelated repository at the same path", async () => {
+		initProjectRepo();
+		const worktree = join(root, "worktree");
+		git(project, "worktree", "add", "-q", worktree);
+		await trustParent();
+		expect(await trustFor(worktree)).toBe("1");
+
+		git(project, "worktree", "remove", "--force", worktree);
+		writeSettings(worktree);
+		git(worktree, "init", "-q");
+
+		expect(await trustFor(worktree)).toBeUndefined();
+	});
+
+	it("does not trust a worker after its gitdir pointer is replaced", async () => {
+		initProjectRepo();
+		const worktree = join(root, "worktree");
+		git(project, "worktree", "add", "-q", worktree);
+		await trustParent();
+		expect(await trustFor(worktree)).toBe("1");
+
+		writeFileSync(join(worktree, ".git"), `gitdir: ${join(project, ".git")}\n`);
+
+		expect(await trustFor(worktree)).toBeUndefined();
+	});
+
+	it("rejects an unrelated repository even while the old worktree registration remains", async () => {
+		initProjectRepo();
+		const worktree = join(root, "worktree");
+		git(project, "worktree", "add", "-q", worktree);
+		await trustParent();
+		expect(await trustFor(worktree)).toBe("1");
+
+		rmSync(worktree, { recursive: true });
+		writeSettings(worktree);
+		git(worktree, "init", "-q");
+
+		expect(await trustFor(worktree)).toBeUndefined();
+	});
+
+	it("rejects a registered path pointing at a different linked worktree's git directory", async () => {
+		initProjectRepo();
+		const first = join(root, "worktree-a");
+		const second = join(root, "worktree-b");
+		git(project, "worktree", "add", "-q", first);
+		git(project, "worktree", "add", "-q", second);
+		await trustParent();
+		expect(await trustFor(first)).toBe("1");
+
+		writeFileSync(join(first, ".git"), `gitdir: ${join(project, ".git", "worktrees", "worktree-b")}\n`);
+
+		expect(await trustFor(first)).toBeUndefined();
+	});
+
+	it("does not grant trust when gated settings change during the asynchronous Git check", async () => {
+		initProjectRepo();
+		const worktree = join(root, "worktree");
+		git(project, "worktree", "add", "-q", worktree);
+		await trustParent();
+		const changing: GitRunner = (dir, args) => {
+			if (dir === worktree) writeFileSync(join(worktree, ".omk", "settings.json"), '{"packages":["npm:changed"]}');
+			return runGit(dir, args);
+		};
+
+		expect(await trustFor(worktree, changing)).toBeUndefined();
+	});
+
+	it("forwards trust from a linked worktree to the main and another linked worktree", async () => {
+		initProjectRepo();
+		const main = project;
+		const parent = join(root, "parent-worktree");
+		const sibling = join(root, "sibling-worktree");
+		git(main, "worktree", "add", "-q", parent);
+		git(main, "worktree", "add", "-q", sibling);
+		project = parent;
+		await trustParent();
+
+		expect(await trustFor(main)).toBe("1");
+		expect(await trustFor(sibling)).toBe("1");
+	});
+
+	it("an already aborted same-project spawn does not receive trust", async () => {
+		await trustParent();
+		const controller = new AbortController();
+		controller.abort();
+		expect(await trustFor(project, undefined, controller.signal)).toBeUndefined();
 	});
 
 	it("concurrent spawns share one git run per question", async () => {
@@ -156,20 +244,20 @@ describe("workerProjectTrustEnv git checks (PR #124 re-review)", () => {
 		expect(await trustFor(worktree, workerFails)).toBeUndefined();
 	});
 
-	it("a worktree added after the first check still gets 1 (the list is read again once)", async () => {
+	it("a worktree added after the first check gets 1 from a fresh registration check", async () => {
 		initProjectRepo();
 		const first = join(root, "worktree-a");
 		git(project, "worktree", "add", "-q", first);
 		await trustParent();
-		expect(await trustFor(first)).toBe("1"); // caches [project, worktree-a]
+		expect(await trustFor(first)).toBe("1");
 		const later = join(root, "worktree-b");
 		git(project, "worktree", "add", "-q", later);
 		const calls: string[][] = [];
 		expect(await trustFor(later, countingGit(calls))).toBe("1");
-		// worker top level, then one re-read of the list (the parent top level stays cached)
 		expect(calls.map((call) => call.slice(1).join(" "))).toEqual([
-			"rev-parse --show-toplevel",
+			"rev-parse --show-toplevel --absolute-git-dir --git-common-dir",
 			"worktree list --porcelain -z",
+			"rev-parse --show-toplevel --absolute-git-dir --git-common-dir",
 		]);
 	});
 

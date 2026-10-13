@@ -272,7 +272,7 @@ export class Editor implements Component, Focusable {
 
 	// Bracketed paste mode buffering
 	private pasteBuffer: string = "";
-	private isInPaste: boolean = false;
+	protected isInPaste: boolean = false;
 
 	// Prompt history for up/down navigation
 	private history: string[] = [];
@@ -300,6 +300,8 @@ export class Editor implements Component, Focusable {
 
 	public onSubmit?: (text: string) => void;
 	public onChange?: (text: string) => void;
+	/** Return true to consume a complete bracketed paste (e.g. dropped image paths). */
+	public onPaste?: (text: string) => boolean;
 	public disableSubmit: boolean = false;
 
 	constructor(tui: TUI, theme: EditorTheme, options: EditorOptions = {}) {
@@ -589,7 +591,7 @@ export class Editor implements Component, Focusable {
 			const endIndex = this.pasteBuffer.indexOf("\x1b[201~");
 			if (endIndex !== -1) {
 				const pasteContent = this.pasteBuffer.substring(0, endIndex);
-				if (pasteContent.length > 0) {
+				if (pasteContent.length > 0 && !this.onPaste?.(pasteContent)) {
 					this.handlePaste(pasteContent);
 				}
 				this.isInPaste = false;
@@ -1182,13 +1184,7 @@ export class Editor implements Component, Focusable {
 			return;
 		}
 
-		if (pastedLines.length === 1) {
-			// Single line - insert atomically (do not trigger autocomplete during paste)
-			this.insertTextAtCursorInternal(filteredText);
-			return;
-		}
-
-		// Multi-line paste - use direct state manipulation
+		// Single- and multi-line pastes are both one atomic insertion without autocomplete.
 		this.insertTextAtCursorInternal(filteredText);
 	}
 

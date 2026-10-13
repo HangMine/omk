@@ -31,6 +31,12 @@ export function retrievalTokens(value: string): string[] {
 export function searchCorpus(query: string, corpus: readonly CorpusDocument[], limit = 8): SearchHit[] {
 	text(query, "query", 4096);
 	integer(limit, "limit", 64);
+	return rankCorpus(query, corpus).slice(0, limit);
+}
+
+/** Rank the bounded corpus before consumer-specific de-duplication and result limits. */
+export function rankCorpus(query: string, corpus: readonly CorpusDocument[]): SearchHit[] {
+	text(query, "query", 4096);
 	ensure(corpus.length <= 5000, "corpus too large");
 	unique(
 		corpus.map((d) => d.id),
@@ -49,7 +55,7 @@ export function searchCorpus(query: string, corpus: readonly CorpusDocument[], l
 		return { d, length: tokens.length, frequencies };
 	});
 	const terms = [...new Set(retrievalTokens(query))];
-	if (!terms.length || !documents.length || limit === 0) return [];
+	if (!terms.length || !documents.length) return [];
 	const avgLength = Math.max(1, documents.reduce((s, d) => s + d.length, 0) / documents.length);
 	const idf = new Map(
 		terms.map((term) => {
@@ -67,8 +73,7 @@ export function searchCorpus(query: string, corpus: readonly CorpusDocument[], l
 			return { ...d, score, trust: "candidate-only" };
 		})
 		.filter((d) => d.score > 0)
-		.sort((a, b) => b.score - a.score || lexical(a.id, b.id))
-		.slice(0, limit);
+		.sort((a, b) => b.score - a.score || lexical(a.id, b.id));
 }
 
 export type AcquisitionResult<T> =

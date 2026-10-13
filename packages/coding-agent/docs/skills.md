@@ -135,7 +135,7 @@ With many skills the `<available_skills>` list grows the system prompt by every 
 
 - `bm25`: the BM25 order above.
 - `metacon`: narrows to the BM25 top 64, then picks a set of skills that together cover the words of the query (local capability-coverage planning, no model or network call). Remaining slots are filled in BM25 order. Each result is marked `metacon` or `bm25-fill` in the tool details and the run log.
-- In both modes, skills whose SKILL.md content is byte-identical (same content hash) appear once.
+- In both modes, skills whose SKILL.md content is byte-identical (same content hash) appear once. Duplicates and already-offered skills, including their content-identical aliases, are removed before the 64-candidate cap, so they cannot crowd out remaining matches. The highest-ranked name represents each identical-content group, with ties broken by name. BM25 scores still use the complete searched corpus.
 - Any other value (including `wpl`) leaves skill search off and prints one warning.
 
 With 24 skills or fewer, without `read`, or with the flag off, prompts are unchanged.
@@ -165,6 +165,16 @@ Toggle skill commands via `/settings` in interactive mode or in `settings.json`:
   "enableSkillCommands": true
 }
 ```
+
+### Searchable skill picker
+
+Run `/skills` or `/skills <query>` to browse the current session's discovered skills. Press **Alt+S** while composing a question to open the same picker without clearing the draft. The shortcut is configurable as `app.skills.select`; `/skills` remains available when the terminal reserves that key.
+
+Search matches names and descriptions case-insensitively. Use arrows or PageUp/PageDown to navigate. The preview shows the description, source scope, file location and explicit-only status. Enter inserts one `!skill:name` invocation before the question; choosing another skill replaces a recognized leading invocation rather than stacking it. Escape or Ctrl+C cancels without changing the draft. Images remain attached, and picking never submits a prompt.
+
+The picker uses loaded metadata, not another filesystem scan or a model request. It does not read skill bodies, change `defaultActiveSkills`, enable packages or save settings. It respects `enableSkillCommands`; `/reload` refreshes discovery. The default editor and custom editors inheriting its action handlers support Alt+S; other custom editors can use `/skills`.
+
+This interaction was informed by Pi's [fuzzy skill selector](https://pi.dev/packages/@ramarivera/pi-skill-selector) and [draft-preserving picker](https://pi.dev/packages/pi-skill-picker), inspected on 2026-10-13. OMK reuses its own `Input`, `SelectList` and resource loader; no third-party extension is installed. `$` stays ordinary text, avoiding conflicts with shell variables. Persistent resource enable/disable remains the existing `omk config` workflow described in [Packages](packages.md).
 
 ## Skill Structure
 

@@ -32,6 +32,9 @@ export interface EditorComponent extends Component {
 	/** Called when text changes */
 	onChange?: (text: string) => void;
 
+	/** Optional complete bracketed-paste interception; true consumes the paste without inserting text. */
+	onPaste?: (text: string) => boolean;
+
 	// =========================================================================
 	// History support (optional)
 	// =========================================================================

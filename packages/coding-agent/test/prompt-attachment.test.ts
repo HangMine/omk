@@ -159,6 +159,23 @@ describe("AttachmentStore", () => {
 		expect(store.list()).toHaveLength(0);
 	});
 
+	it("reuses an identical image even at the count and draft-byte limits", () => {
+		const bytes = pngWithDimensions(1, 1);
+		const store = new AttachmentStore({ maxAttachments: 1, maxDraftBytes: bytes.length });
+		const first = store.put(bytes, "file");
+		expect(store.put(bytes, "clipboard").id).toBe(first.id);
+		expect(store.list()).toHaveLength(1);
+	});
+
+	it.each(["uint8", "buffer"])("owns stored bytes independently of the %s acquisition buffer", (kind) => {
+		const bytes = kind === "buffer" ? Buffer.from(pngWithDimensions(8, 8)) : pngWithDimensions(8, 8);
+		const expected = Buffer.from(bytes).toString("base64");
+		const store = new AttachmentStore();
+		const attachment = store.put(bytes, "clipboard");
+		bytes.fill(0);
+		expect(store.materializeImages([attachment.id])[0].data).toBe(expected);
+	});
+
 	it("enforces the attachment-count and draft-size limits", () => {
 		const store = new AttachmentStore({ maxAttachments: 2 });
 		store.put(pngWithDimensions(1, 1), "clipboard");
