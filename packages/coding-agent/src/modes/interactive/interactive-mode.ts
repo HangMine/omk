@@ -169,6 +169,7 @@ import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
 import { pinnedRailNotice, railFits } from "./layout-class.ts";
 import { formatResourceDescription } from "./resource-description.ts";
+import { createSkillPickerForDraft } from "./skill-picker-draft.ts";
 import {
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
@@ -2759,6 +2760,7 @@ export class InteractiveMode {
 		// Global debug handler on TUI (works regardless of focus)
 		this.ui.onDebug = () => this.handleDebugCommand();
 		this.defaultEditor.onAction("app.model.select", () => this.showModelSelector());
+		this.defaultEditor.onAction("app.skills.select", () => this.showSkillPicker());
 		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
 		this.defaultEditor.onAction("app.sidebar.toggle", () => this.toggleStatusSidebar());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
@@ -2846,6 +2848,11 @@ export class InteractiveMode {
 			if (!text && !hasAttachments) return;
 
 			// Handle commands
+			if (text === "/skills" || text.startsWith("/skills ")) {
+				this.editor.setText("");
+				this.showSkillPicker(text.slice("/skills".length).trim());
+				return;
+			}
 			if (text === "/attach" || text.startsWith("/attach ")) {
 				this.editor.setText("");
 				await this.handleAttachCommand(text.slice("/attach".length).trim());
@@ -4462,6 +4469,18 @@ export class InteractiveMode {
 		this.editorContainer.addChild(component);
 		this.ui.setFocus(focus);
 		this.ui.requestRender();
+	}
+
+	private showSkillPicker(query = ""): void {
+		if (!this.settingsManager.getEnableSkillCommands()) {
+			this.showWarning("Skill commands are disabled. Enable them in /settings first.");
+			return;
+		}
+		const skills = this.session.resourceLoader.getSkills().skills;
+		this.showSelector((done) => {
+			const selector = createSkillPickerForDraft(this.editor, skills, { query, done });
+			return { component: selector, focus: selector };
+		});
 	}
 
 	private showSettingsSelector(): void {
@@ -6246,6 +6265,7 @@ export class InteractiveMode {
 | \`${cycleThinkingLevel}\` | Cycle thinking level |
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |
+| \`${keyDisplayText("app.skills.select")}\` | Open skill picker (keep draft) |
 | \`${expandTools}\` | Toggle tool output expansion |
 | \`${toggleThinking}\` | Toggle thinking block visibility |
 | \`${externalEditor}\` | Edit message in external editor |

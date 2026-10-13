@@ -4,6 +4,7 @@
 
 ### Added
 
+- Searchable skill picker via `/skills [query]` and configurable `Alt+S` (`app.skills.select`). Search names and descriptions, preview source/location and explicit-only status, and insert one invocation without submitting or losing text/images. Selection replaces an existing leading skill; cancellation preserves the draft. Uses discovered metadata and existing TUI components, without changing persistent activation or adding dependencies. See [skill picker](docs/skills.md#searchable-skill-picker).
 - Prompt image file attachment via `/attach add <paths>`, `/attach paste` and complete bracketed-paste file drops. Quoted/escaped multi-file paths and local file URIs attach without replacing the question; remote URLs stay unsupported. `/attach` is discoverable in slash completion. Acquisition is bounded and serialized, loading blocks submit, and failed batches retain the existing draft. See [prompt images](docs/usage.md#images-and-screenshots-in-the-prompt).
 
 ### Fixed

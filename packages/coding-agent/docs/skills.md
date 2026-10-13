@@ -166,6 +166,16 @@ Toggle skill commands via `/settings` in interactive mode or in `settings.json`:
 }
 ```
 
+### Searchable skill picker
+
+Run `/skills` or `/skills <query>` to browse the current session's discovered skills. Press **Alt+S** while composing a question to open the same picker without clearing the draft. The shortcut is configurable as `app.skills.select`; `/skills` remains available when the terminal reserves that key.
+
+Search matches names and descriptions case-insensitively. Use arrows or PageUp/PageDown to navigate. The preview shows the description, source scope, file location and explicit-only status. Enter inserts one `!skill:name` invocation before the question; choosing another skill replaces a recognized leading invocation rather than stacking it. Escape or Ctrl+C cancels without changing the draft. Images remain attached, and picking never submits a prompt.
+
+The picker uses loaded metadata, not another filesystem scan or a model request. It does not read skill bodies, change `defaultActiveSkills`, enable packages or save settings. It respects `enableSkillCommands`; `/reload` refreshes discovery. The default editor and custom editors inheriting its action handlers support Alt+S; other custom editors can use `/skills`.
+
+This interaction was informed by Pi's [fuzzy skill selector](https://pi.dev/packages/@ramarivera/pi-skill-selector) and [draft-preserving picker](https://pi.dev/packages/pi-skill-picker), inspected on 2026-10-13. OMK reuses its own `Input`, `SelectList` and resource loader; no third-party extension is installed. `$` stays ordinary text, avoiding conflicts with shell variables. Persistent resource enable/disable remains the existing `omk config` workflow described in [Packages](packages.md).
+
 ## Skill Structure
 
 A skill is a directory with a `SKILL.md` file. Everything else is freeform.

@@ -24,6 +24,7 @@ The editor can be replaced temporarily by built-in UI such as `/settings` or by 
 | Multi-line input | Shift+Enter, or Ctrl+Enter on Windows Terminal |
 | Images | Paste screenshots with Ctrl+V / Alt+V, drop local image paths into the terminal, or use `/attach add <paths>`; previews appear above the editor |
 | Skill/bash launcher | `!` opens skill completion; `!skill:name prompt` invokes a skill; `!omk <role-or-request>` routes through OMK role hubs |
+| Skill picker | Alt+S preserves the draft while browsing by name/description; `/skills [query]` opens the same picker |
 | Shell command | `! command` runs and sends output to the model |
 | Hidden shell command | `!! command` runs without sending output to the model |
 | External editor | Ctrl+G opens `$VISUAL` or `$EDITOR` |
@@ -66,6 +67,7 @@ this display change enables no foreign tools or compatibility guarantees.
 | `/think` | Choose thinking level, or `auto` to route per task through v4 |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
 | `/settings` | Thinking level, theme, message delivery, transport |
+| `/skills [query]` | Search discovered skills and insert one invocation without submitting; see [Skills](skills.md#searchable-skill-picker) |
 | `/attach [add <paths>\|paste\|list\|remove [n]\|clear]` | Add image files, paste a screenshot, inspect or remove prompt attachments |
 | `/resume` | Pick from previous sessions |
 | `/new` | Start a new session |
