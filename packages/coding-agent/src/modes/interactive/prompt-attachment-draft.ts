@@ -59,6 +59,7 @@ export class PromptAttachmentDraft {
 
 	clear(): void {
 		this.epoch++;
+		this.tail = Promise.resolve();
 		this.store.clear();
 		this.host.changed();
 	}

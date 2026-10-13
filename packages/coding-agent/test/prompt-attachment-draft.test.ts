@@ -86,6 +86,27 @@ describe("prompt attachment draft", () => {
 		expect(input.ids).toEqual([]);
 		expect(input.busy).toBe(false);
 	});
+	it("starts a fresh acquisition after clear without waiting for the old clipboard read", async () => {
+		await writeFile(join(root, "fresh.png"), PNG);
+		const image = deferredImage();
+		clipboard.mockReturnValue(image.pending);
+		const { input } = draft();
+		const oldRead = input.clipboard();
+		await vi.waitFor(() => expect(clipboard).toHaveBeenCalledOnce());
+		input.clear();
+		const freshRead = input.addFiles(["fresh.png"]);
+		try {
+			await vi.waitFor(() => expect(input.ids).toHaveLength(1), { timeout: 200 });
+			await freshRead;
+			expect(input.busy).toBe(false);
+		} finally {
+			image.complete({ bytes: PNG, mimeType: "image/png" });
+			await oldRead;
+			await freshRead;
+		}
+		expect(input.ids).toHaveLength(1);
+		expect(input.busy).toBe(false);
+	});
 	it("disposal suppresses late state changes and warnings", async () => {
 		const image = deferredImage();
 		clipboard.mockReturnValue(image.pending);
