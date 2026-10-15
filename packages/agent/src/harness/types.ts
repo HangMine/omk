@@ -699,6 +699,7 @@ export interface ToolResultPatch {
 
 export interface SessionBeforeCompactResult {
 	cancel?: boolean;
+	reason?: string;
 	compaction?: CompactResult;
 }
 

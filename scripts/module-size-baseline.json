@@ -8,7 +8,7 @@
 	"packages/agent/src/harness/reverse-skill.ts": 789,
 	"packages/agent/src/harness/session/jsonl-storage.ts": 288,
 	"packages/agent/src/harness/skills.ts": 319,
-	"packages/agent/src/harness/types.ts": 643,
+	"packages/agent/src/harness/types.ts": 644,
 	"packages/agent/src/harness/utils/truncate.ts": 261,
 	"packages/agent/src/proxy.ts": 297,
 	"packages/ai/src/providers/amazon-bedrock.ts": 767,
