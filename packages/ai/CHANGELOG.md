@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-16
+
+### Changed
+
+- Lockstep version alignment with OMK 1.4.2. Provider behavior and external dependency versions are unchanged.
+
 ## [1.4.1] - 2026-10-13
 
 ### Changed

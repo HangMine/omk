@@ -95,9 +95,10 @@ function pushSkillItems(
 
 	const sortedInactive = visibleSkills
 		.filter((skill) => !activeSkillNames.has(skill.name))
-		.sort((a, b) => scoreSkillRelevance(b, options.queryContext) - scoreSkillRelevance(a, options.queryContext));
-	for (const skill of sortedInactive.slice(0, maxInactive)) {
-		items.push(renderSkillBudgetItem(skill, "low", Math.max(0.25, scoreSkillRelevance(skill, options.queryContext))));
+		.map((skill) => ({ skill, relevance: scoreSkillRelevance(skill, options.queryContext) }))
+		.sort((a, b) => b.relevance - a.relevance);
+	for (const { skill, relevance } of sortedInactive.slice(0, maxInactive)) {
+		items.push(renderSkillBudgetItem(skill, "low", Math.max(0.25, relevance)));
 	}
 	items.push({ id: "skill-footer", tier: "skills", priority: "hard", text: "</available_skills>" });
 

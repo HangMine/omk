@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-16
+
+### Fixed
+
+- Model selection with the context budget enabled scores each inactive skill once per prompt rebuild instead of repeating relevance calculations inside the sort comparator. Ranking, discovery-order ties, active/hidden filtering and query freshness are preserved. Regression tests cover the real model-picker callback and `AgentSession.setModel`; extension setup hooks remain awaited.
+- The agent harness exposes the optional before-compaction cancellation reason through `SessionBeforeCompactResult.reason`.
+
 ## [1.4.1] - 2026-10-13
 
 ### Added

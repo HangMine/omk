@@ -103,6 +103,14 @@ Override defaults when you need specific values:
 
 The file reloads each time you open `/model`. Edit during session; no restart needed.
 
+When the context budget is enabled, switching models rebuilds model-specific prompt
+context. Skill relevance is scored once per inactive skill for that rebuild, then
+sorted using the stored scores. Equal scores retain discovery order, and the next
+query is scored again; no ranking is reused across turns. This avoids repeated
+relevance calculations while choosing a model from a large skill inventory without
+changing which skills are included. Extension `model_select` handlers are still
+awaited and can add their own provider-specific setup delay.
+
 ## Google AI Studio Example
 
 Use `google-generative-ai` with a `baseUrl` to add models from Google AI Studio, including custom Gemma 4 entries:

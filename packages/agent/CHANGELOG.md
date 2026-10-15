@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-16
+
+### Fixed
+
+- Expose the optional before-compaction cancellation reason through `SessionBeforeCompactResult.reason`.
+
 ## [1.4.1] - 2026-10-13
 
 ### Changed
