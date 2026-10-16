@@ -1,6 +1,6 @@
 # Spec 062: UI lag at Enter and model selection (measurement + plan)
 
-Status: DRAFT, waiting for Tech Lead approval. Measurement only. No product code changed.
+Status: APPROVED scope (Tech Lead, 10/17). 062 = F2+F3 token-estimate cache only. 063 = F4 (separate branch). 064 = F1 (last, strictest review; 1.4.4 if not PASS+reviewed by 10/18 18:00 KST). F5 → 1.4.4, out of scope.
 Base: origin/main `e28c260f75`. Node 22 (`~/.local/node22`), dist build, `OMK_TRUST_PROJECT=0`, fake OpenAI-compatible
 provider in-process (no real keys), file-backed session (`SessionManager.create`), 20 measured runs + 2 warmups.
 No other bench was running (ps checked). load1 was 6.9–7.8 on 8 cores, so the box was busy; read absolute ms with that in mind.
@@ -38,6 +38,35 @@ node profsum.mjs prof/enter-large.cpuprofile
 Enter→request grows with session length (about 21 → 94 ms) and does not grow with model count. Selector open grows with
 model count (refresh). Selector apply grows with session length (durable append).
 
+
+## Render path (keypress → frame done), measured
+Harness: `bench/render-bench.mjs` uses the real `TUI` scheduler (16 ms min interval), a byte-counting terminal at 120×40,
+and a chat of N `UserMessageComponent` + `AssistantMessageComponent` pairs (~4 KB markdown each, with a code block).
+Each sample starts more than 40 ms after the previous frame. 20 runs + 2 warmups.
+```
+node render-bench.mjs --worktree <wt> --pairs 5|200 --runs 20 --out results/render-main-<n>.json
+node --cpu-prof --cpu-prof-dir=prof --cpu-prof-name=render-200.cpuprofile render-bench.mjs --worktree <wt> --pairs 200 --runs 20
+```
+| p50 / p90 / p95 ms | 5 pairs (412 lines), load1 1.97 | 200 pairs (16402 lines), load1 2.12 |
+|---|---|---|
+| /model open → models loaded → first frame | 18.5 / 30.9 / 180.7 (one GC-sized outlier) | 19.6 / 29.1 / 42.6 |
+| filter keystroke → frame | 2.9 / 3.3 / 3.4 | 5.3 / 6.7 / 11.3 |
+| select (Enter) → frame (editor back) | 2.4 / 3.3 / 5.4 | 4.9 / 7.1 / 7.2 |
+| thinking selector open → frame | 1.7 / 1.9 / 2.0 | 4.0 / 5.2 / 7.4 |
+| thinking move ↓ → frame | 1.6 / 2.2 / 2.9 | 3.9 / 4.5 / 8.8 |
+| thinking select → frame | 1.6 / 1.9 / 2.9 | 4.0 / 4.5 / 4.8 |
+| Enter → user message echoed (frame) | 1.9 / 2.2 / 2.3 | 4.1 / 4.9 / 5.0 |
+| one doRender | 0.4 / 0.8 / 0.9 | 2.6 / 3.4 / 3.7 |
+
+CPU profile, 200 pairs: `/model` open is dominated by `ModelSelectorComponent.loadModels` → `core/model-registry.ts:341`
+`loadModels` / `mergeCustomModels` (~16 ms per open with 500 models), not by rendering. Diff rendering
+(`tui/src/tui.ts` `doRender`, `line-reset-memo`, `wrapSingleLine`) costs ≤ 3.7 ms per frame even at 16k lines.
+Conclusion: the render path is not the lag source. The felt lag is the synchronous work in front of the frame:
+selector `refresh()` (→ 063) and, on Enter, ~90 ms of our code before the request in long sessions (→ 062 and 064).
+The Enter→echo frame is fast (4 ms) when measured alone. In the real flow the echo shares the event loop with the
+synchronous preflight (append + admit), so the user sees it only after that work yields. This is not separately
+measured here.
+
 ## Hotspots, ranked (large session, per turn; CPU profile totals / 22 turns plus the timers)
 | # | where (src) | ms/turn | why |
 |---|---|---|---|
@@ -62,12 +91,30 @@ skills/settings reload on every Enter (omk-scout-mem). I did not see skills or s
 | F2 Per-message token-estimate cache (WeakMap keyed by message object plus counter id/epoch). Reuse it in admit() and in the request admission check. | H2+H3 | ~35–40 ms | No (same numbers). |
 | F3 Reuse admit()'s estimate in `budget-stream` check when the context is unchanged (same messages array identity/length + system prompt hash). | H2 | ~20 ms (covered by F2 if F2 lands) | No. |
 | F4 Selector: skip `refresh()` when models.json mtime/size and the auth revision are unchanged. | H6 | ~10 ms with many models | No (refresh still happens on change). |
-| F5 Run-journal start fsync batching / async | H4 | ~5–10 ms | Yes, durability semantics change. Only behind a default-off flag, or drop it. |
+| F5 Run-journal start fsync batching / async | H4 | ~5–10 ms | Yes. Moved to 1.4.4, out of scope. |
+
+## 062 design: F2+F3 exact token-estimate cache
+- Key: `WeakMap<message object, Entry>` where `Entry = { leaves, json, stats }`. `leaves` is the ordered list of every key,
+  primitive value and array length in the canonical projection of that message. On lookup the projection is rebuilt
+  (shallow, cheap) and its leaves are compared with `===`. Any difference recomputes the entry. Because strings are
+  immutable, an in-place mutation (compaction masking, edit, reasoning drop) always changes at least one leaf, so it can
+  never produce a stale hit. A non-plain object (Date, class instance, toJSON) makes the message uncacheable.
+- `stats` = fallback char-class counts + length + code-keyword flag for that message's JSON. Used only when the counter
+  is the fallback estimator. Other counters (BPE) still get the parts and count them themselves.
+- `withoutReasoning` (reasoning-drop) is memoized per source message (shallow key and content-element identity check),
+  so closed-turn assistant copies keep a stable identity and hit the cache.
+- Compaction, branch switch and resume create new message objects or new arrays. Those are WeakMap misses or leaf
+  mismatches, so no explicit invalidation hook is needed. Tests prove it.
+- F3: `request-admission-projection` uses the same per-message cache for its bounded JSON parts. Budget charges and the
+  node count are replayed from the entry, so limits trip exactly as before.
+- Required tests: cached == uncached (deep-equal results) for random transcripts, after in-place text mutation with
+  the same length, after a toolCall arguments mutation, after compaction / branch / resume, and with a non-fallback
+  counter.
 
 ## Success criteria (paired A/B, same box, same load window, interleaved runs, n=20 each)
 - Large session Enter→request p50 drops ≥ 40 ms (93 → ≤ 53) and p90 ≤ 70 ms. Small session does not regress (> +2 ms p50).
 - Large session `setModel` p50 ≤ 6 ms. Selector open with 500 models p50 ≤ 4 ms when models.json is unchanged.
-- Report load1 for every run. If load1 differs by > 2 between arms, rerun.
+- Report p50/p90/p95 from 20 paired, interleaved A/B runs. p95 < 30 ms is an aspirational target only. Report load1 for every run. If load1 differs by > 2 between arms, rerun.
 
 ## Tests
 - F1: an append after a foreign append (another SessionManager instance), a truncation, or an inode replace still throws `SessionManagerStaleWriteError`. The incremental hash equals the full-file sha256 after N appends (property test).
@@ -76,5 +123,4 @@ skills/settings reload on every Enter (omk-scout-mem). I did not see skills or s
 - Bench script stays in `specs/062-ui-lag/bench/` (not in CI). A vitest timing gate is optional and should be loose (CI noise).
 
 ## Not in scope / follow-ups
-- TUI render cost of long chat history and of the thinking selector after a model switch (needs a TUI harness).
 - Library Scout's skills/settings reload check (omk-scout-mem).
