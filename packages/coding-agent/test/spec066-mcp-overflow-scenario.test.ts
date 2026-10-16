@@ -4,9 +4,12 @@
  * `SPEC066_RUNS=20` repeats each arm; the default suite runs each arm once.
  */
 
+import { readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentMessage, AgentTool } from "omk-agent-core";
 import { type AssistantMessage, createAssistantMessageEventStream } from "omk-ai";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { OVERFLOW_RECOVERY_FAILED } from "../src/core/compaction/overflow-recovery-progress.ts";
 import { createTokenCounterForMode } from "../src/core/context-budget-token-counter.ts";
 import type { ExtensionContext } from "../src/core/extensions/types.ts";
@@ -145,6 +148,13 @@ async function runOnce(): Promise<RunResult> {
 		h.cleanup();
 	}
 }
+
+// Temp spills (no-session mode) are never cleaned up by omk, like bash's; remove the ones these tests made.
+const tempSpillsBefore = new Set(readdirSync(tmpdir()).filter((f) => f.startsWith("omk-mcp-")));
+afterAll(() => {
+	for (const f of readdirSync(tmpdir()))
+		if (f.startsWith("omk-mcp-") && !tempSpillsBefore.has(f)) rmSync(join(tmpdir(), f), { force: true });
+});
 
 const RUNS = Number(process.env.SPEC066_RUNS ?? "1");
 

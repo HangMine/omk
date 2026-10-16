@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { ImageContent, TextContent } from "omk-ai";
 import { sessionArtifactDir } from "../session-artifacts.ts";
+import { defaultTempFilePath } from "../tools/output-accumulator.ts";
 import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
@@ -29,10 +30,19 @@ export interface McpSpillTarget {
 	readonly toolCallId: string;
 }
 
+/** No session file (`--no-session`): same temp dir, name convention and 0600 mode as bash's full output. */
+function spillToTemp(full: string): string {
+	const file = defaultTempFilePath("omk-mcp");
+	writeFileSync(file, full, { encoding: "utf-8", mode: 0o600, flag: "wx" });
+	chmodSync(file, 0o600);
+	return file;
+}
+
+/** Session mode: `<session>.artifacts/`, marker path relative to cwd. No session: a temp file, absolute path. */
 function spill(full: string, resolveTarget: () => McpSpillTarget): string | undefined {
 	try {
 		const target = resolveTarget();
-		if (!target.sessionFile) return undefined;
+		if (!target.sessionFile) return spillToTemp(full);
 		const dir = sessionArtifactDir(target.sessionFile);
 		mkdirSync(dir, { recursive: true, mode: 0o700 });
 		chmodSync(dir, 0o700);
@@ -62,7 +72,7 @@ export function capMcpContent(
 	const path = spill(full, typeof target === "function" ? target : () => target);
 	const where = path
 		? `Full output: ${path} (use read with offset/limit to see the middle).`
-		: "Full output was not saved (no session file).";
+		: "Full output could not be saved.";
 	const marker =
 		`[MCP output truncated: kept the start and the end; cut ${cut.omittedLines} of ${cut.totalLines} lines ` +
 		`(${formatSize(cut.omittedBytes)} of ${formatSize(cut.totalBytes)}) from the middle ` +

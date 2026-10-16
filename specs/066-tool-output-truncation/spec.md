@@ -75,6 +75,11 @@ have no cap, so one large MCP result costs two compactions and then a failed tur
   `truncateMcpText` (`core/mcp/output-cap.ts`).
 - Spill: the full text goes to `<session>.artifacts/mcp-<toolCallId>.txt` next to the session `.jsonl` (dir 0700,
   file 0600). The marker shows the path relative to the tool cwd. Deleting the session removes the artifacts directory.
+- No session file (`--no-session`, used by R8/workers): the full text goes to a temp file with the same directory,
+  name convention and mode as bash's full output: `<tmpdir>/omk-mcp-<16 hex>.log`, 0600
+  (`defaultTempFilePath`, `core/tools/output-accumulator.ts`). The marker holds that absolute path, so the model can
+  `read` it. Like bash's temp files, omk never deletes it. Before this fix the marker said "Full output was not saved",
+  and the Bench Analyst A/B failed `--noreg` (200KB mid-output fact 20/20 → 0/20).
 - Structured-only results: unchanged (`(no content)`). Not covered.
 
 ## Results

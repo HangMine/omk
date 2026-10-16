@@ -5,18 +5,20 @@ import {
 	readdirSync,
 	readFileSync,
 	renameSync,
+	rmSync,
 	statSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import type { ImageContent, TextContent } from "omk-ai";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import type { ExtensionContext } from "../src/core/extensions/types.ts";
 import type { McpClient, McpContentBlock } from "../src/core/mcp/client.ts";
 import { capMcpContent } from "../src/core/mcp/output-cap.ts";
 import { createMcpToolDefinition, mapMcpContent } from "../src/core/mcp/tools.ts";
 import { deleteSessionFile, sessionArtifactDir, type TrashSpawn } from "../src/core/session-artifacts.ts";
+import { createReadTool } from "../src/core/tools/read.ts";
 import { DEFAULT_MAX_BYTES, truncateHead, truncateHeadTail } from "../src/core/tools/truncate.ts";
 
 const MARKER =
@@ -39,6 +41,13 @@ function tool(blocks: readonly McpContentBlock[], isError = false) {
 
 const texts = (content: (TextContent | ImageContent)[]) =>
 	content.filter((b): b is TextContent => b.type === "text").map((b) => b.text);
+
+// Temp spills (no-session mode) are never cleaned up by omk, like bash's; remove the ones these tests made.
+const tempSpillsBefore = new Set(readdirSync(tmpdir()).filter((f) => f.startsWith("omk-mcp-")));
+afterAll(() => {
+	for (const f of readdirSync(tmpdir()))
+		if (f.startsWith("omk-mcp-") && !tempSpillsBefore.has(f)) rmSync(join(tmpdir(), f), { force: true });
+});
 
 afterEach(() => {
 	delete process.env.OMK_MCP_OUTPUT_CAP;
@@ -158,16 +167,63 @@ describe("spec 066 MCP output cap", () => {
 			undefined,
 			{} as ExtensionContext,
 		);
-		expect(texts(big.content as (TextContent | ImageContent)[])[1]).toContain("Full output was not saved");
+		expect(texts(big.content as (TextContent | ImageContent)[])[1]).toMatch(
+			/Full output: \/\S+omk-mcp-[0-9a-f]{16}\.log /,
+		);
 	});
 
-	it("no session file: marker says the full output was not saved", () => {
-		const out = capMcpContent([{ type: "text", text: "z\n".repeat(5000) }], {
+	it("--no-session: full output goes to a bash-style 0600 temp file whose absolute path is in the marker", () => {
+		const full = Array.from({ length: 5000 }, (_, i) => `z ${i}`).join("\n");
+		const out = capMcpContent([{ type: "text", text: full }], {
 			sessionFile: undefined,
 			cwd: tmpdir(),
 			toolCallId: "c4",
 		});
-		expect(texts(out)[1]).toContain("Full output was not saved (no session file).");
+		const path = /Full output: (\S+) \(use read/.exec(texts(out)[1])?.[1] ?? "";
+		expect(path).toMatch(
+			new RegExp(`^${tmpdir().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/omk-mcp-[0-9a-f]{16}\\.log$`),
+		);
+		expect(isAbsolute(path)).toBe(true);
+		expect(readFileSync(path, "utf-8")).toBe(full);
+		expect(statSync(path).mode & 0o777).toBe(0o600);
+	});
+
+	it("--no-session regression: a mid-output fact is recoverable by reading the saved file", async () => {
+		// Bench Analyst 066 A/B: 200KB output with one fact in the middle; the model only had the marker.
+		const fact = "THE-ANSWER-IS 7f3c-mid-output";
+		const rows = Array.from({ length: 4000 }, (_, i) => `row ${i} ${"x".repeat(40)}`);
+		rows.splice(2000, 0, fact);
+		const full = rows.join("\n");
+		const noSession = {
+			cwd: tmpdir(),
+			sessionManager: { getSessionFile: () => undefined },
+		} as unknown as ExtensionContext;
+		const result = await tool([{ type: "text", text: full }]).execute("mid", {}, undefined, undefined, noSession);
+		const seen = texts(result.content as (TextContent | ImageContent)[]);
+		expect(seen.join("\n")).not.toContain(fact);
+		const path = /Full output: (\S+) \(use read/.exec(seen[1])?.[1] ?? "";
+		expect(path).not.toBe("");
+		const read = await createReadTool(tmpdir()).execute("r1", { path, offset: 1990, limit: 30 });
+		const readText = (read.content as TextContent[]).map((b) => b.text).join("\n");
+		expect(readText).toContain(fact);
+	});
+
+	it("session mode is unchanged: spill under <session>.artifacts/, relative path, no temp file", async () => {
+		const s = session();
+		const before = new Set(readdirSync(tmpdir()).filter((f) => f.startsWith("omk-mcp-")));
+		const result = await tool([{ type: "text", text: "s\n".repeat(5000) }]).execute(
+			"sm",
+			{},
+			undefined,
+			undefined,
+			s.ctx,
+		);
+		const marker = texts(result.content as (TextContent | ImageContent)[])[1];
+		const rel = /Full output: (\S+) \(use read/.exec(marker)?.[1] ?? "";
+		expect(isAbsolute(rel)).toBe(false);
+		expect(join(s.dir, rel)).toBe(join(sessionArtifactDir(s.file), "mcp-sm.txt"));
+		const after = readdirSync(tmpdir()).filter((f) => f.startsWith("omk-mcp-") && !before.has(f));
+		expect(after).toEqual([]);
 	});
 
 	it("OMK_MCP_OUTPUT_CAP=0 restores the uncapped output", async () => {

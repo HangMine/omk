@@ -27,3 +27,10 @@ The gating numbers are counts, so load does not affect them. Elapsed times are o
 Detection rate: head+tail **4/6**, head-only **1/6** → criterion 6 (head+tail ≥ head-only) met. When the error sits
 more than ~1000 lines / 25KB before the end, or in the middle, both strategies lose it. The model then has only the
 spill-file path in the marker.
+
+## No-session spill fix (after Bench Analyst `--noreg` failure)
+- Regression test: in `--no-session`, a fact in the middle of a 200KB MCP output is recovered by `read` on the temp
+  file named in the marker (`test/spec066-mcp-output-cap.test.ts`).
+- 061 scenario rerun (the harness session is in-memory, so this exercises the temp-file path), 20 runs, load1 4.45:
+  capped 0 give-ups / 0 overflow compactions (18/23/24 ms p50/p90/p95); `OMK_MCP_OUTPUT_CAP=0` 20/20 give-ups,
+  40 compactions.
