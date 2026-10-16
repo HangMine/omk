@@ -28,6 +28,7 @@ import { stripJsonComments } from "../utils/json.ts";
 import { normalizePath } from "../utils/paths.ts";
 import type { AuthStatus, AuthStorage } from "./auth-storage.ts";
 import { GROK_OAUTH_PROVIDER } from "./grok-playbook.ts";
+import { ModelRegistryRefreshInputs } from "./model-registry-refresh-inputs.ts";
 import { type ModelOverride, type ModelsConfig, validateModelsConfig } from "./model-registry-schema.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
 import {
@@ -291,6 +292,7 @@ export class ModelRegistry {
 	readonly authStorage: AuthStorage;
 	private modelsJsonPath: string | undefined;
 	private readonly snapshotOnLoad: boolean;
+	private readonly refreshInputs = new ModelRegistryRefreshInputs();
 
 	private constructor(authStorage: AuthStorage, modelsJsonPath: string | undefined, snapshotOnLoad = true) {
 		this.authStorage = authStorage;
@@ -329,6 +331,14 @@ export class ModelRegistry {
 		for (const [providerName, config] of this.registeredProviders.entries()) {
 			this.applyProviderConfig(providerName, config);
 		}
+	}
+
+	/**
+	 * Spec 063: `refresh()` unless models.json text, registered API/OAuth providers and model-modifying OAuth
+	 * credentials are all unchanged since the last call here. Returns whether it refreshed.
+	 */
+	refreshIfChanged(): boolean {
+		return this.refreshInputs.run(this.modelsJsonPath, this.authStorage, () => this.refresh());
 	}
 
 	/**
@@ -847,6 +857,7 @@ export class ModelRegistry {
 		this.validateProviderConfig(providerName, migratedConfig);
 		this.applyProviderConfig(providerName, migratedConfig);
 		this.upsertRegisteredProvider(providerName, migratedConfig);
+		this.refreshInputs.invalidate();
 	}
 
 	/**

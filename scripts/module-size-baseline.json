@@ -61,7 +61,7 @@
 	"packages/coding-agent/src/core/loop-registry.ts": 982,
 	"packages/coding-agent/src/core/mcp-presets.ts": 471,
 	"packages/coding-agent/src/core/mcp-public-presets.ts": 817,
-	"packages/coding-agent/src/core/model-registry.ts": 740,
+	"packages/coding-agent/src/core/model-registry.ts": 746,
 	"packages/coding-agent/src/core/model-resolver.ts": 421,
 	"packages/coding-agent/src/core/package-manager.ts": 2289,
 	"packages/coding-agent/src/core/package-procurement.ts": 896,
