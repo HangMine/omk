@@ -140,6 +140,88 @@ describe.runIf(process.env.SPEC061_SCENARIO === "1")("061 oversized tool output 
 			// Settles either by completing or by a reported recovery failure; it must not hang.
 			await h.session.prompt("turn 1").catch(() => undefined);
 			expect(overflowStarts).toBeLessThanOrEqual(MAX_OVERFLOW_RECOVERY_ATTEMPTS);
+			// The give-up is user visible and names the cause: one tool output larger than the window.
+			const failures = h
+				.eventsOfType("compaction_end")
+				.map((e) => e.errorMessage)
+				.filter((m): m is string => typeof m === "string");
+			expect(failures).toHaveLength(1);
+			expect(failures[0]).toMatch(
+				/output of tool "out" \(~[\d,]+ tokens\) is larger than the 64,000-token context window/,
+			);
+		} finally {
+			h.cleanup();
+		}
+	}, 30_000);
+});
+
+/**
+ * Guard for the 061 fix: legitimate overflow recovery with progress in between is not capped.
+ * One headless prompt, many tool turns with moderate (~10k token) outputs. The faux provider has
+ * an effective input limit of 30k tokens (below admission's ~41k ceiling) and answers larger prompts
+ * with an Anthropic-style "prompt is too long" error, so overflow recovery runs several times; each
+ * time the next tool result is consumed within the window, which is progress.
+ */
+describe.runIf(process.env.SPEC061_SCENARIO === "1")("061 overflow recovery with progress", () => {
+	it("completes one prompt that needs >= 3 overflow compactions with progress between them", async () => {
+		const PROVIDER_LIMIT = 30_000;
+		const TOOL_CALLS = 14;
+		const h: Harness = createHarness({
+			contextWindow: 64_000,
+			baseToolsOverride: { out: outputTool("m".repeat(40_000)) },
+			responses: ["unused"],
+		});
+		try {
+			answerSummaries(h, false);
+			let toolCalls = 0;
+			let overflowErrors = 0;
+			const summarizer = h.agent.streamFn;
+			h.agent.streamFn = (model, context, options) => {
+				if (/summar/i.test(String(context.systemPrompt ?? ""))) return summarizer(model, context, options);
+				const base = realisticReply(context);
+				const input = base.usage.input;
+				const zero = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: base.usage.cost };
+				let reply: AssistantMessage;
+				if (input > PROVIDER_LIMIT) {
+					overflowErrors++;
+					reply = {
+						...base,
+						content: [],
+						usage: zero,
+						stopReason: "error",
+						errorMessage: `prompt is too long: ${input} tokens > ${PROVIDER_LIMIT} maximum`,
+					};
+				} else if (toolCalls < TOOL_CALLS) {
+					toolCalls++;
+					reply = {
+						...base,
+						content: [{ type: "toolCall", id: `pg_${toolCalls}`, name: "out", arguments: {} }],
+						stopReason: "toolUse",
+					};
+				} else {
+					reply = { ...base, content: [{ type: "text", text: "done" }], stopReason: "stop" };
+				}
+				const stream = createAssistantMessageEventStream();
+				queueMicrotask(() => {
+					stream.push({ type: "start", partial: reply });
+					if (reply.stopReason === "error") stream.push({ type: "error", reason: "error", error: reply });
+					else stream.push({ type: "done", reason: reply.stopReason as "stop" | "toolUse", message: reply });
+				});
+				return stream;
+			};
+			let overflowStarts = 0;
+			h.session.subscribe((event) => {
+				if (event.type === "compaction_start" && event.reason === "overflow") overflowStarts++;
+			});
+			await h.session.prompt("long headless run");
+			const failures = h.eventsOfType("compaction_end").filter((e) => e.errorMessage);
+			expect(failures.map((e) => e.errorMessage)).toEqual([]);
+			expect(overflowStarts).toBeGreaterThanOrEqual(3);
+			expect(overflowErrors).toBe(overflowStarts);
+			expect(toolCalls).toBe(TOOL_CALLS);
+			const last = h.agent.state.messages.at(-1) as AssistantMessage | undefined;
+			expect(last?.content).toEqual([{ type: "text", text: "done" }]);
+			process.stderr.write(`061-progress: overflowCompactions=${overflowStarts}\n`);
 		} finally {
 			h.cleanup();
 		}

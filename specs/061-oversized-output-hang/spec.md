@@ -1,6 +1,6 @@
 # 061 — 창보다 큰 도구 출력 하나로 세션이 멈추는 문제
 
-상태: 초안 (Tech Lead 승인 전, 수정은 아직 넣지 않음)
+상태: 승인됨 (Tech Lead, 2026-10-17). 최종 설계: 진전 없는 연속 overflow 컴팩션 카운터.
 
 ## 문제
 
@@ -34,34 +34,60 @@ usage로 보고하면(`stopReason: "stop"`, `usage.input > contextWindow`, 즉 s
 prompt 한 번 안에서 overflow 복구 컴팩션 횟수를 상한으로 묶어, 창보다 큰 도구 출력 하나가 있어도
 `prompt()`가 완주하거나 기존 "Context overflow recovery failed…" 오류로 끝나게 한다.
 
-## 제안 수정 (최소, 승인 후 구현)
+## 재현 가능한 도구
 
-`agent-session.ts`에 prompt 단위 카운터 `_overflowCompactionsThisPrompt`를 둔다. `_prompt`의 run 시작
-(`:2111` 근처)에서 0으로, overflow 분기에서 `_overflowRecoveryAttempts`와 같이 증가시키고,
-`:3905` 상한 검사에 `|| this._overflowCompactionsThisPrompt >= MAX_OVERFLOW_RECOVERY_ATTEMPTS`를 더한다.
-기존 메시지 단위 리셋(`:1324`, `:1389`)은 건드리지 않는다. (임시 적용 확인: 회귀 테스트 통과, 시나리오 301ms,
-coding-agent 전체 8773 테스트 통과. 실패 6개 파일은 main에서도 `open-multi-agent-kit` 미빌드로 import 실패.)
+- 내장 도구는 400KB를 낼 수 없다. `tools/truncate.ts:11-12`(2000줄 / 50KB)로 잘린다:
+  `tools/bash.ts`(마지막 2000줄·50KB, 넘치면 임시 파일), `tools/read.ts:160`(`truncateHead`), `tools/grep.ts:288`,
+  `tools/find.ts:135`, `tools/ls.ts:135`, `tools/rtk-output.ts:83`.
+- MCP 도구는 결과를 자르지 않는다: `mcp/tools.ts:79`(`mapMcpContent`) → `:138`. 상한은 프로토콜 한 줄 16MB
+  (`mcp/protocol.ts:11`)뿐이다. 확장·커스텀 `AgentTool.execute` 결과도 자르지 않는다.
+- 결론: 400KB 경로는 MCP·확장·커스텀 도구로만 닿는다.
+
+## 수정 (최종 설계)
+
+`agent-session.ts`의 `_overflowRecoveryAttempts`를 "진전 없는 연속 overflow 컴팩션" 카운터로 바꾼다. 상한은 2 그대로다.
+- 증가: overflow 분기에서 컴팩션할 때마다(기존과 같음).
+- 리셋 ①: 새 사용자 prompt 시작(`_prompt`의 run 시작).
+- 리셋 ②(진전): 에러가 아니고 usage(`input + cacheRead`)가 창 안이며, 바로 앞 메시지가 `toolResult`인 assistant 응답.
+  즉 도구 결과가 창 안에서 모델에 소비된 경우다(`compaction/overflow-recovery-progress.ts` `isOverflowRecoveryProgress`).
+- 리셋하지 않음: `continue()`가 넣는 빈 user 메시지(기존 `:1324` 리셋 제거), 재시도, 자동 컴팩션 뒤 재개,
+  빈 continuation 프롬프트에 답한 도구 호출(큰 출력이 아직 안 돌아와서 창 안일 뿐이다).
+- 상한 도달: `compaction_end`(`reason: "overflow"`, `willRetry: false`)의 `errorMessage`가 사용자에게 보인다.
+  마지막 도구 결과가 창보다 크면 다음 문장을 덧붙인다:
+  `The output of tool "<name>" (~N tokens) is larger than the W-token context window, so compaction cannot make it fit. …`
+  그렇지 않으면 기존 문구를 그대로 쓴다(기존 테스트 2곳의 기대값 유지).
+
+## 현실적 usage 규칙
+
+060 리뷰에서 정한 규칙을 지킨다. 모든 시나리오의 faux provider는 실제로 받은 프롬프트 크기
+(`estimateContextInputTokens`, system + tools + messages)를 usage로 보고한다. 에러 응답만 usage 0이다.
 
 ## 수용 기준 (AC)
 
-1. `test/oversized-output-hang.test.ts`가 main(`e28c260`)에서 실패한다: 자식 vitest가 20초 벽시계 가드에 죽는다
-   (`timedOut: true`).
-2. 수정 후 같은 테스트가 통과한다: 자식 프로세스가 20초 안에 exit 0, 5회 연속.
-3. 시나리오 안에서 prompt 1회당 `compaction_start(reason: "overflow")` ≤ 2.
-4. 시나리오 테스트 본체(자식 안 `prompt()`)가 2초 안에 끝난다 (임시 수정에서 301ms).
-5. 기존 컴팩션·overflow 테스트(`compaction-before-capacity`, `overflow-retry-guard` 등)와 coding-agent 전체
-   스위트에 새 실패가 없다.
+1. 멈춤: `test/oversized-output-hang.test.ts`의 첫 테스트가 main(`e28c260`)에서 실패한다. 자식 vitest가 20초 벽시계
+   가드에 죽는다(`timedOut: true`). 수정 후에는 20초 안에 exit 0으로 끝난다.
+2. 상한: 400KB 시나리오에서 prompt 1회당 `compaction_start(reason: "overflow")` ≤ 2.
+3. 오류 표시: 상한에 닿으면 `compaction_end.errorMessage`가 정확히 1개 나오고,
+   `/output of tool "out" \(~[\d,]+ tokens\) is larger than the 64,000-token context window/`에 맞는다(AC 1 테스트 안에서 단언).
+4. 진전 가드: prompt 한 번, 도구 출력 ~10k 토큰 14회, provider 실효 한도 30k(넘으면 "prompt is too long" 에러).
+   overflow 컴팩션 ≥ 3회(실측 6회)가 일어나도 실패한 컴팩션 없이 14번 도구 호출 뒤 "done"으로 끝난다. main에서도 통과한다.
+5. continue만으로는 리셋하지 않는다: AC 1이 이것을 고정한다. 빈 continuation 메시지나 그 답의 도구 호출에서
+   리셋하면 400KB 시나리오가 다시 끝없이 돈다.
+6. 새 테스트를 5회 연속 돌려 모두 통과한다. `npm run check`가 통과한다.
+7. 회귀: 기존 overflow·컴팩션 테스트와 coding-agent 전체 스위트에 새 실패가 없다. 이전에 import 실패였던
+   6개 파일은 main과 수정본에서 같은 결과여야 한다(새 실패가 있으면 블로커).
 
 ## 하지 않을 것
 
-- 큰 도구 출력 자체를 자르거나 spill하는 변경(도구 출력 truncation 정책).
+- 큰 도구 출력을 처음부터 자르거나 spill하는 근본 수정(MCP·확장 도구 결과에 상한 두기). 1.4.4 후보다.
 - `overflowRetryBlocked` 판정 방식 변경, 컴팩션 cut-point 알고리즘 변경.
 - faux provider가 매크로태스크에 양보하게 바꿔 증상만 가리는 변경.
 - 스펙 060(`usage + delta`) 범위의 작업.
 
 ## 파일
 
-- `packages/coding-agent/test/oversized-output-hang.test.ts` — 회귀 테스트(자식 프로세스 + 벽시계 가드, 프로세스 그룹 SIGKILL).
+- `packages/coding-agent/test/oversized-output-hang.test.ts` — 회귀 테스트 2개(자식 프로세스 + 20초 벽시계 가드, 프로세스 그룹 SIGKILL, `-t`로 시나리오 선택).
 - `packages/coding-agent/test/scenarios/oversized-output-hang.scenario.test.ts` — 시나리오. `SPEC061_SCENARIO=1`일 때만 실행
   (`OMK_*`는 `test/setup-env.ts`가 지우므로 다른 접두사).
-- 수정 예정: `packages/coding-agent/src/core/agent-session.ts`.
+- `packages/coding-agent/src/core/agent-session.ts` — 카운터 리셋 위치(+4/−4).
+- `packages/coding-agent/src/core/compaction/overflow-recovery-progress.ts` — 진전 판정과 오류 문구(새 파일, module-size 상한 때문에 분리).

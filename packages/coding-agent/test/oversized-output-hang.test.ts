@@ -8,12 +8,14 @@ const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const VITEST_BIN = fileURLToPath(new URL("../../../node_modules/vitest/vitest.mjs", import.meta.url));
 const WALL_CLOCK_MS = 20_000;
 
-function runScenario(): Promise<{ code: number | null; timedOut: boolean; elapsedMs: number; output: string }> {
+function runScenario(
+	filter: string,
+): Promise<{ code: number | null; timedOut: boolean; elapsedMs: number; output: string }> {
 	return new Promise((resolve) => {
 		const started = Date.now();
 		const child = spawn(
 			process.execPath,
-			[VITEST_BIN, "run", "--pool=forks", "test/scenarios/oversized-output-hang.scenario.test.ts"],
+			[VITEST_BIN, "run", "--pool=forks", "test/scenarios/oversized-output-hang.scenario.test.ts", "-t", filter],
 			{ cwd: PACKAGE_ROOT, env: { ...process.env, SPEC061_SCENARIO: "1" }, detached: true },
 		);
 		let output = "";
@@ -38,10 +40,22 @@ function runScenario(): Promise<{ code: number | null; timedOut: boolean; elapse
 
 describe("spec 061: single tool output larger than the context window", () => {
 	it(
-		"settles within the wall-clock guard with bounded overflow recovery",
+		"settles within the wall-clock guard and reports the oversized tool output",
 		async () => {
-			const result = await runScenario();
+			const result = await runScenario("settles a prompt whose single tool output exceeds the window");
 			expect({ timedOut: result.timedOut, code: result.code }, result.output).toEqual({ timedOut: false, code: 0 });
+			expect(result.output).toMatch(/1 passed/);
+		},
+		WALL_CLOCK_MS + 15_000,
+	);
+
+	it(
+		"does not cap overflow recovery that makes progress within one prompt (>= 3 compactions)",
+		async () => {
+			const result = await runScenario("completes one prompt that needs >= 3 overflow compactions");
+			expect({ timedOut: result.timedOut, code: result.code }, result.output).toEqual({ timedOut: false, code: 0 });
+			expect(result.output).toMatch(/1 passed/);
+			expect(result.output).toMatch(/061-progress: overflowCompactions=([3-9]|\d{2,})/);
 		},
 		WALL_CLOCK_MS + 15_000,
 	);
