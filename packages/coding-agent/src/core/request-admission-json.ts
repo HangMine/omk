@@ -1,3 +1,4 @@
+import type { AdmissionJsonCache, AdmissionJsonCacheEntry } from "./admission-json-cache.ts";
 /** Limits are consumed BEFORE building strings. This is a local projection, not a provider serializer. */
 export interface AdmissionJsonBudget {
 	remaining: number;
@@ -61,12 +62,27 @@ export function boundedAdmissionJson(value: unknown, budget: AdmissionJsonBudget
  * same budget charges and errors. A top-level array stays split per element so a
  * token counter can read a whole transcript without one joined history-sized copy.
  */
-export function boundedAdmissionJsonParts(value: unknown, budget: AdmissionJsonBudget): string[] {
-	const rendered = createAdmissionJsonRenderer(budget)(value, 0, true);
+export function boundedAdmissionJsonParts(
+	value: unknown,
+	budget: AdmissionJsonBudget,
+	elementCache?: AdmissionJsonElementCache,
+): string[] {
+	const rendered = createAdmissionJsonRenderer(budget, elementCache)(value, 0, true);
 	return typeof rendered === "string" ? [rendered] : rendered;
+}
+/**
+ * Spec 062: reuse the rendered JSON of top-level array elements whose source object and projection leaves are
+ * unchanged. A hit replays the exact budget characters and nodes the element consumed, so limits trip as before.
+ * `entries[index]` receives the entry of element `index`.
+ */
+export interface AdmissionJsonElementCache {
+	readonly cache: AdmissionJsonCache;
+	readonly sources: readonly unknown[];
+	readonly entries: AdmissionJsonCacheEntry[];
 }
 function createAdmissionJsonRenderer(
 	budget: AdmissionJsonBudget,
+	elementCache?: AdmissionJsonElementCache,
 ): (current: unknown, depth: number, split: boolean) => string | string[] {
 	const ancestors = new WeakSet<object>();
 	const visit = (current: unknown, depth: number): string => render(current, depth, false) as string;
@@ -105,7 +121,12 @@ function createAdmissionJsonRenderer(
 					if (index > 0) charge(budget, 1);
 					const desc = Object.getOwnPropertyDescriptor(current, String(index));
 					if (desc && !("value" in desc)) throw new TypeError("admission.json_accessor");
-					parts.push(visit(desc?.value === undefined ? null : desc.value, depth + 1));
+					const element = desc?.value === undefined ? null : desc.value;
+					if (split && depth === 0 && elementCache) {
+						parts.push(renderCachedElement(elementCache, index, element, depth + 1));
+						continue;
+					}
+					parts.push(visit(element, depth + 1));
 				}
 				return split ? splitWrapped(parts) : joinWrapped("[", parts, "]");
 			}
@@ -123,6 +144,26 @@ function createAdmissionJsonRenderer(
 		} finally {
 			ancestors.delete(current);
 		}
+	}
+	function renderCachedElement(
+		elementCache: AdmissionJsonElementCache,
+		index: number,
+		element: unknown,
+		depth: number,
+	): string {
+		const { entry, hit } = elementCache.cache.resolve(elementCache.sources[index], element, () => {
+			const remaining = budget.remaining;
+			const nodes = budget.nodes;
+			const json = visit(element, depth);
+			return { json, charged: remaining - budget.remaining, nodes: budget.nodes - nodes };
+		});
+		if (hit) {
+			if (budget.nodes + entry.nodes > 100000) representationLimit();
+			budget.nodes += entry.nodes;
+			charge(budget, entry.charged);
+		}
+		elementCache.entries[index] = entry;
+		return entry.json;
 	}
 	return render;
 }

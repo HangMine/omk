@@ -124,3 +124,20 @@ skills/settings reload on every Enter (omk-scout-mem). I did not see skills or s
 
 ## Not in scope / follow-ups
 - Library Scout's skills/settings reload check (omk-scout-mem).
+
+## 062 implementation result (F2+F3), paired A/B
+A = main `e28c260f75` dist. B = this branch. 20 interleaved process pairs (A, B, A, B, …), each with 10 measured turns,
+10×50 models. Commands: `bench/ab.sh <A> <B> large|small 20 results/ab062`, then `node bench/absum.mjs results/ab062 large|small`.
+| ms | A p50 / p90 / p95 | B p50 / p90 / p95 | paired A−B p50 diff (median, min) | load1 A / B |
+|---|---|---|---|---|
+| large Enter→request | 98.0 / 108.2 / 131.2 | 51.2 / 56.3 / 75.0 | 48.2 (min 31.4) | 2.58–11.0 / 2.57–10.5 |
+| large preflight | 21.8 / 25.5 / 27.3 | 4.4 / 5.0 / 6.7 | 17.7 (min 15.2) | same |
+| small Enter→request | 20.6 / 24.7 / 34.1 | 20.2 / 21.9 / 29.1 | 0.2 (min −2.4) | 2.49–2.85 |
+| small preflight | 2.1 / 2.4 / 2.8 | 2.1 / 2.4 / 3.0 | 0.0 | same |
+(p50 = median of per-process p50s; p90 = 90th percentile of per-process p50s; p95 = median of per-process p95s.)
+Final run, after the module-size split. load1 spiked to ~11 for a few large pairs in both arms; pairing keeps the
+comparison fair. Criteria: large p50 ≤ 53 ms ✅ (51.2). p90 ≤ 70 ms ✅ (56.3). Small p50 no regression > 2 ms ✅ (paired 0.2).
+An earlier run before the split (load1 2–3.7) gave 96.3 → 50.2. p95 is the median of per-process p95s over only 10 turns, so it is noisy. Remaining large-session cost before the request: H1 durable append (~17 ms, 064) and H4 journal (~11 ms, 1.4.4).
+Tests: `test/spec062-admission-cache.test.ts` (9). Two mutants were checked: skipping the leaf comparison → 3 fail;
+skipping the reasoning-drop snapshot comparison → 1 fails. The 20 related admission/compaction test files pass
+(216 tests). The full coding-agent suite passes: 759 files, 8940 tests, 56 skipped.

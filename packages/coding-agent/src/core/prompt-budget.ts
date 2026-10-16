@@ -208,7 +208,7 @@ export function estimateContextInputTokens(input: ContextInputEstimateInput): Co
 	const systemPromptTokens = countText(input.tokenCounter, input.systemPrompt, input.modelId);
 	const heuristicMessageTokens = messages.reduce((sum, message) => sum + estimateTokens(message as AgentMessage), 0);
 	const messageTokens = Math.max(
-		countParts(input.tokenCounter, canonical.textParts, input.modelId),
+		countParts(input.tokenCounter, canonical.textParts, input.modelId, canonical.statsAt),
 		heuristicMessageTokens,
 	);
 	const toolTokens = countText(input.tokenCounter, serializePromptToolSchemas(input.tools), input.modelId);
@@ -258,9 +258,9 @@ function countText(counter: TokenCounterAdapter, input: string, modelId: string)
 	return result.tokens;
 }
 
-function countParts(counter: TokenCounterAdapter, parts: readonly string[], modelId: string): number {
-	const result = countTextParts(counter, parts, modelId);
-	assertNonNegativeSafeInteger(result.tokens, `tokenCounter(${counter.id}).tokens`);
+function countParts(...args: Parameters<typeof countTextParts>): number {
+	const result = countTextParts(...args);
+	assertNonNegativeSafeInteger(result.tokens, `tokenCounter(${args[0].id}).tokens`);
 	return result.tokens;
 }
 

@@ -1,9 +1,20 @@
 import type {
 	ContextBudgetTokenConfidence,
 	ContextBudgetTokenCountMethod,
+	TextPartStats,
+	TextPartStatsAt,
 	TokenCounterAdapter,
 	TokenCountResult,
 } from "./context-budget-token-counter-types.ts";
+import {
+	isAsciiAlphaNumeric,
+	isAsciiPunctuation,
+	isCjkIdeograph,
+	isEmojiOrWideSymbol,
+	isHangul,
+	isHiraganaOrKatakana,
+	isUnicodeWhitespace,
+} from "./text-char-classes.ts";
 
 /**
  * Fallback token estimator. `estimateTextTokensFromParts` returns exactly what
@@ -19,7 +30,9 @@ export function countTextParts(
 	counter: TokenCounterAdapter,
 	parts: readonly string[],
 	modelId: string,
+	statsAt?: TextPartStatsAt,
 ): TokenCountResult {
+	if (statsAt && counter.countTextPartsWithStats) return counter.countTextPartsWithStats(parts, statsAt, modelId);
 	return counter.countTextParts ? counter.countTextParts(parts, modelId) : counter.countText(parts.join(""), modelId);
 }
 
@@ -79,15 +92,44 @@ export function estimateTextTokens(input: string, modelId = "unknown"): TokenCou
 
 /** Same result as `estimateTextTokens(parts.join(""), modelId)`. */
 export function estimateTextTokensFromParts(parts: readonly string[], modelId = "unknown"): TokenCountResult {
+	return estimateTextTokensFromPartStats(parts, noPartStats, modelId);
+}
+
+const noPartStats: TextPartStatsAt = () => undefined;
+const COUNT_KEYS = Object.keys(emptyCounts()) as (keyof CharClassCounts)[];
+
+/** Statistics of one part; `estimateTextTokensFromPartStats` sums them instead of rescanning the text. */
+export function textPartStats(part: string): TextPartStats {
+	const counts = emptyCounts();
+	countCharClasses(part, counts);
+	return Object.freeze({ ...counts, length: part.length, keyword: CODE_KEYWORD.test(part) });
+}
+
+/**
+ * Same result as `estimateTextTokensFromParts(parts, modelId)`. Parts with cached statistics are not rescanned;
+ * a joint that is not neutral falls back to the joined scan exactly like the uncached path.
+ */
+export function estimateTextTokensFromPartStats(
+	parts: readonly string[],
+	statsAt: TextPartStatsAt,
+	modelId = "unknown",
+): TokenCountResult {
 	if (!hasNeutralJoints(parts)) return estimateTextTokens(parts.join(""), modelId);
 	const counts = emptyCounts();
 	let length = 0;
 	let keyword = false;
-	for (const part of parts) {
+	for (let index = 0; index < parts.length; index++) {
+		const part = parts[index];
+		const stats = statsAt(index);
+		if (stats === undefined || stats.length !== part.length) {
+			countCharClasses(part, counts);
+			// Neutral joints keep every `\b...\b` match inside one part with the same boundaries.
+			if (!keyword) keyword = CODE_KEYWORD.test(part);
+		} else {
+			for (const key of COUNT_KEYS) counts[key] += stats[key];
+			if (!keyword) keyword = stats.keyword;
+		}
 		length += part.length;
-		countCharClasses(part, counts);
-		// Neutral joints keep every `\b...\b` match inside one part with the same boundaries.
-		if (!keyword) keyword = CODE_KEYWORD.test(part);
 	}
 	if (length === 0) return emptyInputResult(modelId);
 	return finishEstimate(counts, length, keyword, partsLookJsonLike(parts), modelId);
@@ -200,77 +242,6 @@ function createTokenResult(
 		modelId,
 		notes,
 	};
-}
-
-/** Exactly the code points `/\s/u` matches: ECMAScript WhiteSpace and LineTerminator. */
-function isUnicodeWhitespace(codePoint: number): boolean {
-	if (codePoint <= 0x20) return codePoint === 0x20 || (codePoint >= 0x09 && codePoint <= 0x0d);
-	if (codePoint < 0xa0) return false;
-	return (
-		codePoint === 0xa0 ||
-		codePoint === 0x1680 ||
-		(codePoint >= 0x2000 && codePoint <= 0x200a) ||
-		codePoint === 0x2028 ||
-		codePoint === 0x2029 ||
-		codePoint === 0x202f ||
-		codePoint === 0x205f ||
-		codePoint === 0x3000 ||
-		codePoint === 0xfeff
-	);
-}
-
-function isAsciiAlphaNumeric(codePoint: number): boolean {
-	return (
-		(codePoint >= 48 && codePoint <= 57) ||
-		(codePoint >= 65 && codePoint <= 90) ||
-		(codePoint >= 97 && codePoint <= 122)
-	);
-}
-
-function isAsciiPunctuation(codePoint: number): boolean {
-	return codePoint >= 33 && codePoint <= 126;
-}
-
-function isHangul(codePoint: number): boolean {
-	// Composed syllables (가-힣)
-	if (codePoint >= 0xac00 && codePoint <= 0xd7af) return true;
-	// Jamo: initial (ㄱ-ㅎ), medial (ㅏ-ㅣ)
-	if (codePoint >= 0x1100 && codePoint <= 0x11ff) return true;
-	// Compatibility jamo (ㄱ-ㅎ, ㅏ-ㅣ) and Hangul letters
-	if (codePoint >= 0x3130 && codePoint <= 0x318f) return true;
-	// Extended jamo
-	if (codePoint >= 0xa960 && codePoint <= 0xa97c) return true;
-	return false;
-}
-
-function isHiraganaOrKatakana(codePoint: number): boolean {
-	// Hiragana (ぁ-より)
-	if (codePoint >= 0x3040 && codePoint <= 0x309f) return true;
-	// Katakana (ァ-ヿ) + halfwidth katakana
-	if (codePoint >= 0x30a0 && codePoint <= 0x30ff) return true;
-	if (codePoint >= 0xff65 && codePoint <= 0xff9f) return true;
-	return false;
-}
-
-function isCjkIdeograph(codePoint: number): boolean {
-	// CJK Unified Ideographs (main block: 中, 国, etc.)
-	if (codePoint >= 0x4e00 && codePoint <= 0x9fff) return true;
-	// CJK Extension A (rare)
-	if (codePoint >= 0x3400 && codePoint <= 0x4dbf) return true;
-	// CJK compatibility ideographs
-	if (codePoint >= 0xf900 && codePoint <= 0xfaff) return true;
-	return false;
-}
-
-function isEmojiOrWideSymbol(codePoint: number): boolean {
-	// Main emoji blocks
-	if (codePoint >= 0x1f000) return true;
-	// Misc symbols, dingbats
-	if (codePoint >= 0x2600 && codePoint <= 0x27bf) return true;
-	// CJK fullwidth/special forms that occupy double width
-	if (codePoint >= 0xff01 && codePoint <= 0xff60) return true;
-	if (codePoint >= 0xffe0 && codePoint <= 0xffe6) return true;
-	return false;
 }
 
 function looksJsonLike(input: string): boolean {

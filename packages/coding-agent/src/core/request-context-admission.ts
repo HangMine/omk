@@ -44,7 +44,7 @@ export function createRequestAdmissionGuard(
 				const projection = projectRequestForAdmission(context, policy);
 				const tokens = [
 					counter.countText(projection.system, model.id).tokens,
-					countTextParts(counter, projection.messageParts, model.id).tokens,
+					countTextParts(counter, projection.messageParts, model.id, projection.statsAt).tokens,
 					counter.countText(projection.tools, model.id).tokens,
 				];
 				if (tokens.some((n) => !Number.isSafeInteger(n) || n < 0)) throw new TypeError("admission.invalid_count");

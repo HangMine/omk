@@ -13,10 +13,34 @@ function hasReasoning(message: RoleMessage): boolean {
 	return message.role === "assistant" && message.content.some((block) => block.type === "thinking");
 }
 
+/**
+ * Spec 062: the stripped copy is reused while the source keeps the same own fields and content blocks, so the
+ * admission JSON cache (keyed by message object) still hits for closed turns that carried reasoning.
+ */
+const strippedCopies = new WeakMap<object, { readonly snapshot: readonly unknown[]; readonly copy: RoleMessage }>();
+
+function shallowSnapshot(message: AssistantMessage): unknown[] {
+	const snapshot: unknown[] = [];
+	for (const key of Object.keys(message)) snapshot.push(key, (message as unknown as Record<string, unknown>)[key]);
+	snapshot.push(message.content.length, ...message.content);
+	return snapshot;
+}
+
+function sameSnapshot(left: readonly unknown[], right: readonly unknown[]): boolean {
+	if (left.length !== right.length) return false;
+	for (let index = 0; index < left.length; index++) if (left[index] !== right[index]) return false;
+	return true;
+}
+
 function withoutReasoning<T extends RoleMessage>(message: T): T {
 	if (!hasReasoning(message)) return message;
 	const assistant = message as AssistantMessage;
-	return { ...assistant, content: assistant.content.filter((block) => block.type !== "thinking") } as T;
+	const snapshot = shallowSnapshot(assistant);
+	const cached = strippedCopies.get(assistant);
+	if (cached && sameSnapshot(cached.snapshot, snapshot)) return cached.copy as T;
+	const copy = { ...assistant, content: assistant.content.filter((block) => block.type !== "thinking") } as T;
+	strippedCopies.set(assistant, { snapshot, copy });
+	return copy;
 }
 
 /** Providers drop reasoning from turns a later user message closed; only the turn in progress keeps it. */

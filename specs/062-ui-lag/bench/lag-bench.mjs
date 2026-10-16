@@ -91,7 +91,7 @@ for (let i = 0; i < runs; i++) { st0(() => modelRegistry.refresh(), refreshT); s
   st0(() => sessionManager.appendModelChange("fake0", "model-0"), mcT); st0(() => settingsManager.setDefaultModelAndProvider("fake0", "model-0"), setDefT); }
 await session.setModel(model);
 const st = (a) => { const s = [...a].sort((x, y) => x - y); const q = (p) => s[Math.min(s.length - 1, Math.floor(p * s.length))];
-  return { n: s.length, p50: +q(0.5).toFixed(2), p90: +q(0.9).toFixed(2), max: +s.at(-1).toFixed(2) }; };
+  return { n: s.length, p50: +q(0.5).toFixed(2), p90: +q(0.9).toFixed(2), p95: +q(0.95).toFixed(2), max: +s.at(-1).toFixed(2) }; };
 const rep = { size, pairs, providers: nProv, modelsPerProvider: nModels, load1: +(await import("node:os")).loadavg()[0].toFixed(2),
   enterToRequest: st(enter), appendBeforeRequest: preReqAppend.length ? st(preReqAppend) : null, appendAfterRequest: postReqAppend.length ? st(postReqAppend) : null, preflightToRunAgentPrompt: st(preflight), segments: Object.fromEntries(Object.entries(seg).map(([k, v]) => [k, st(v)])),
   selector: { ctorSync: st(open), openToRendered: st(render), perKeystrokeFilterRender: st(filter), setModelApply: st(apply), registryRefresh: st(refreshT), getAvailable: st(availT), appendModelChange: st(mcT), setDefaultModelAndProvider: st(setDefT) } };
