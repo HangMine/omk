@@ -46,3 +46,7 @@ Only method names and durations are written. No prompt text, model output, keys 
 - on: the same drive with a fake OpenAI-compatible server writes `model.open` (firstFrame, refresh, getAvailable),
   `model.apply` (appendModelChange, settings.write) and `enter` (request.sent, admit, appendMessage, streamFn.entered),
   and the log does not contain the fake API key.
+
+## Limits
+- Spans live in a process-global Map (`core/debug-timing.ts` `active`), so this is for the TUI's single session only. Concurrent sessions in one process (SDK/RPC hosting several) would mix records.
+- Hooked method names are listed in `debugTimingHookTargets()`; a test asserts each exists on current code, so a rename fails CI instead of silently dropping a phase.

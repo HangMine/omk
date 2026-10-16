@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { resetDebugTimingForTests } from "../src/core/debug-timing.ts";
-import { installDebugTimingHooks } from "../src/core/debug-timing-hooks.ts";
+import { debugTimingHookTargets, installDebugTimingHooks } from "../src/core/debug-timing-hooks.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
@@ -129,6 +129,15 @@ async function drive(env: NodeJS.ProcessEnv): Promise<void> {
 }
 
 describe("spec 065 OMK_TIMING debug timing", () => {
+	it("every hooked method name exists on its target (a rename must fail here)", () => {
+		const { spans, timed, render } = debugTimingHookTargets();
+		const missing = [...spans, ...timed, render]
+			.filter(([target, method]) => typeof (target as Record<string, unknown>)[method] !== "function")
+			.map(([target, method]) => `${(target as { constructor: { name: string } }).constructor.name}.${method}`);
+		expect(missing).toEqual([]);
+		expect(spans.length + timed.length + 1).toBe(20);
+	});
+
 	it("off: installs nothing and writes nothing", async () => {
 		const file = join(mkdtempSync(join(tmpdir(), "omk-spec065-off-")), "timing.log");
 		const prompt = AgentSession.prototype.prompt;
