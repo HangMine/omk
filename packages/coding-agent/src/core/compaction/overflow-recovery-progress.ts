@@ -32,12 +32,22 @@ export function isOverflowRecoveryProgress(
 /** Prefix of every overflow-recovery give-up message; headless modes key their non-zero exit on it. */
 export const OVERFLOW_RECOVERY_FAILED = "Context overflow recovery failed after two staged compact-and-retry attempts.";
 
-/** User-visible reason when overflow recovery gives up; names a tool output larger than the window. */
+/** User-visible reason when overflow recovery gives up; names the tool output larger than the window. */
 export function overflowRecoveryFailureMessage(messages: readonly AgentMessage[], contextWindow: number): string {
-	const lastToolResult = [...messages].reverse().find((m) => m.role === "toolResult");
-	const toolTokens = lastToolResult ? estimateTokens(lastToolResult) : 0;
-	if (lastToolResult && contextWindow > 0 && toolTokens > contextWindow) {
-		const toolName = (lastToolResult as { toolName?: string }).toolName ?? "tool";
+	// The largest tool result still in context, not the last one: later turns (blocked or nudged calls)
+	// can append small results after the oversized one (seen end-to-end through `omk -p`).
+	let largestToolResult: AgentMessage | undefined;
+	let toolTokens = 0;
+	for (const message of messages) {
+		if (message.role !== "toolResult") continue;
+		const tokens = estimateTokens(message);
+		if (tokens > toolTokens) {
+			largestToolResult = message;
+			toolTokens = tokens;
+		}
+	}
+	if (largestToolResult && contextWindow > 0 && toolTokens > contextWindow) {
+		const toolName = (largestToolResult as { toolName?: string }).toolName ?? "tool";
 		return (
 			`${OVERFLOW_RECOVERY_FAILED} The output of tool "${toolName}" (~${toolTokens.toLocaleString("en-US")} tokens) ` +
 			`is larger than the ${contextWindow.toLocaleString("en-US")}-token context window, so compaction cannot make ` +
