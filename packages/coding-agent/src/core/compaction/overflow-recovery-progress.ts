@@ -26,7 +26,8 @@ export function isOverflowRecoveryProgress(
 	return previous?.role === "toolResult";
 }
 
-const OVERFLOW_RECOVERY_FAILED = "Context overflow recovery failed after two staged compact-and-retry attempts.";
+/** Prefix of every overflow-recovery give-up message; headless modes key their non-zero exit on it. */
+export const OVERFLOW_RECOVERY_FAILED = "Context overflow recovery failed after two staged compact-and-retry attempts.";
 
 /** User-visible reason when overflow recovery gives up; names a tool output larger than the window. */
 export function overflowRecoveryFailureMessage(messages: readonly AgentMessage[], contextWindow: number): string {
