@@ -7,7 +7,12 @@ import type {
 	TokenCounterRegistryOptions,
 	TokenCountResult,
 } from "./context-budget-token-counter-types.ts";
-import { countTextParts, estimateTextTokens, estimateTextTokensFromParts } from "./text-token-estimate.ts";
+import {
+	countTextParts,
+	estimateTextTokens,
+	estimateTextTokensFromPartStats,
+	estimateTextTokensFromParts,
+} from "./text-token-estimate.ts";
 import { countFromTokenizerPackages, validateTokenCountResult } from "./tokenizer-module-adapter.ts";
 
 export type * from "./context-budget-token-counter-types.ts";
@@ -41,6 +46,9 @@ export function createFallbackTokenCounter(): TokenCounterAdapter {
 		},
 		countTextParts(parts, modelId) {
 			return estimateTextTokensFromParts(parts, modelId);
+		},
+		countTextPartsWithStats(parts, statsAt, modelId) {
+			return estimateTextTokensFromPartStats(parts, statsAt, modelId);
 		},
 	};
 }
@@ -129,6 +137,8 @@ export function createTokenCounterRegistry(options: TokenCounterRegistryOptions 
 		supports: () => true,
 		countText: (input, modelId) => count(modelId, (adapter) => adapter.countText(input, modelId)),
 		countTextParts: (parts, modelId) => count(modelId, (adapter) => countTextParts(adapter, parts, modelId)),
+		countTextPartsWithStats: (parts, statsAt, modelId) =>
+			count(modelId, (adapter) => countTextParts(adapter, parts, modelId, statsAt)),
 	};
 }
 

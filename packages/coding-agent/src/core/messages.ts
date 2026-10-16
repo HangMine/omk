@@ -7,6 +7,8 @@
 
 import type { AgentMessage } from "omk-agent-core";
 import type { ImageContent, Message, TextContent, ThinkingContent, ToolCall } from "omk-ai";
+import { AdmissionJsonCache, type AdmissionStatsEntry, admissionEntryStats } from "./admission-json-cache.ts";
+import type { TextPartStatsAt } from "./context-budget-token-counter-types.ts";
 
 export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
 
@@ -206,6 +208,8 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 export function canonicalizeMessagesForContextAdmission(messages: readonly Message[]): {
 	readonly textParts: readonly string[];
 	readonly imageCount: number;
+	/** Cached fallback-estimator statistics per text part (spec 062). */
+	readonly statsAt: TextPartStatsAt;
 } {
 	let imageCount = 0;
 	const markImage = (): void => {
@@ -239,14 +243,28 @@ export function canonicalizeMessagesForContextAdmission(messages: readonly Messa
 		}
 	});
 	const textParts = ["["];
+	const entries: (AdmissionStatsEntry | undefined)[] = [undefined];
+	// `canonical` is `messages.map(...)`, so canonical[index] is the projection of messages[index] (1:1, in order).
+	// The stats cache relies on this: it is keyed by messages[index] and validated against canonical[index].
 	for (let index = 0; index < canonical.length; index++) {
-		if (index > 0) textParts.push(",");
+		if (index > 0) {
+			textParts.push(",");
+			entries.push(undefined);
+		}
 		// Element objects are fresh literals, so each serializes as it would inside the array.
 		textParts.push(stringifyProviderMessages(canonical[index]));
+		entries.push(canonicalAdmissionJsonCache.resolve(messages[index], canonical[index]));
 	}
 	textParts.push("]");
-	return { textParts, imageCount };
+	const statsAt: TextPartStatsAt = (index) => {
+		const entry = entries[index];
+		return entry ? admissionEntryStats(entry, textParts[index]) : undefined;
+	};
+	return { textParts, imageCount, statsAt };
 }
+
+/** Spec 062: token statistics per source message, reused while its projection leaves are unchanged. */
+const canonicalAdmissionJsonCache = new AdmissionJsonCache();
 
 function stringifyProviderMessages(value: unknown): string {
 	try {

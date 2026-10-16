@@ -1,4 +1,6 @@
 import type { Context } from "omk-ai";
+import { AdmissionJsonCache, admissionEntryStats } from "./admission-json-cache.ts";
+import type { TextPartStatsAt } from "./context-budget-token-counter-types.ts";
 import { boundedAdmissionJson, boundedAdmissionJsonParts, representationLimit } from "./request-admission-json.ts";
 import type { RequestAdmissionPolicy } from "./request-admission-policy.ts";
 
@@ -15,6 +17,8 @@ export function projectRequestForAdmission(
 	system: string;
 	/** Pieces of the messages JSON; `join("")` is the projected text. */
 	messageParts: readonly string[];
+	/** Cached fallback-estimator statistics per message part (spec 062). */
+	statsAt: TextPartStatsAt;
 	tools: string;
 	imageCount: number;
 } {
@@ -85,10 +89,21 @@ export function projectRequestForAdmission(
 		}
 	});
 	const messageParts = boundedAdmissionJsonParts(messages, budget);
+	// `messages` is `context.messages.map(...)`, so messages[k] projects context.messages[k] (1:1, in order),
+	// and the parts are ["[", e0, ",", e1, ..., "]"]: element k sits at index 2k + 1.
+	const entries = messages.map((projected, k) => requestAdmissionJsonCache.resolve(context.messages[k], projected));
+	const statsAt: TextPartStatsAt = (index) => {
+		if (index % 2 === 0 || messages.length === 0) return undefined;
+		const entry = entries[(index - 1) / 2];
+		return entry ? admissionEntryStats(entry, messageParts[index]) : undefined;
+	};
 	const tools = (context.tools ?? []).map((tool) => ({
 		name: tool.name,
 		description: tool.description,
 		parameters: tool.parameters,
 	}));
-	return { system, messageParts, tools: boundedAdmissionJson(tools, budget), imageCount };
+	return { system, messageParts, statsAt, tools: boundedAdmissionJson(tools, budget), imageCount };
 }
+
+/** Spec 062: request-admission token statistics per source message (see admission-json-cache.ts). */
+const requestAdmissionJsonCache = new AdmissionJsonCache();
