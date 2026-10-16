@@ -76,3 +76,11 @@ have no cap, so one large MCP result costs two compactions and then a failed tur
 - Spill: the full text goes to `<session>.artifacts/mcp-<toolCallId>.txt` next to the session `.jsonl` (dir 0700,
   file 0600). The marker shows the path relative to the tool cwd. Deleting the session removes the artifacts directory.
 - Structured-only results: unchanged (`(no content)`). Not covered.
+
+## Results
+See `bench/results/summary.md`. Tests:
+- `test/spec066-mcp-output-cap.test.ts` (36): cap + marker, tail error kept / head-only loses
+  it, single long line, multi-block + image, `truncateHeadTail` unit tests, no-session marker,
+  `OMK_MCP_OUTPUT_CAP=0`, delete removes the spill, 22 golden small outputs.
+- `test/spec066-mcp-overflow-scenario.test.ts` (2; `SPEC066_RUNS=20` for the 20-run check).
+- `deleteSessionFile` moved from `session-selector.ts` to `core/session-artifacts.ts` (unchanged except artifact removal).
