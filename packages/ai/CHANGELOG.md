@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-17
+
+### Changed
+
+- Lockstep version alignment with OMK 1.4.3. Provider behavior and generated model catalogs are unchanged.
+
 ## [1.4.2] - 2026-10-16
 
 ### Changed

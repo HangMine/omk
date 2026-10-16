@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-17
+
+### Changed
+
+- Lockstep version alignment with OMK 1.4.3. No AdaptOrch service or default transport is enabled by this release.
+
 ## [1.4.2] - 2026-10-16
 
 ### Changed

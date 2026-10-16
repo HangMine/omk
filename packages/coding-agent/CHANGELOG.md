@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-17
+
+### Added
+
+- Opt-in `OMK_TIMING=1` phase diagnostics for model-selector opening, model application and prompt admission. `OMK_TIMING_FILE` selects the local log; timing is disabled by default and records phase durations without prompt or credential values. The diagnostic spans target one interactive session, not overlapping SDK sessions. ([#144](https://github.com/dmae97/omk/pull/144))
+
+### Changed
+
+- Cache fallback admission token statistics per source message without retaining serialized JSON. In-place edits invalidate the cache, unusual JSON projections bypass it, and token estimates remain unchanged. ([#142](https://github.com/dmae97/omk/pull/142))
+- Skip model-registry rebuilding when its model-file, provider and selected OAuth inputs are unchanged. Model edits, provider registration and credential changes still trigger refresh. ([#143](https://github.com/dmae97/omk/pull/143))
+
+### Fixed
+
+- Stop context-overflow recovery after two staged compact-and-retry attempts without progress, including when one tool result exceeds the context window. Diagnostics identify the largest oversized result; print mode reports the failure on stderr and exits with status 1. Successful in-window text replies and consumed tool results reset the recovery counter. ([#141](https://github.com/dmae97/omk/pull/141))
+
 ## [1.4.2] - 2026-10-16
 
 ### Fixed

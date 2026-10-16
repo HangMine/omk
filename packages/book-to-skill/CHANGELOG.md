@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-17
+
+### Changed
+
+- Lockstep version alignment with OMK 1.4.3. The exported compiler identity follows the package version.
+
 ## [1.4.2] - 2026-10-16
 
 ### Changed
