@@ -73,6 +73,7 @@ import {
 	resolveCompactionModel,
 } from "./compaction/index.ts";
 import { summarizeWithOAuthRecovery } from "./compaction/oauth-recovery.ts";
+import { isOverflowRecoveryProgress, overflowRecoveryFailureMessage } from "./compaction/overflow-recovery-progress.ts";
 import { overflowRetryBlocked } from "./compaction/overflow-retry-guard.ts";
 import { compactionEmitWillRetry } from "./compaction/resume-policy.ts";
 import { type CompactionSummaryInput, summarizeSessionCompaction } from "./compaction/session-summary.ts";
@@ -1321,7 +1322,6 @@ export class AgentSession {
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
-			this._overflowRecoveryAttempts = 0;
 			const messageText = this._getUserMessageText(event.message);
 			if (messageText) {
 				// Check steering queue first
@@ -1385,7 +1385,7 @@ export class AgentSession {
 				this._lastAssistantMessage = finalizedEvent.message;
 
 				const assistantMsg = finalizedEvent.message as AssistantMessage;
-				if (assistantMsg.stopReason !== "error") {
+				if (isOverflowRecoveryProgress(assistantMsg, this.agent.state.messages, this.model?.contextWindow ?? 0)) {
 					this._overflowRecoveryAttempts = 0;
 				}
 
@@ -2109,6 +2109,7 @@ export class AgentSession {
 		// One identity per top-level run (§16.2): internal retries and
 		// continuations inside this call share it, as does the resource lease.
 		const promptRunId = `prompt-run-${randomUUID()}`;
+		this._overflowRecoveryAttempts = 0; // spec 061: fresh overflow-recovery budget per user prompt
 		const ownedRun = this._promptLifecycle.begin(promptRunId);
 		// Roadmap M2: the lease spans the whole run including internal retries
 		// and continuations, so they share one admission decision (§8.3).
@@ -3909,8 +3910,7 @@ export class AgentSession {
 					result: undefined,
 					aborted: false,
 					willRetry: false,
-					errorMessage:
-						"Context overflow recovery failed after two staged compact-and-retry attempts. Reduce the latest input or switch to a model with a larger effective context window.",
+					errorMessage: overflowRecoveryFailureMessage(this.agent.state.messages, contextWindow),
 				});
 				return false;
 			}
