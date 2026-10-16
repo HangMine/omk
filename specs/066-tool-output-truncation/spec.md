@@ -1,6 +1,6 @@
 # Spec 066: cap MCP tool output like built-in tools (1.4.4)
 
-Status: draft, spec only, no implementation. Base: origin/main `0ce36329dc`. Scope (Tech Lead): MCP output first.
+Status: implemented locally (Tech Lead decisions below). Base: origin/main `0ce36329dc`. Scope (Tech Lead): MCP output first.
 
 ## Problem
 A tool result larger than the context window makes the session compact over and over (spec 061). 061 bounded the
@@ -47,6 +47,9 @@ have no cap, so one large MCP result costs two compactions and then a failed tur
 4. No regression in task success on the Bench Analyst paired A/B (n=20, `paired_verdict.py --noreg`), and fewer
    context tokens per turn on the large-MCP tasks (CI high < 0).
 5. Full coding-agent suite green; module-size ratchet unchanged or explicitly approved.
+6. (added before measuring, Tech Lead 2026-10-17) Large MCP outputs whose failure message is at the end: the detection
+   rate (the error text survives into what the model sees) with head+tail must be ≥ the rate with head-only.
+   Test case "large MCP output with error at the end": head+tail keeps the error, and head-only is recorded as losing it.
 
 ## Open questions
 - Default-off flag? The 1.4.4 rule says a behavior change goes behind a default-off flag (e.g.
@@ -59,3 +62,17 @@ have no cap, so one large MCP result costs two compactions and then a failed tur
 - Should the same cap later wrap extension tools (`tool-definition-wrapper.ts`)? Proposed: a follow-up spec.
 - Are `structuredContent`-only results (empty `content`) rendered to the model anywhere? They currently become
   `(no content)` (`core/mcp/tools.ts:140`).
+
+## Tech Lead decisions
+- On by default (parity fix with the built-in tools). `OMK_MCP_OUTPUT_CAP=0` turns it off (rollback). MCP only;
+  extension tools are unchanged.
+- **Head+tail** (decision changed from head-only; Agent Researcher: Codex CLI `truncate.rs`, issue #6415, tail
+  errors were lost). Keep the start and the end, cut the middle. The marker sits at the cut and states the total
+  lines/bytes and how many were cut. `core/tools/truncate.ts` on main `0ce36329dc` has only `truncateHead` /
+  `truncateTail` / `truncateLine` (no head+tail), so a new `truncateHeadTail` is added there, built from their limit
+  logic. read/grep/bash are unchanged.
+- Limits: the existing 2000 lines / 50KB total, split evenly between head and tail. The strategy is isolated in
+  `truncateMcpText` (`core/mcp/output-cap.ts`).
+- Spill: the full text goes to `<session>.artifacts/mcp-<toolCallId>.txt` next to the session `.jsonl` (dir 0700,
+  file 0600). The marker shows the path relative to the tool cwd. Deleting the session removes the artifacts directory.
+- Structured-only results: unchanged (`(no content)`). Not covered.
