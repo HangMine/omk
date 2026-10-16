@@ -46,6 +46,9 @@ describe("spec 061: single tool output larger than the context window", () => {
 			const result = await runScenario("settles a prompt whose single tool output exceeds the window");
 			expect({ timedOut: result.timedOut, code: result.code }, result.output).toEqual({ timedOut: false, code: 0 });
 			expect(result.output).toMatch(/1 passed/);
+			// The scenario's own prompt time, measured in the child (vitest startup excluded).
+			const elapsed = Number(/061-elapsed-ms=(\d+)/.exec(result.output)?.[1] ?? Number.NaN);
+			expect(elapsed).toBeLessThan(2_000);
 		},
 		WALL_CLOCK_MS + 15_000,
 	);

@@ -95,6 +95,20 @@ prompt 한 번 안에서 overflow 복구 컴팩션 횟수를 상한으로 묶어
 9. headless: 상한 도달 시 text·json 모드 모두 stderr에 같은 문구를 쓰고 종료 코드 1, 다음 prompt는 실행하지 않는다.
    복구에 성공한 overflow 컴팩션(`willRetry: true`)은 종료 코드 0 그대로다(`test/print-mode.test.ts`).
 
+10. end-to-end(`test/oversized-output-hang.e2e.test.ts`, `SPEC061_E2E=1`, 빌드 필요): 실제 `omk -p`(dist/cli.js), mock
+    openai-completions(prompt_tokens = 받은 요청 크기/4), 64k 창, 400KB 확장 도구, `OMK_TRUST_PROJECT=0`, Node 22.20.
+    수정본은 같은 인자·바뀌는 인자 모두 stderr에 AC 3 문구, 종료 코드 1(~3.5초). main은 같은 인자에서 stdout "ok", 종료 코드 0,
+    바뀌는 인자에서 60초 동안 요청 345번 뒤 SIGKILL.
+
+## 위험·차이
+
+- 하네스와 실제 CLI가 다르다. 실제 `omk -p`에는 identical-loop 가드가 있어서, 같은 인자로 도구를 6번 부르면 도구를 막는다
+  (작은 tool result "identical loop: big repeated 6 times…" 추가). 그래서 main에서도 같은 인자면 멈추지 않고 "ok"·종료 코드 0으로
+  조용히 끝난다. 인자가 매번 바뀌면 가드가 안 걸려서 main은 실제 provider 요청을 끝없이 보낸다(비용).
+- 그 작은 결과가 마지막 tool result가 되므로, 오류 문구는 마지막이 아니라 컨텍스트에서 가장 큰 tool result를 보고 고른다
+  (`overflowRecoveryFailureMessage`, `test/overflow-recovery-progress.test.ts`).
+- 두 경로 모두 "print mode finished but the process was still held open after 2000ms (PipeWrap x3)" 경고가 main에서도 나온다. 061과 무관하다.
+
 ## 하지 않을 것
 
 - 큰 도구 출력을 처음부터 자르거나 spill하는 근본 수정(MCP·확장 도구 결과에 상한 두기). 1.4.4 후보다.
@@ -109,4 +123,6 @@ prompt 한 번 안에서 overflow 복구 컴팩션 횟수를 상한으로 묶어
   (`OMK_*`는 `test/setup-env.ts`가 지우므로 다른 접두사).
 - `packages/coding-agent/src/core/agent-session.ts` — 카운터 리셋 위치(+4/−4).
 - `packages/coding-agent/src/modes/print-mode.ts`, `test/print-mode.test.ts` — headless stderr·종료 코드 1.
+- `packages/coding-agent/test/oversized-output-hang.e2e.test.ts` — 실제 CLI end-to-end(게이트).
+- `packages/coding-agent/test/overflow-recovery-progress.test.ts` — 오류 문구가 가장 큰 tool result를 고르는지.
 - `packages/coding-agent/src/core/compaction/overflow-recovery-progress.ts` — 진전 판정과 오류 문구(새 파일, module-size 상한 때문에 분리).

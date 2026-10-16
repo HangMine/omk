@@ -138,7 +138,12 @@ describe.runIf(process.env.SPEC061_SCENARIO === "1")("061 oversized tool output 
 				}
 			});
 			// Settles either by completing or by a reported recovery failure; it must not hang.
+			const started = performance.now();
 			await h.session.prompt("turn 1").catch(() => undefined);
+			const elapsedMs = Math.round(performance.now() - started);
+			// Measured inside the child, excluding vitest startup (spec 061 AC 4: < 2s).
+			process.stderr.write(`061-elapsed-ms=${elapsedMs}\n`);
+			expect(elapsedMs).toBeLessThan(2_000);
 			expect(overflowStarts).toBeLessThanOrEqual(MAX_OVERFLOW_RECOVERY_ATTEMPTS);
 			// The give-up is user visible and names the cause: one tool output larger than the window.
 			const failures = h
