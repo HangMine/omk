@@ -8,6 +8,7 @@
 
 import type { AssistantMessage, ImageContent } from "omk-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
+import { OVERFLOW_RECOVERY_FAILED } from "../core/compaction/overflow-recovery-progress.ts";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
 import type { PromptSettlementOutcome } from "../core/prompt-settlement.ts";
 import { startRunBudgetClock } from "../core/remaining-budget.ts";
@@ -43,6 +44,8 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 	let promptStarted = false;
 	let latestTermination: SessionTermination | undefined;
 	let latestOutcome: PromptSettlementOutcome | undefined;
+	// Spec 061: overflow recovery gave up, but the run still settles "completed" on the overflowing reply.
+	let overflowRecoveryFailure: string | undefined;
 	let renderedTermination: SessionTermination | undefined;
 	const signalCleanupHandlers: Array<() => void> = [];
 
@@ -66,6 +69,10 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 	};
 
 	const promptFailed = (): boolean => {
+		if (overflowRecoveryFailure !== undefined) {
+			console.error(overflowRecoveryFailure);
+			return true;
+		}
 		const last = session.state.messages.at(-1);
 		const assistantFailed =
 			last?.role === "assistant" && (last.stopReason === "error" || last.stopReason === "aborted");
@@ -117,6 +124,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		promptStarted = false;
 		latestTermination = undefined;
 		latestOutcome = undefined;
+		overflowRecoveryFailure = undefined;
 		await session.bindExtensions({
 			mode: mode === "json" ? "json" : "print",
 			commandContextActions: {
@@ -150,6 +158,13 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		unsubscribe?.();
 		unsubscribe = session.subscribe((event) => {
 			if (event.type === "prompt_settled") latestOutcome = event.outcome;
+			if (
+				event.type === "compaction_end" &&
+				event.reason === "overflow" &&
+				!event.willRetry &&
+				event.errorMessage?.startsWith(OVERFLOW_RECOVERY_FAILED)
+			)
+				overflowRecoveryFailure = event.errorMessage;
 			if (event.type === "session_termination") {
 				latestTermination = event.termination;
 				if (mode === "text") {
@@ -194,6 +209,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			promptStarted = true;
 			latestTermination = undefined;
 			latestOutcome = undefined;
+			overflowRecoveryFailure = undefined;
 			await session.prompt(initialMessage, { images: initialImages });
 			if (promptFailed()) return 1;
 		}
@@ -202,6 +218,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			promptStarted = true;
 			latestTermination = undefined;
 			latestOutcome = undefined;
+			overflowRecoveryFailure = undefined;
 			await session.prompt(message);
 			if (promptFailed()) return 1;
 		}

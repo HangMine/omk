@@ -257,3 +257,65 @@ describe("runPrintMode", () => {
 		expect(session.extensionRunner.emit).toHaveBeenCalledWith({ type: "session_shutdown", reason: "quit" });
 	});
 });
+
+describe("runPrintMode overflow recovery give-up (spec 061)", () => {
+	const failure =
+		'Context overflow recovery failed after two staged compact-and-retry attempts. The output of tool "out" (~100,029 tokens) is larger than the 64,000-token context window, so compaction cannot make it fit.';
+
+	it.each(["text", "json"] as const)(
+		"prints the error to stderr and exits 1 although the run settles completed in %s mode",
+		async (mode) => {
+			// What agent-session leaves behind: a success-shaped overflowing reply and a completed settlement.
+			const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "ok" }));
+			runtimeHost.session.subscribe.mockImplementation((listener: (event: unknown) => void) => {
+				runtimeHost.session.prompt.mockImplementationOnce(async () => {
+					listener({
+						type: "compaction_end",
+						reason: "overflow",
+						result: undefined,
+						aborted: false,
+						willRetry: false,
+						errorMessage: failure,
+					});
+					listener({ type: "prompt_settled", promptRunId: "fixture", outcome: "completed", durationMs: 1 });
+				});
+				return () => {};
+			});
+			const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+			const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+				mode,
+				initialMessage: "fixture",
+				messages: ["must not run"],
+			});
+			expect(exitCode).toBe(1);
+			expect(errorSpy).toHaveBeenCalledWith(failure);
+			expect(runtimeHost.session.prompt).toHaveBeenCalledTimes(1);
+			expect(printIo.output.join("")).not.toContain("ok\n");
+		},
+	);
+
+	it("keeps exit 0 for an overflow compaction that recovered (no default change)", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
+		runtimeHost.session.subscribe.mockImplementation((listener: (event: unknown) => void) => {
+			runtimeHost.session.prompt.mockImplementationOnce(async () => {
+				listener({
+					type: "compaction_end",
+					reason: "overflow",
+					result: undefined,
+					aborted: false,
+					willRetry: true,
+				});
+				listener({ type: "prompt_settled", promptRunId: "fixture", outcome: "completed", durationMs: 1 });
+			});
+			return () => {};
+		});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+			initialMessage: "fixture",
+		});
+		expect(exitCode).toBe(0);
+		expect(errorSpy).not.toHaveBeenCalled();
+		expect(printIo.output.join("")).toContain("done\n");
+	});
+});
