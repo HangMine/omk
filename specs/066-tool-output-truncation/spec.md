@@ -1,0 +1,61 @@
+# Spec 066: cap MCP tool output like built-in tools (1.4.4)
+
+Status: draft, spec only, no implementation. Base: origin/main `0ce36329dc`. Scope (Tech Lead): MCP output first.
+
+## Problem
+A tool result larger than the context window makes the session compact over and over (spec 061). 061 bounded the
+loop: after `MAX_OVERFLOW_RECOVERY_ATTEMPTS = 2` (`core/agent-session.ts:144`, checked at `:3906`) the prompt ends with
+`OVERFLOW_RECOVERY_FAILED` (`core/compaction/overflow-recovery-progress.ts:33`, tool-named message `:52`). So it no
+longer hangs, but the turn still fails. Built-in tools can't trigger this, because their output is capped. MCP tools
+have no cap, so one large MCP result costs two compactions and then a failed turn.
+
+## Current sizing (file:line, `packages/coding-agent/src`)
+| tool | limit | how | marker / way to get more |
+|---|---|---|---|
+| shared helper | 2000 lines / 50 KB | `core/tools/truncate.ts:11-12`; `truncateHead` `:78`, `truncateTail` `:168`, `truncateLine` `:268` (grep 500 chars `:13`) | `TruncationResult` `:14-37` |
+| bash | last 2000 lines / 50 KB | `core/tools/output-accumulator.ts:5,59` → `truncateTail`; `core/tools/bash-output.ts:21` | `[Showing lines a-b of N (50KB limit). Full output: <tmp>]` |
+| user `!` bash | 50 KB tail | `core/bash-executor.ts:139,166` | full output in a temp file |
+| read | first 2000 lines / 50 KB | `core/tools/read.ts:160`; single huge line `:165`; continuation marker `:175`; spill `:177` (`core/tools/artifact-spill.ts`) | `Use offset=N to continue` |
+| grep | 100 matches / 50 KB, 500 chars/line | `core/tools/grep.ts:288,300,305` | notice text |
+| find | 1000 results / 50 KB | `core/tools/find.ts:144,274` | notice text |
+| ls | 50 KB | `core/tools/ls.ts:135,145` | notice text |
+| edit / write | bounded by their own input | `core/tools/edit.ts`, `write.ts` | — |
+| **MCP** | **none** (only the 16 MiB JSON-RPC line limit, `core/mcp/protocol.ts:11`) | `core/mcp/tools.ts:79` `mapMcpContent` copies text/resource text as-is; `execute` `:135-146` returns it unchanged | — |
+| extension tools | none | `core/tools/tool-definition-wrapper.ts` passes results through | — (out of scope, open question) |
+| agent harness shell | 50 KB tail | `packages/agent/src/harness/utils/shell-output.ts:112` | — |
+
+## Proposal
+- In `createMcpToolDefinition.execute` (`core/mcp/tools.ts:135`), after `mapMcpContent`, cap the combined text
+  blocks with the existing `truncateHead` (2000 lines / 50 KB, `DEFAULT_MAX_*`) and the same marker style as read/grep:
+  `[Showing lines 1-K of N (50.0KB limit). MCP output truncated; full output: <spill path>]`. Write the full text with
+  `spillTruncatedOutput` (adding a `kind: "mcp"` variant), so the model can `read` it with offset/limit.
+- Text-block budgets are shared: once the cap is reached, later text blocks are dropped and counted in the marker.
+  Images are untouched (they are already resized elsewhere). `details.structuredContent` is not sent to the model and
+  stays as it is.
+- `isError` results get the same cap.
+- Head (not head+tail) to match read/grep. Head+tail is an open question.
+- Small outputs (≤ both limits): no change, byte-identical content array.
+
+## Success criteria (fixed before any measurement)
+1. An MCP result over 50 KB or 2000 lines reaches the model at ≤ 50 KB of text plus one marker that uses the
+   `truncate.ts` helper and marker format. Unit test.
+2. Small MCP outputs (≤ limits, including multi-block, image and resource) give a content array that is
+   byte-identical to `origin/main`. Golden test over a corpus of ≥ 20 recorded/synthetic results.
+3. On the 061 scenario with a 400 KB MCP output (64k window, realistic-usage fake model that reports
+   `usage.input` from the real prompt size, as in 061): **0** `OVERFLOW_RECOVERY_FAILED` hits and **0** overflow
+   compactions, over 20 runs. On main, the same scenario hits the give-up limit (baseline recorded first).
+4. No regression in task success on the Bench Analyst paired A/B (n=20, `paired_verdict.py --noreg`), and fewer
+   context tokens per turn on the large-MCP tasks (CI high < 0).
+5. Full coding-agent suite green; module-size ratchet unchanged or explicitly approved.
+
+## Open questions
+- Default-off flag? The 1.4.4 rule says a behavior change goes behind a default-off flag (e.g.
+  `OMK_MCP_OUTPUT_CAP=1`) unless Tech Lead waives it. Built-in tools already cap unconditionally, so this could
+  count as a parity fix. **Tech Lead decision needed.**
+- Head only, or head+tail (keep the end, like bash, for log-like MCP output)?
+- Cap per call or per text block? Proposed: per call (combined).
+- Spill file: always, or only when the cap is hit? Retention and cleanup of `omk-spill-*` dirs?
+- Should the cap be configurable per server (`mcp.json` `max_output_bytes`)? Proposed: not in 1.4.4.
+- Should the same cap later wrap extension tools (`tool-definition-wrapper.ts`)? Proposed: a follow-up spec.
+- Are `structuredContent`-only results (empty `content`) rendered to the model anywhere? They currently become
+  `(no content)` (`core/mcp/tools.ts:140`).
