@@ -1,5 +1,6 @@
 import type { StreamFn } from "omk-agent-core";
 import { linkAbortSignals } from "./abort-link.ts";
+import { timingEnd, timingMark } from "./debug-timing.ts";
 import { requestAdmissionPolicyFromEnv } from "./request-admission-policy.ts";
 import { createRequestAdmissionGuard, type RequestAdmissionGuard } from "./request-context-admission.ts";
 import { requestTraceFromEnv } from "./request-trace.ts";
@@ -13,7 +14,9 @@ export function wrapBudgetStream(
 	const wrapped: StreamFn = async (model, context, options) => {
 		options?.signal?.throwIfAborted();
 		budget.assertActive();
+		timingMark("enter", "streamFn.entered");
 		admission.check(model, context, options);
+		timingMark("enter", "requestAdmission.done");
 		options?.signal?.throwIfAborted();
 		const release = budget.admit();
 		const remainingMs = budget.remainingMs;
@@ -23,6 +26,7 @@ export function wrapBudgetStream(
 		const link = options?.signal ? linkAbortSignals(options.signal, budget.signal) : undefined;
 		try {
 			traceId = trace?.begin(model.provider, model.id);
+			timingEnd("enter", "request.sent");
 			const stream = await source(model, context, {
 				...options,
 				signal: link?.signal ?? budget.signal,
