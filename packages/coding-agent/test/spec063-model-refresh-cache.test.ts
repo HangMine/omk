@@ -109,6 +109,43 @@ describe("spec 063 ModelRegistry.refreshIfChanged", () => {
 		expect(registry.find("acme", "acme-1")?.baseUrl).toBe("https://two");
 	});
 
+	test("a raw stored OAuth credential change (selected account unchanged) forces a reload", () => {
+		write(["model-a"]);
+		const registry = ModelRegistry.create(auth, modelsJson);
+		registry.registerProvider("acme", {
+			...provider(["acme-1"]),
+			oauth: {
+				name: "Acme",
+				login: async () => ({ access: "a", refresh: "r", expires: 0 }),
+				refreshToken: async (c) => c,
+				getApiKey: (c) => c.access,
+				modifyModels: (models, credentials) =>
+					models.map((m) => (m.provider === "acme" ? { ...m, baseUrl: String(credentials.enterpriseUrl) } : m)),
+			},
+		});
+		const accounts = [
+			{ access: "a", refresh: "r", expires: 0 },
+			{ access: "b", refresh: "r", expires: 0 },
+		];
+		const stored = (url: string) =>
+			({
+				type: "oauth",
+				access: "a",
+				refresh: "r",
+				expires: 0,
+				accounts,
+				activeAccount: 0,
+				enterpriseUrl: url,
+			}) as never;
+		auth.set("acme", stored("https://one"));
+		expect(registry.refreshIfChanged()).toBe(true);
+		expect(registry.find("acme", "acme-1")?.baseUrl).toBe("https://one");
+		expect(registry.refreshIfChanged()).toBe(false);
+		auth.set("acme", stored("https://two"));
+		expect(registry.refreshIfChanged()).toBe(true);
+		expect(registry.find("acme", "acme-1")?.baseUrl).toBe("https://two");
+	});
+
 	test("an API key login needs no reload: availability is read live", () => {
 		write(["model-a"]);
 		const registry = ModelRegistry.create(auth, modelsJson);

@@ -11,7 +11,8 @@ Measurement: spec 062 (`harness/062-ui-lag`). With 500 models, `/model` open spe
     mtime/size, so a same-size edit inside the same timestamp tick is still caught. Reading the file is cheap; the
     parse, validation and merge are what cost.
   - the registered API provider objects (`getApiProviders()`)
-  - each OAuth provider's own fields and, for model-modifying ones, the selected account's own fields
+  - each OAuth provider's own fields and, for model-modifying ones, the selected account's own fields plus the raw
+    stored credential's own fields (registered providers' `modifyModels` receives `authStorage.get()`, not the selected account)
   - `registerProvider()` invalidates explicitly, because it mutates registry state outside `refresh()`.
 - Call sites changed: `/model` selector open (`model-selector.ts` `loadModels`), `showModelsSelector` and
   `getModelCandidates` in `interactive-mode.ts`. Login/logout/account-select/provider-auth keep calling `refresh()`.
@@ -22,7 +23,20 @@ Measurement: spec 062 (`harness/062-ui-lag`). With 500 models, `/model` open spe
 - Module-size baseline: `core/model-registry.ts` 740 → 746 (+6 LOC: import, field, 3-line method, invalidate call).
   This is a deliberate bump. The logic lives in the new module; only the hook points are in the registry.
 
-## Tests (`test/spec063-model-refresh-cache.test.ts`, 6)
+## Inputs `refresh()` reads (audit, `core/model-registry.ts`)
+| input | where | covered by |
+|---|---|---|
+| models.json existence + text | `loadCustomModels` 430, 435 | file text / ABSENT / UNREADABLE |
+| models.json path | 299 (fixed per instance) | path entry |
+| built-in models | `loadBuiltInModels` 384–385, `parseModels` 583/590, `validateConfig` 490 (`omk-ai` models.ts: static, built once at module load) | not needed |
+| OAuth providers + selected credentials (`modifyModels`) | `loadModels` 369–372 | provider fields + selected-account fields |
+| registered providers (extensions) | `refresh` 331–333 → `applyProviderConfig` 921–988 | `registerProvider` invalidate (860); `unregisterProvider` 872 calls `refresh()` itself |
+| registered provider's raw OAuth credential | `applyProviderConfig` 974–976 (`authStorage.get`) | **added**: raw stored-credential fields (test 7) |
+| API providers | `resetApiProviders` 326, `registerApiProvider` 934 | `getApiProviders()` identities |
+| env-var API keys / auth.json API keys / `isConfigValueConfigured` | not read in `refresh()`; read live in `hasConfiguredAuth` 669–674, `getApiKeyAndHeaders` 723+ | not needed (test 8) |
+| snapshot dir, retired-proxy warning | `snapshotModelsJson` 544–562, `warnRetiredGrokOAuthProxy` 458/599 | side effects only: a skip just skips a duplicate snapshot/warning for identical text |
+
+## Tests (`test/spec063-model-refresh-cache.test.ts`, 7)
 Covered:
 - skip, and the skipped state deep-equals a forced refresh
 - a same-size models.json edit reloads
@@ -30,6 +44,7 @@ Covered:
 - deleting models.json reloads
 - `registerProvider` forces a reload
 - an OAuth credential change for a `modifyModels` provider reloads, and the new baseUrl is used
+- a raw stored OAuth credential change with the selected account unchanged reloads (fails without the added input)
 - an API-key login needs no reload
 
 Mutants:
@@ -39,7 +54,7 @@ Mutants:
 `model-registry.test.ts` (75) and `model-registry-snapshot.test.ts` (6) pass.
 
 ## Paired A/B (20 interleaved process pairs, 10 samples each; A = main dist, B = this branch)
-`bench/ab063.sh <A> <B> 20 results/ab063`, then `node bench/absum063.mjs results/ab063`.
+`bench/ab063.sh <A> <B> 20 <dir>`, then `node bench/absum063.mjs <dir>`. Raw JSONs are archived outside the repo; `bench/results/summary.md` has the paired verdict.
 | p50 / p90 / p95 ms | A | B | paired A−B p50 (median, min) |
 |---|---|---|---|
 | selector open → rendered (lag-bench, 500 models) | 14.8 / 22.3 / 22.8 | 2.4 / 3.0 / 3.6 | 12.8 (min 10.9) |
@@ -47,4 +62,5 @@ Mutants:
 | select → frame | 4.7 / 5.1 / 5.8 | 4.7 / 5.1 / 5.9 | 0.2 |
 load1 1.14–2.16 for both arms. Criterion "selector open with 500 models p50 ≤ 4 ms" ✅ (2.4).
 Note: a direct forced `refresh()` timed in the bench went from 8.2 to 13.2 ms p50 in B. That code is unchanged; in B
-the selector no longer runs it, so it stays colder in the JIT. It only matters at login/logout.
+the selector no longer runs it, so it stays colder in the JIT. It now runs only on login/logout/account select, where
++5 ms is not user-visible. Module-size baseline 746 approved by Tech Lead.

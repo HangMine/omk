@@ -29,6 +29,10 @@ function refreshInputs(modelsJsonPath: string | undefined, authStorage: AuthStor
 		inputs.push(credentials === undefined);
 		// Account views may be rebuilt per call: compare the selected account's fields, not its identity.
 		if (credentials) for (const [key, value] of Object.entries(credentials)) inputs.push(key, value);
+		// Registered providers' modifyModels gets the raw stored credential (model-registry.ts applyProviderConfig).
+		const stored = authStorage.get(provider.id);
+		inputs.push(SEPARATOR);
+		if (stored?.type === "oauth") for (const [key, value] of Object.entries(stored)) inputs.push(key, value);
 		inputs.push(SEPARATOR);
 	}
 	return inputs;
