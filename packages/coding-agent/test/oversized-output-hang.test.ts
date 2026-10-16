@@ -59,4 +59,14 @@ describe("spec 061: single tool output larger than the context window", () => {
 		},
 		WALL_CLOCK_MS + 15_000,
 	);
+
+	it(
+		"does not cap text-only overflow recovery within one prompt (>= 2 compactions)",
+		async () => {
+			const result = await runScenario("completes one prompt that recovers >= 2 overflows through text turns");
+			expect({ timedOut: result.timedOut, code: result.code }, result.output).toEqual({ timedOut: false, code: 0 });
+			expect(result.output).toMatch(/1 passed/);
+		},
+		WALL_CLOCK_MS + 15_000,
+	);
 });

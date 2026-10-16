@@ -4,13 +4,15 @@ import { estimateTokens } from "./compaction.ts";
 
 /**
  * Spec 061: progress that re-arms overflow recovery. Overflow recovery counts consecutive overflow
- * compactions without progress; it resets on a new user prompt and here, on a successful reply that
- * fits the window and was produced after a tool result reached the model.
+ * compactions without progress; it resets on a new user prompt and here, on a successful reply whose
+ * usage fits the window and that either
+ * - has no tool calls (a text turn completed in the window), or
+ * - came right after a tool result (that result was consumed in the window).
  *
  * Not progress: the empty user message Agent.continue() injects after compaction, retries, and a
  * tool call answering that empty prompt. That call fits only because the oversized tool output has
- * not come back yet; resetting on it made recovery unbounded (a single tool output larger than the
- * window re-ran tool -> overflow -> compact -> continue forever).
+ * not come back yet; counting it (or any in-window reply) made a single tool output larger than the
+ * window loop tool -> overflow -> compact -> continue forever.
  *
  * `messages` is agent state at message_end; the finalized reply may be a copy of the last entry.
  */
@@ -21,6 +23,7 @@ export function isOverflowRecoveryProgress(
 ): boolean {
 	if (message.stopReason === "error") return false;
 	if (contextWindow > 0 && message.usage.input + message.usage.cacheRead > contextWindow) return false;
+	if (!message.content.some((block) => block.type === "toolCall")) return true;
 	const last = messages.at(-1);
 	const previous = last?.role === "assistant" ? messages.at(-2) : last;
 	return previous?.role === "toolResult";

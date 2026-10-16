@@ -48,14 +48,28 @@ prompt 한 번 안에서 overflow 복구 컴팩션 횟수를 상한으로 묶어
 `agent-session.ts`의 `_overflowRecoveryAttempts`를 "진전 없는 연속 overflow 컴팩션" 카운터로 바꾼다. 상한은 2 그대로다.
 - 증가: overflow 분기에서 컴팩션할 때마다(기존과 같음).
 - 리셋 ①: 새 사용자 prompt 시작(`_prompt`의 run 시작).
-- 리셋 ②(진전): 에러가 아니고 usage(`input + cacheRead`)가 창 안이며, 바로 앞 메시지가 `toolResult`인 assistant 응답.
-  즉 도구 결과가 창 안에서 모델에 소비된 경우다(`compaction/overflow-recovery-progress.ts` `isOverflowRecoveryProgress`).
+- 리셋 ②(진전): 에러가 아니고 usage(`input + cacheRead`)가 창 안이며, (a) 도구 호출이 없는 응답(텍스트 턴이 창 안에서
+  끝남)이거나 (b) 바로 앞 메시지가 `toolResult`인 응답(도구 결과가 창 안에서 소비됨)이다(규칙 B)(`compaction/overflow-recovery-progress.ts` `isOverflowRecoveryProgress`).
 - 리셋하지 않음: `continue()`가 넣는 빈 user 메시지(기존 `:1324` 리셋 제거), 재시도, 자동 컴팩션 뒤 재개,
   빈 continuation 프롬프트에 답한 도구 호출(큰 출력이 아직 안 돌아와서 창 안일 뿐이다).
 - 상한 도달: `compaction_end`(`reason: "overflow"`, `willRetry: false`)의 `errorMessage`가 사용자에게 보인다.
   마지막 도구 결과가 창보다 크면 다음 문장을 덧붙인다:
   `The output of tool "<name>" (~N tokens) is larger than the W-token context window, so compaction cannot make it fit. …`
   그렇지 않으면 기존 문구를 그대로 쓴다(기존 테스트 2곳의 기대값 유지).
+
+## 진전 규칙 실험 (2026-10-17)
+
+- A: "창 안의 에러 아닌 응답이면 모두 진전" → 400KB 시나리오가 다시 끝없이 돈다(10회 넘게 컴팩션, 45초 가드에 죽음).
+  컴팩션 뒤 빈 continuation에 답한 도구 호출이 작아서 창 안이기 때문이다. 기각.
+- B(채택): 위 리셋 ② 규칙. 400KB 시나리오는 끝나고(상한 2), 진전 가드(6회)와 텍스트 전용 복구(4회)가 모두 통과한다.
+- 직전 규칙(도구 결과 뒤 응답만)은 텍스트 전용 복구에서 세 번째 overflow에 상한이 걸려 실패한다.
+
+## headless 모드
+
+`print-mode.ts`(`omk -p`, `--mode json`)는 `compaction_end`(`reason: "overflow"`, `willRetry: false`, 문구가
+`OVERFLOW_RECOVERY_FAILED`로 시작)을 기록하고, prompt가 끝나면 그 문구를 stderr에 쓰고 종료 코드 1을 돌려준다.
+세션은 이 경우에도 `prompt_settled: completed`이고 마지막 메시지가 overflow된 "ok"라서, 수정 전에는 "ok"를 stdout에 쓰고 0으로 끝났다.
+그 밖의 경우는 동작이 바뀌지 않는다.
 
 ## 현실적 usage 규칙
 
@@ -76,6 +90,10 @@ prompt 한 번 안에서 overflow 복구 컴팩션 횟수를 상한으로 묶어
 6. 새 테스트를 5회 연속 돌려 모두 통과한다. `npm run check`가 통과한다.
 7. 회귀: 기존 overflow·컴팩션 테스트와 coding-agent 전체 스위트에 새 실패가 없다. 이전에 import 실패였던
    6개 파일은 main과 수정본에서 같은 결과여야 한다(새 실패가 있으면 블로커).
+8. 텍스트 전용 복구: prompt 한 번, follow-up 사용자 메시지 6개(각 ~12k 토큰), provider 실효 한도 30k. overflow 컴팩션 ≥ 2회
+   (실측 4회)가 일어나도 실패 없이 텍스트 응답 7개로 끝난다.
+9. headless: 상한 도달 시 text·json 모드 모두 stderr에 같은 문구를 쓰고 종료 코드 1, 다음 prompt는 실행하지 않는다.
+   복구에 성공한 overflow 컴팩션(`willRetry: true`)은 종료 코드 0 그대로다(`test/print-mode.test.ts`).
 
 ## 하지 않을 것
 
@@ -90,4 +108,5 @@ prompt 한 번 안에서 overflow 복구 컴팩션 횟수를 상한으로 묶어
 - `packages/coding-agent/test/scenarios/oversized-output-hang.scenario.test.ts` — 시나리오. `SPEC061_SCENARIO=1`일 때만 실행
   (`OMK_*`는 `test/setup-env.ts`가 지우므로 다른 접두사).
 - `packages/coding-agent/src/core/agent-session.ts` — 카운터 리셋 위치(+4/−4).
+- `packages/coding-agent/src/modes/print-mode.ts`, `test/print-mode.test.ts` — headless stderr·종료 코드 1.
 - `packages/coding-agent/src/core/compaction/overflow-recovery-progress.ts` — 진전 판정과 오류 문구(새 파일, module-size 상한 때문에 분리).

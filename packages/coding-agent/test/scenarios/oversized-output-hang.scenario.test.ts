@@ -227,3 +227,63 @@ describe.runIf(process.env.SPEC061_SCENARIO === "1")("061 overflow recovery with
 		}
 	}, 30_000);
 });
+
+/**
+ * Text-only overflow recovery (spec 061, progress rule B): one prompt whose follow-up user messages
+ * grow the context past the provider's effective limit several times. Each recovery is followed by
+ * an in-window text reply without tool calls, which is progress even though no tool result precedes it.
+ */
+describe.runIf(process.env.SPEC061_SCENARIO === "1")("061 text-only overflow recovery", () => {
+	it("completes one prompt that recovers >= 2 overflows through text turns", async () => {
+		const PROVIDER_LIMIT = 30_000;
+		const FOLLOW_UPS = 6;
+		const h: Harness = createHarness({ contextWindow: 64_000, responses: ["unused"] });
+		try {
+			answerSummaries(h, false);
+			let queued = false;
+			let textReplies = 0;
+			const summarizer = h.agent.streamFn;
+			h.agent.streamFn = (model, context, options) => {
+				if (/summar/i.test(String(context.systemPrompt ?? ""))) return summarizer(model, context, options);
+				if (!queued) {
+					queued = true;
+					for (let i = 0; i < FOLLOW_UPS; i++) void h.session.followUp(`note ${i}: ${"t".repeat(48_000)}`);
+				}
+				const base = realisticReply(context);
+				const input = base.usage.input;
+				let reply: AssistantMessage;
+				if (input > PROVIDER_LIMIT) {
+					reply = {
+						...base,
+						content: [],
+						usage: { ...base.usage, input: 0, totalTokens: 0, output: 0 },
+						stopReason: "error",
+						errorMessage: `prompt is too long: ${input} tokens > ${PROVIDER_LIMIT} maximum`,
+					};
+				} else {
+					textReplies++;
+					reply = { ...base, content: [{ type: "text", text: `noted ${textReplies}` }], stopReason: "stop" };
+				}
+				const stream = createAssistantMessageEventStream();
+				queueMicrotask(() => {
+					stream.push({ type: "start", partial: reply });
+					if (reply.stopReason === "error") stream.push({ type: "error", reason: "error", error: reply });
+					else stream.push({ type: "done", reason: "stop", message: reply });
+				});
+				return stream;
+			};
+			let overflowStarts = 0;
+			h.session.subscribe((event) => {
+				if (event.type === "compaction_start" && event.reason === "overflow") overflowStarts++;
+			});
+			await h.session.prompt("start");
+			const failures = h.eventsOfType("compaction_end").filter((e) => e.errorMessage);
+			process.stderr.write(`061-text: overflowCompactions=${overflowStarts} textReplies=${textReplies}\n`);
+			expect(failures.map((e) => e.errorMessage)).toEqual([]);
+			expect(overflowStarts).toBeGreaterThanOrEqual(2);
+			expect(textReplies).toBe(FOLLOW_UPS + 1);
+		} finally {
+			h.cleanup();
+		}
+	}, 30_000);
+});
