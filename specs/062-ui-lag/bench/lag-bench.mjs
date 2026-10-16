@@ -47,6 +47,13 @@ for (let i = 0; i < pairs; i++) {
     usage: { input: 10, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 11, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: Date.now() };
   sessionManager.appendMessage(u); sessionManager.appendMessage(a); session.agent.state.messages.push(u, a);
 }
+if (process.argv.includes("--mem")) {
+  const gc = globalThis.gc; const snap = () => { gc(); gc(); const u = process.memoryUsage(); return { heap: u.heapUsed, rss: u.rss }; };
+  const m0 = snap(); for (let i = 0; i < 10; i++) { await session.prompt(`mem ${i}`); session.agent.state.messages.splice(pairs * 2); }
+  const m1 = snap(); const { loadavg } = await import("node:os");
+  const r = { size, pairs, load1: +loadavg()[0].toFixed(2), heapDeltaMiB: +((m1.heap - m0.heap) / 1048576).toFixed(3), rssDeltaMiB: +((m1.rss - m0.rss) / 1048576).toFixed(3), heapAfterMiB: +(m1.heap / 1048576).toFixed(2), rssAfterMiB: +(m1.rss / 1048576).toFixed(2) };
+  console.log(JSON.stringify(r)); if (out) writeFileSync(out, JSON.stringify(r)); srv.close(); process.exit(0);
+}
 // segment timers
 const seg = {}; const wrap = (obj, name, label) => { const f = obj?.[name]; if (typeof f !== "function") return console.error("nowrap", label);
   obj[name] = function (...a) { const t = performance.now(); const r = f.apply(this, a); const end = () => { (seg[label] ??= []).push(performance.now() - t); };

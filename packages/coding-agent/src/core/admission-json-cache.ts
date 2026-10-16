@@ -2,24 +2,24 @@ import type { TextPartStats } from "./context-budget-token-counter-types.ts";
 import { textPartStats } from "./text-token-estimate.ts";
 
 /**
- * Spec 062: per-message cache for admission JSON and its token statistics.
+ * Spec 062: per-message cache of fallback token statistics for admission JSON.
  *
  * The key is the source message object (WeakMap, so dropped messages free their entry). A hit additionally needs
  * the freshly built projection to have exactly the same leaves (every key, primitive and array length, in order,
  * compared with `===`) as when the entry was made. Strings are immutable, so any in-place edit of the message
- * (compaction masking, an edited text, changed tool arguments) changes a leaf and recomputes. Projections holding
- * anything JSON could treat specially (non-plain prototypes, accessors, `toJSON`, cycles, very deep values) are
- * never cached.
+ * (compaction masking, an edited text, changed tool arguments) changes a leaf and starts a fresh entry. Projections
+ * holding anything JSON could treat specially (non-plain prototypes, accessors, `toJSON`, cycles, very deep values)
+ * are never cached.
+ *
+ * Only statistics are kept, never the serialized JSON: callers still render the JSON every turn (it is transient),
+ * so the cache retains one small stats object plus a leaf array of references per message. Storing the JSON too
+ * retained ~3.5 MiB of heap on a ~400k-token session (spec 062, paired heap A/B).
  */
-export interface AdmissionJsonCacheEntry {
-	readonly json: string;
-	/** Budget characters and nodes the uncached render consumed, replayed on a hit. */
-	readonly charged: number;
-	readonly nodes: number;
+export interface AdmissionStatsEntry {
 	stats?: TextPartStats;
 }
 
-interface StoredEntry extends AdmissionJsonCacheEntry {
+interface StoredEntry extends AdmissionStatsEntry {
 	readonly leaves: readonly unknown[];
 }
 
@@ -74,24 +74,16 @@ function sameLeaves(left: readonly unknown[], right: readonly unknown[]): boolea
 export class AdmissionJsonCache {
 	private entries = new WeakMap<object, StoredEntry>();
 
-	/**
-	 * The entry for `source` whose projection is `projected`. `render` runs on a miss and returns the JSON plus the
-	 * budget it consumed; its errors propagate and nothing is stored.
-	 */
-	resolve(
-		source: unknown,
-		projected: unknown,
-		render: () => { json: string; charged: number; nodes: number },
-	): { entry: AdmissionJsonCacheEntry; hit: boolean } {
-		const leaves = typeof source === "object" && source !== null ? admissionProjectionLeaves(projected) : undefined;
-		if (leaves) {
-			const stored = this.entries.get(source as object);
-			if (stored && sameLeaves(stored.leaves, leaves)) return { entry: stored, hit: true };
-		}
-		const rendered = render();
-		const entry: StoredEntry = { ...rendered, leaves: leaves ?? [] };
-		if (leaves) this.entries.set(source as object, entry);
-		return { entry, hit: false };
+	/** The entry for `source` while its projection has the same leaves; undefined when it must not be cached. */
+	resolve(source: unknown, projected: unknown): AdmissionStatsEntry | undefined {
+		if (typeof source !== "object" || source === null) return undefined;
+		const leaves = admissionProjectionLeaves(projected);
+		if (!leaves) return undefined;
+		const stored = this.entries.get(source);
+		if (stored && sameLeaves(stored.leaves, leaves)) return stored;
+		const entry: StoredEntry = { leaves };
+		this.entries.set(source, entry);
+		return entry;
 	}
 
 	clear(): void {
@@ -99,8 +91,8 @@ export class AdmissionJsonCache {
 	}
 }
 
-/** Cached statistics for an entry's JSON, computed once. */
-export function admissionEntryStats(entry: AdmissionJsonCacheEntry): TextPartStats {
-	entry.stats ??= textPartStats(entry.json);
+/** Statistics of `json`, the part this entry's projection rendered to; computed once per entry. */
+export function admissionEntryStats(entry: AdmissionStatsEntry, json: string): TextPartStats {
+	if (entry.stats === undefined || entry.stats.length !== json.length) entry.stats = textPartStats(json);
 	return entry.stats;
 }

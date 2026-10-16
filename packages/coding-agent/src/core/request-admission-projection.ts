@@ -88,13 +88,14 @@ export function projectRequestForAdmission(
 				throw new TypeError("admission.invalid_role");
 		}
 	});
-	const elementCache = { cache: requestAdmissionJsonCache, sources: context.messages, entries: [] };
-	const messageParts = boundedAdmissionJsonParts(messages, budget, elementCache);
-	// Parts are ["[", e0, ",", e1, ..., "]"]: element k sits at index 2k + 1.
+	const messageParts = boundedAdmissionJsonParts(messages, budget);
+	// `messages` is `context.messages.map(...)`, so messages[k] projects context.messages[k] (1:1, in order),
+	// and the parts are ["[", e0, ",", e1, ..., "]"]: element k sits at index 2k + 1.
+	const entries = messages.map((projected, k) => requestAdmissionJsonCache.resolve(context.messages[k], projected));
 	const statsAt: TextPartStatsAt = (index) => {
 		if (index % 2 === 0 || messages.length === 0) return undefined;
-		const entry = elementCache.entries[(index - 1) / 2];
-		return entry ? admissionEntryStats(entry) : undefined;
+		const entry = entries[(index - 1) / 2];
+		return entry ? admissionEntryStats(entry, messageParts[index]) : undefined;
 	};
 	const tools = (context.tools ?? []).map((tool) => ({
 		name: tool.name,
@@ -104,5 +105,5 @@ export function projectRequestForAdmission(
 	return { system, messageParts, statsAt, tools: boundedAdmissionJson(tools, budget), imageCount };
 }
 
-/** Spec 062: request-admission JSON per source message (see admission-json-cache.ts). */
+/** Spec 062: request-admission token statistics per source message (see admission-json-cache.ts). */
 const requestAdmissionJsonCache = new AdmissionJsonCache();

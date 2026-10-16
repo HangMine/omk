@@ -93,23 +93,24 @@ skills/settings reload on every Enter (omk-scout-mem). I did not see skills or s
 | F4 Selector: skip `refresh()` when models.json mtime/size and the auth revision are unchanged. | H6 | ~10 ms with many models | No (refresh still happens on change). |
 | F5 Run-journal start fsync batching / async | H4 | ~5–10 ms | Yes. Moved to 1.4.4, out of scope. |
 
-## 062 design: F2+F3 exact token-estimate cache
-- Key: `WeakMap<message object, Entry>` where `Entry = { leaves, json, stats }`. `leaves` is the ordered list of every key,
+## 062 design: F2+F3 exact token-estimate cache (stats only)
+- Key: `WeakMap<message object, Entry>` where `Entry = { leaves, stats }`. `leaves` is the ordered list of every key,
   primitive value and array length in the canonical projection of that message. On lookup the projection is rebuilt
-  (shallow, cheap) and its leaves are compared with `===`. Any difference recomputes the entry. Because strings are
-  immutable, an in-place mutation (compaction masking, edit, reasoning drop) always changes at least one leaf, so it can
-  never produce a stale hit. A non-plain object (Date, class instance, toJSON) makes the message uncacheable.
-- `stats` = fallback char-class counts + length + code-keyword flag for that message's JSON. Used only when the counter
-  is the fallback estimator. Other counters (BPE) still get the parts and count them themselves.
-- `withoutReasoning` (reasoning-drop) is memoized per source message (shallow key and content-element identity check),
-  so closed-turn assistant copies keep a stable identity and hit the cache.
-- Compaction, branch switch and resume create new message objects or new arrays. Those are WeakMap misses or leaf
-  mismatches, so no explicit invalidation hook is needed. Tests prove it.
-- F3: `request-admission-projection` uses the same per-message cache for its bounded JSON parts. Budget charges and the
-  node count are replayed from the entry, so limits trip exactly as before.
-- Required tests: cached == uncached (deep-equal results) for random transcripts, after in-place text mutation with
-  the same length, after a toolCall arguments mutation, after compaction / branch / resume, and with a non-fallback
-  counter.
+  and its leaves are compared with `===`. Any difference starts a fresh entry. Because strings are immutable, an in-place
+  mutation (compaction masking, edit, reasoning drop) always changes a leaf, so it can never produce a stale hit. A
+  non-plain object (Date, class instance, toJSON, accessor, cycle) makes the message uncacheable.
+- `stats` = fallback char-class counts + length + code-keyword flag of that message's JSON, used only by the fallback
+  estimator (BPE counters still count the parts themselves). The JSON itself is NOT cached: it is re-rendered every
+  turn and dropped. An earlier version also cached the JSON string; on a ~400k-token session that retained +3.5 MiB
+  heap (paired), over the 2 MiB budget, so it was replaced (see bench/results/summary.md).
+- Ordering assumption (commented in `messages.ts` and `request-admission-projection.ts`): the projection is
+  `messages.map(...)`, so element k always projects source message k.
+- `withoutReasoning` is memoized per source message (shallow field and content-element identity check), so
+  closed-turn assistant copies keep a stable identity and hit the cache.
+- Compaction, branch switch and resume create new message objects or arrays. Those are misses or leaf mismatches,
+  so no invalidation hook is needed.
+- F3: the request-admission projection uses its own cache of the same kind. The bounded renderer runs unchanged, so
+  budget limits and errors are untouched.
 
 ## Success criteria (paired A/B, same box, same load window, interleaved runs, n=20 each)
 - Large session Enter→request p50 drops ≥ 40 ms (93 → ≤ 53) and p90 ≤ 70 ms. Small session does not regress (> +2 ms p50).
@@ -125,19 +126,20 @@ skills/settings reload on every Enter (omk-scout-mem). I did not see skills or s
 ## Not in scope / follow-ups
 - Library Scout's skills/settings reload check (omk-scout-mem).
 
-## 062 implementation result (F2+F3), paired A/B
-A = main `e28c260f75` dist. B = this branch. 20 interleaved process pairs (A, B, A, B, …), each with 10 measured turns,
-10×50 models. Commands: `bench/ab.sh <A> <B> large|small 20 results/ab062`, then `node bench/absum.mjs results/ab062 large|small`.
-| ms | A p50 / p90 / p95 | B p50 / p90 / p95 | paired A−B p50 diff (median, min) | load1 A / B |
+## 062 implementation result (F2+F3, stats-only cache), paired A/B
+A = main `e28c260f75` dist, B = this branch. 20 interleaved process pairs, each with 10 turns, 10×50 models, load1
+1.7–2.6. Commands: `bench/ab.sh <A> <B> large|small 20 <out>`, a TSV via `/workspace/omk-bench-archive/to_tsv.py`,
+then `paired_verdict.py`. Summary: `bench/results/summary.md`. Raw JSON is in `/workspace/omk-bench-archive/062/`.
+| ms (p50 / p90 / p95) | A | B | paired median d (95% CI) | verdict |
 |---|---|---|---|---|
-| large Enter→request | 98.0 / 108.2 / 131.2 | 51.2 / 56.3 / 75.0 | 48.2 (min 31.4) | 2.58–11.0 / 2.57–10.5 |
-| large preflight | 21.8 / 25.5 / 27.3 | 4.4 / 5.0 / 6.7 | 17.7 (min 15.2) | same |
-| small Enter→request | 20.6 / 24.7 / 34.1 | 20.2 / 21.9 / 29.1 | 0.2 (min −2.4) | 2.49–2.85 |
-| small preflight | 2.1 / 2.4 / 2.8 | 2.1 / 2.4 / 3.0 | 0.0 | same |
-(p50 = median of per-process p50s; p90 = 90th percentile of per-process p50s; p95 = median of per-process p95s.)
-Final run, after the module-size split. load1 spiked to ~11 for a few large pairs in both arms; pairing keeps the
-comparison fair. Criteria: large p50 ≤ 53 ms ✅ (51.2). p90 ≤ 70 ms ✅ (56.3). Small p50 no regression > 2 ms ✅ (paired 0.2).
-An earlier run before the split (load1 2–3.7) gave 96.3 → 50.2. p95 is the median of per-process p95s over only 10 turns, so it is noisy. Remaining large-session cost before the request: H1 durable append (~17 ms, 064) and H4 journal (~11 ms, 1.4.4).
-Tests: `test/spec062-admission-cache.test.ts` (9). Two mutants were checked: skipping the leaf comparison → 3 fail;
-skipping the reasoning-drop snapshot comparison → 1 fails. The 20 related admission/compaction test files pass
-(216 tests). The full coding-agent suite passes: 759 files, 8940 tests, 56 skipped.
+| large Enter→request | 93.2 / 103.0 / 120.3 | 66.0 / 74.6 / 93.7 | −25.6 (−27.5..−22.7), 20/20 | SMALL vs target −40 |
+| large preflight | 21.0 / 25.9 / 27.8 | 8.8 / 10.1 / 12.1 | −12.3 (−13.7..−11.1) | PASS |
+| small Enter→request | 19.3 / 24.6 / 29.2 | 19.6 / 21.0 / 26.9 | −0.4 (−1.6..1.5) | PASS (no regression) |
+| small preflight | 2.1 / 2.5 / 2.8 | 2.3 / 2.5 / 3.0 | +0.1 (−0.1..0.3) | PASS (no regression) |
+Memory (large session, 10 prompts, after gc, 10 pairs): heap growth +0.36 MiB (B−A), heap after +0.77 MiB; RSS
+within noise. The JSON+stats variant had reached −47.9 ms (PASS, ≤53 ms p50) but retained +3.5 MiB heap and +8.6 MiB
+RSS. **Trade-off for Tech Lead:** stats-only meets the memory budget but not the −40 ms target. The remaining gap is
+re-serializing the JSON (`stringifyProviderMessages`, request-admission render) each turn.
+Tests: `test/spec062-admission-cache.test.ts` (9). Mutants: skipping both the leaf check and the stats length guard
+→ the same-length masking test fails (the other edit tests are caught by the length guard). The 20 related files
+(216 tests) and the full suite pass.
