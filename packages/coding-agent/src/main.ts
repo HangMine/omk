@@ -510,6 +510,7 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 	resetTimings();
+	if (process.env.OMK_TIMING === "1") (await import("./core/debug-timing-hooks.ts")).installDebugTimingHooks();
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.OMK_OFFLINE);
 	if (offlineMode) {
 		process.env.OMK_OFFLINE = "1";
