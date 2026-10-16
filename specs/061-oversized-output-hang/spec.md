@@ -78,8 +78,8 @@ prompt 한 번 안에서 overflow 복구 컴팩션 횟수를 상한으로 묶어
 
 ## 수용 기준 (AC)
 
-1. 멈춤: `test/oversized-output-hang.test.ts`의 첫 테스트가 main(`e28c260`)에서 실패한다. 자식 vitest가 20초 벽시계
-   가드에 죽는다(`timedOut: true`). 수정 후에는 20초 안에 exit 0으로 끝난다.
+1. 멈춤: `test/oversized-output-hang.test.ts`의 첫 테스트가 main(`e28c260`)에서 실패한다. 자식 vitest가 60초 벽시계
+   가드에 죽는다(`timedOut: true`). 수정 후에는 60초 안에 exit 0으로 끝난다.
 2. 상한: 400KB 시나리오에서 prompt 1회당 `compaction_start(reason: "overflow")` ≤ 2.
 3. 오류 표시: 상한에 닿으면 `compaction_end.errorMessage`가 정확히 1개 나오고,
    `/output of tool "out" \(~[\d,]+ tokens\) is larger than the 64,000-token context window/`에 맞는다(AC 1 테스트 안에서 단언).
@@ -104,7 +104,7 @@ prompt 한 번 안에서 overflow 복구 컴팩션 횟수를 상한으로 묶어
 
 ## 파일
 
-- `packages/coding-agent/test/oversized-output-hang.test.ts` — 회귀 테스트 2개(자식 프로세스 + 20초 벽시계 가드, 프로세스 그룹 SIGKILL, `-t`로 시나리오 선택).
+- `packages/coding-agent/test/oversized-output-hang.test.ts` — 회귀 테스트 2개(자식 프로세스 + 60초 벽시계 가드, 프로세스 그룹 SIGKILL, `-t`로 시나리오 선택).
 - `packages/coding-agent/test/scenarios/oversized-output-hang.scenario.test.ts` — 시나리오. `SPEC061_SCENARIO=1`일 때만 실행
   (`OMK_*`는 `test/setup-env.ts`가 지우므로 다른 접두사).
 - `packages/coding-agent/src/core/agent-session.ts` — 카운터 리셋 위치(+4/−4).

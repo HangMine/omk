@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 // fires, so the scenario runs in a child vitest process killed by a hard wall-clock guard.
 const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const VITEST_BIN = fileURLToPath(new URL("../../../node_modules/vitest/vitest.mjs", import.meta.url));
-const WALL_CLOCK_MS = 20_000;
+// Generous: a child vitest needs ~9s to start, longer under full-suite load. The hang never ends.
+const WALL_CLOCK_MS = 60_000;
 
 function runScenario(
 	filter: string,
