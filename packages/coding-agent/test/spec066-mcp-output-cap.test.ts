@@ -1,13 +1,22 @@
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { ImageContent, TextContent } from "omk-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionContext } from "../src/core/extensions/types.ts";
 import type { McpClient, McpContentBlock } from "../src/core/mcp/client.ts";
 import { capMcpContent } from "../src/core/mcp/output-cap.ts";
 import { createMcpToolDefinition, mapMcpContent } from "../src/core/mcp/tools.ts";
-import { deleteSessionFile, sessionArtifactDir } from "../src/core/session-artifacts.ts";
+import { deleteSessionFile, sessionArtifactDir, type TrashSpawn } from "../src/core/session-artifacts.ts";
 import { DEFAULT_MAX_BYTES, truncateHead, truncateHeadTail } from "../src/core/tools/truncate.ts";
 
 const MARKER =
@@ -170,15 +179,48 @@ describe("spec 066 MCP output cap", () => {
 		expect(existsSync(sessionArtifactDir(s.file))).toBe(false);
 	});
 
-	it("deleting the session removes its spill directory", async () => {
-		const s = session();
-		await tool([{ type: "text", text: "w".repeat(60_000) }]).execute("c6", {}, undefined, undefined, s.ctx);
-		writeFileSync(s.file, "{}\n");
-		expect(existsSync(sessionArtifactDir(s.file))).toBe(true);
-		const deleted = await deleteSessionFile(s.file);
-		expect(deleted.ok).toBe(true);
-		expect(existsSync(s.file)).toBe(false);
-		expect(existsSync(sessionArtifactDir(s.file))).toBe(false);
+	describe("deleting the session takes <session>.artifacts/ with it", () => {
+		async function sessionWithSpill() {
+			const s = session();
+			await tool([{ type: "text", text: "w".repeat(60_000) }]).execute("c6", {}, undefined, undefined, s.ctx);
+			writeFileSync(s.file, "{}\n");
+			expect(existsSync(sessionArtifactDir(s.file))).toBe(true);
+			return s;
+		}
+
+		it("trash path: the artifacts directory is trashed together with the session", async () => {
+			const s = await sessionWithSpill();
+			const trashDir = join(s.dir, "Trash");
+			mkdirSync(trashDir);
+			const trashed: string[] = [];
+			const spawn: TrashSpawn = (_command, args) => {
+				const target = args.at(-1) ?? "";
+				renameSync(target, join(trashDir, basename(target)));
+				trashed.push(basename(target));
+				return { status: 0, stderr: "" };
+			};
+			const deleted = await deleteSessionFile(s.file, spawn);
+			expect(deleted).toEqual({ ok: true, method: "trash" });
+			expect(trashed).toEqual([basename(s.file), basename(sessionArtifactDir(s.file))]);
+			expect(existsSync(s.file)).toBe(false);
+			expect(existsSync(sessionArtifactDir(s.file))).toBe(false);
+			const spillName = readdirSync(join(trashDir, basename(sessionArtifactDir(s.file))));
+			expect(spillName).toEqual(["mcp-c6.txt"]);
+		});
+
+		it("unlink fallback path: trash is unavailable, the session is unlinked and the artifacts deleted", async () => {
+			const s = await sessionWithSpill();
+			const calls: string[] = [];
+			const spawn: TrashSpawn = (_command, args) => {
+				calls.push(args.at(-1) ?? "");
+				return { status: null, error: new Error("spawnSync trash ENOENT"), stderr: null };
+			};
+			const deleted = await deleteSessionFile(s.file, spawn);
+			expect(deleted).toEqual({ ok: true, method: "unlink" });
+			expect(calls).toEqual([s.file]);
+			expect(existsSync(s.file)).toBe(false);
+			expect(existsSync(sessionArtifactDir(s.file))).toBe(false);
+		});
 	});
 
 	describe("small outputs are byte-identical to the uncapped path (golden)", () => {

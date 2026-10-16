@@ -7,32 +7,54 @@ export function sessionArtifactDir(sessionFile: string): string {
 	return `${sessionFile.replace(/\.jsonl$/u, "")}.artifacts`;
 }
 
-function removeSessionArtifacts(sessionPath: string): void {
+/** Runs the `trash` CLI; injectable so tests can drive the trash and unlink paths. */
+export type TrashSpawn = (
+	command: "trash",
+	args: string[],
+	options: { encoding: "utf-8" },
+) => {
+	status: number | null;
+	error?: Error;
+	stderr?: string | null;
+};
+
+const trashArgs = (path: string) => (path.startsWith("-") ? ["--", path] : [path]);
+
+/** Artifacts follow the session: trashed when the session was trashed, else (or if that fails) deleted. */
+function removeSessionArtifacts(sessionPath: string, method: "trash" | "unlink", spawn: TrashSpawn): void {
+	const dir = sessionArtifactDir(sessionPath);
+	if (!existsSync(dir)) return;
 	try {
-		rmSync(sessionArtifactDir(sessionPath), { recursive: true, force: true });
+		if (method === "trash" && spawn("trash", trashArgs(dir), { encoding: "utf-8" }).status === 0) return;
+	} catch {
+		// fall through to deletion
+	}
+	try {
+		rmSync(dir, { recursive: true, force: true });
 	} catch {
 		// Best effort: a leftover artifact directory must not fail the delete.
 	}
 }
 
 /**
- * Delete a session file, trying the `trash` CLI first, then falling back to unlink. Its artifact directory is removed
- * too (spec 066).
+ * Delete a session file, trying the `trash` CLI first, then falling back to unlink. Its artifact directory goes the same
+ * way (trashed with it, or deleted on the unlink path; spec 066).
  */
 export async function deleteSessionFile(
 	sessionPath: string,
+	spawn: TrashSpawn = spawnSync,
 ): Promise<{ ok: boolean; method: "trash" | "unlink"; error?: string }> {
-	const result = await deleteSessionFileOnly(sessionPath);
-	if (result.ok) removeSessionArtifacts(sessionPath);
+	const result = await deleteSessionFileOnly(sessionPath, spawn);
+	if (result.ok) removeSessionArtifacts(sessionPath, result.method, spawn);
 	return result;
 }
 
 async function deleteSessionFileOnly(
 	sessionPath: string,
+	spawn: TrashSpawn,
 ): Promise<{ ok: boolean; method: "trash" | "unlink"; error?: string }> {
 	// Try `trash` first (if installed)
-	const trashArgs = sessionPath.startsWith("-") ? ["--", sessionPath] : [sessionPath];
-	const trashResult = spawnSync("trash", trashArgs, { encoding: "utf-8" });
+	const trashResult = spawn("trash", trashArgs(sessionPath), { encoding: "utf-8" });
 
 	const getTrashErrorHint = (): string | null => {
 		const parts: string[] = [];
