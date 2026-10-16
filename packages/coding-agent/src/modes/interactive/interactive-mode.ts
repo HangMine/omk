@@ -4734,7 +4734,7 @@ export class InteractiveMode {
 			return this.session.scopedModels.map((scoped) => scoped.model);
 		}
 
-		this.session.modelRegistry.refresh();
+		this.session.modelRegistry.refreshIfChanged();
 		try {
 			return await this.session.modelRegistry.getAvailable();
 		} catch {
@@ -4841,7 +4841,7 @@ export class InteractiveMode {
 
 	private async showModelsSelector(): Promise<void> {
 		// Get all available models
-		this.session.modelRegistry.refresh();
+		this.session.modelRegistry.refreshIfChanged();
 		const allModels = this.session.modelRegistry.getAvailable();
 
 		if (allModels.length === 0) {

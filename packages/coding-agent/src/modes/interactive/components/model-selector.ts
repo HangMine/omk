@@ -175,8 +175,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	private async loadModels(): Promise<void> {
 		let models: ModelItem[];
 
-		// Refresh to pick up any changes to models.json
-		this.modelRegistry.refresh();
+		// Refresh to pick up any changes to models.json (spec 063: skipped when no refresh input changed)
+		this.modelRegistry.refreshIfChanged();
 
 		// Check for models.json errors
 		const loadError = this.modelRegistry.getError();
