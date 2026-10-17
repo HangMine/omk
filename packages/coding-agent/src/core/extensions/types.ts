@@ -43,6 +43,7 @@ import type {
 import type { Static, TSchema } from "typebox";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { BashResult } from "../bash-executor.ts";
+import type { CompactionCancelReason } from "../compaction/concurrent-write-policy.ts";
 import type { CompactionPreparation, CompactionResult } from "../compaction/index.ts";
 import type { EventBus } from "../event-bus.ts";
 import type { ExecOptions, ExecResult } from "../exec.ts";
@@ -1062,8 +1063,7 @@ export interface SessionBeforeForkResult {
 	skipConversationRestore?: boolean;
 }
 
-export interface SessionBeforeCompactResult {
-	cancel?: boolean;
+export interface SessionBeforeCompactResult extends CompactionCancelReason {
 	compaction?: CompactionResult;
 }
 

@@ -1,0 +1,26 @@
+{
+	"extends": "../../../tsconfig.json",
+	"compilerOptions": {
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"baseUrl": "../../..",
+		"paths": {
+			"@earendil-works/pi-coding-agent": ["packages/coding-agent/src/index.ts"],
+			"@earendil-works/pi-tui": ["packages/tui/src/index.ts"],
+			"open-multi-agent-kit": ["packages/coding-agent/src/index.ts"],
+			"omk-tui": ["packages/tui/src/index.ts"],
+			"omk-ai": ["packages/ai/src/index.ts"],
+			"omk-ai/oauth": ["packages/ai/src/oauth.ts"],
+			"omk-agent-core": ["packages/agent/src/index.ts"],
+			"omk-protocol": ["packages/protocol/src/index.ts"],
+			"omk-adaptorch-wpl": ["packages/adaptorch-wpl/src/index.ts"]
+		}
+	},
+	"include": [
+		"index.ts",
+		"src/**/*.ts",
+		"vendor/**/*.ts",
+		"test/**/*.ts",
+		"../../../packages/coding-agent/src/utils/highlight-js-lib-index.d.ts"
+	]
+}

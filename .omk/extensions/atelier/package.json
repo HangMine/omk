@@ -1,0 +1,20 @@
+{
+	"name": "omk-atelier",
+	"version": "0.15.0-omk.1",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"omk": {
+		"extensions": [
+			"./index.ts"
+		],
+		"themes": [
+			"./themes"
+		]
+	},
+	"scripts": {
+		"test": "node ../../../node_modules/vitest/vitest.mjs run --config vitest.config.ts",
+		"typecheck": "node ../../../node_modules/typescript/bin/tsc -p tsconfig.json",
+		"check:vendor": "node scripts/verify-vendor.mjs"
+	}
+}

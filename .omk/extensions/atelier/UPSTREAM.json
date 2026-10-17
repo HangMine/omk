@@ -1,0 +1,160 @@
+{
+	"repository": "https://github.com/michaelmjhhhh/pi-atelier",
+	"version": "0.15.0",
+	"commit": "776c1e3701d7fced2115cdef27a58ca9f0f0bf07",
+	"license": "MIT",
+	"retrievedAt": "2026-10-15",
+	"files": {
+		"LICENSE": {
+			"upstreamSha256": "ddd19b6568834edec81aa7edec92c4eb6cba4ba01f96812f82d1ed9c06688eb7",
+			"localSha256": "ddd19b6568834edec81aa7edec92c4eb6cba4ba01f96812f82d1ed9c06688eb7"
+		},
+		"UPSTREAM.md": {
+			"upstreamSha256": "5192fbb14319002a16ea01d6f594f257197f3678d8e58dfc383299729c953449",
+			"localSha256": "5192fbb14319002a16ea01d6f594f257197f3678d8e58dfc383299729c953449"
+		},
+		"extensions/index.ts": {
+			"upstreamSha256": "da515a495b5242929a80babaf1e1ea53025bf92a18352a0d123f978425a6bc83",
+			"localSha256": "0b73c1e7fd5d11d806e6526770456503ab0f73d337366e8ed8069516ac017839"
+		},
+		"src/activity.ts": {
+			"upstreamSha256": "16644b32d2eb4c0c8561e55c782fd333722c39c20aebec412b651b887cc0a658",
+			"localSha256": "16644b32d2eb4c0c8561e55c782fd333722c39c20aebec412b651b887cc0a658"
+		},
+		"src/bounded-file.ts": {
+			"upstreamSha256": "ae5a3d6c8ab323879899c74b75570fa76466bdb6128576dcc8984e569aa5b21d",
+			"localSha256": "ae5a3d6c8ab323879899c74b75570fa76466bdb6128576dcc8984e569aa5b21d"
+		},
+		"src/completion-notifier.ts": {
+			"upstreamSha256": "224496ae0316e7f00b097a42b4013d466e8e8860ce0b633b55845fb496889f79",
+			"localSha256": "ece2d5ec7f751d8d91ef975326db20218a3f63d5c53d4de7985975577611c3c6"
+		},
+		"src/config.ts": {
+			"upstreamSha256": "cb14550376a37effe0fc164fe6bfa5be3595cc84531a97edb3040f763ce80828",
+			"localSha256": "9661479dfe44717093363b0ae165b219cfb05a6ffa9ba758ee1535ce63ebc988"
+		},
+		"src/display-path.ts": {
+			"upstreamSha256": "110970eb45d44a4434f0cee9d10d38d695676077c45be39d8122b2273ba2bed2",
+			"localSha256": "110970eb45d44a4434f0cee9d10d38d695676077c45be39d8122b2273ba2bed2"
+		},
+		"src/display.ts": {
+			"upstreamSha256": "3b19c289ff7c5e1ae6269750f1e734ed0a56eaf1c0c6a9c07e617c0d50c856b6",
+			"localSha256": "270595631bb3352705ce3564a61a01795d64fc5800b0a3cec1f93a48d98b4bbf"
+		},
+		"src/editor.ts": {
+			"upstreamSha256": "1ebda1c38bf0db5fd1416551d31b050b8d3e8e81eaba02505f496054bde89bc5",
+			"localSha256": "74646559ff2ecdf585df0a6adc076778babf4f2fb4271a5a7b5b4ea28f026652"
+		},
+		"src/footer.ts": {
+			"upstreamSha256": "be70c71646483b474d8b657a2cbf89b0f1179c6ad0797761890e12ee36a1214e",
+			"localSha256": "045d1096d3763183d9c4a90c4e0c54bc97c13f557a4aa9cf56338f648710004d"
+		},
+		"src/image-compositor.ts": {
+			"upstreamSha256": "6a6c9297fc6b3766bcd3a7ba9f1bc36b794916f8b1b3c3ddb4196f171e8ad4fa",
+			"localSha256": "f34fd3a1a8551afa80b40920aa2c23cd16ac3b034c933b73af2d5b80884656fa"
+		},
+		"src/menu.ts": {
+			"upstreamSha256": "bd5ec225178428bc27795be3715e575545363e42a91a69487faee214e3afa527",
+			"localSha256": "61bf0a1154e91022862f2ce3e1c47b9262ce23f00cfa163e66cc870634a0dbd2"
+		},
+		"src/metrics.ts": {
+			"upstreamSha256": "1feffe15a01f63cf1e0a55e7d9298ca4b12839ea4d77a2ca4c3228b207af80fd",
+			"localSha256": "a7045004927c153b9b98b495a156dcc79af36f180b22c93d0cfb5ccaa3259c77"
+		},
+		"src/overlay-lifecycle.ts": {
+			"upstreamSha256": "bf891254e9a4cc0853af50a805c23d35be80189518d1f6b1e4dfc7947ec6b903",
+			"localSha256": "bf891254e9a4cc0853af50a805c23d35be80189518d1f6b1e4dfc7947ec6b903"
+		},
+		"src/palette.ts": {
+			"upstreamSha256": "7dfbba2ca268f8b1347526e045982f324cc533fe5462265141654a5e26fb33a6",
+			"localSha256": "f225667ca02e7083be0fb6819c7304640bf6cc6ab8c00a2274bee3a6e725d069"
+		},
+		"src/run-activity.ts": {
+			"upstreamSha256": "fca89dcfc014ca42e3c02039666f02b64a20a8d355eb54621c13318a0c16b4b8",
+			"localSha256": "a6eebe9296ec7ac3a7e350dccb439436e258aed43133c6ae016b4694d1ebce98"
+		},
+		"src/settings-workspace.ts": {
+			"upstreamSha256": "a9864a611a1da6c4a72c9aa0df2507d5f6a8ce1f49905f477cea7dfcaca03861",
+			"localSha256": "d178eed32878f7fc566e7c85bf1c6822c8a052f4364e2d57d94d0ecada2a03d4"
+		},
+		"src/sidebar-panels.ts": {
+			"upstreamSha256": "b5b5cad073bfa57852381b8d8985b40c0638bba5f698c71b4211b831f208f5d2",
+			"localSha256": "71522f9d630e50cd89692a69dcc404a436d3f95550da0a2d8ec99b2b392c75c8"
+		},
+		"src/sidebar.ts": {
+			"upstreamSha256": "bf12d79de368a2e60b5343749583132fe2d078b09436b2463052cbaec92c34dd",
+			"localSha256": "40bb544aa4b46592786db30aaaf01e74eb339baa28334247d5539542053b79ea"
+		},
+		"src/split-pane.ts": {
+			"upstreamSha256": "4de8615cab170e60a084f8c42f40166371f5cd4c7873374c58b1d9ec4e9b64e8",
+			"localSha256": "0b8022f8fe902b42f94705b63d1f2b1afcb8aeb6aeb37ea8e03e52b702a9f149"
+		},
+		"src/state.ts": {
+			"upstreamSha256": "7a83ab4700f30dc45c0a936129ead706a6c84f4500aa229f06d97e94b0dd064e",
+			"localSha256": "dbd8995058aed94f49c096aaf0bc45b3a768727280eb2c003c12e0821cbb9485"
+		},
+		"src/subagent-cost-chart.ts": {
+			"upstreamSha256": "e02035f57b5cd207b3450555f94afdd6dc19ec66c04dee7e0d30645703df8dcc",
+			"localSha256": "a9565f5cabd6e824dea9bb8d1d7a8994122b3c7514eb79b80f9fae9abcbc3407"
+		},
+		"src/subagent-cost-history.ts": {
+			"upstreamSha256": "04fb12208ae230692ca3eb51508a67a424830f15f316e875b98bb325d0130d4a",
+			"localSha256": "5d6f029e33c8f94e07a11e5f600b24a51a01efd0428c83ce687959d852403c31"
+		},
+		"src/subagent-cost-image.ts": {
+			"upstreamSha256": "35b6a78be591b4dfbb2d898c1eda45d2dfa38e0b702d62cff745b01f24d4469a",
+			"localSha256": "8ecb218e34b1a1e840fb5a495cd9fed81256b896b599e6b384b8b16017ed2c3f"
+		},
+		"src/subagent-usage-view.ts": {
+			"upstreamSha256": "51553ad6dcfb836f9ca339b009295873c1f03aca3a8b713f6f4b5b8984be71e7",
+			"localSha256": "b005dec7f57d7aa416bc330d97a39849046e6b1ffc5d8be8ed74b7b9442f4c4e"
+		},
+		"src/subagent-usage.ts": {
+			"upstreamSha256": "56a2e7a0619179386876a4be250f11cd7dac5e569000a06a212cb5f99d5bf039",
+			"localSha256": "52619bda35f245e8ccba7a32ec5fe930274bcf39b3e1fb155b16d8a6ce83c30b"
+		},
+		"src/text.ts": {
+			"upstreamSha256": "348e187ddc977595a0cc54c44cddcf5d8c6fa67c8f6b65ac538ebea754d6fc28",
+			"localSha256": "ca0c889c9e8acb78083966a4d8cc9b6969252ea9746673c2e112919fb7e9b7c2"
+		},
+		"src/todos.ts": {
+			"upstreamSha256": "cae83e6520e160940b5511cafd239216191990dd8674badf2a904fd83efb6fba",
+			"localSha256": "afba6cea8de9df7551df3538f18bb3c8194df08d0c1f1ac4eab1da57883b3420"
+		},
+		"src/types.ts": {
+			"upstreamSha256": "fcf846ee8756b89757a2e7f00c2a88cd12f8fdbe3ee89f30bd1b0f77ed443736",
+			"localSha256": "93246a3e1fb48c7d6495bea6120da7d0146e43e0a51a69eee568ab301a1abf52"
+		},
+		"src/workspace-pulse.ts": {
+			"upstreamSha256": "fe12168c6241450a4f361f789976aa444b514d8934b38aaf3b5ab249959e8a1a",
+			"localSha256": "f69ee8c2c0597b8bb500915f9933d413e7098797d66f96f241019b675001c5e7"
+		}
+	},
+	"adaptedFiles": [
+		"extensions/index.ts",
+		"src/completion-notifier.ts",
+		"src/config.ts",
+		"src/display.ts",
+		"src/editor.ts",
+		"src/footer.ts",
+		"src/image-compositor.ts",
+		"src/menu.ts",
+		"src/metrics.ts",
+		"src/palette.ts",
+		"src/run-activity.ts",
+		"src/settings-workspace.ts",
+		"src/sidebar-panels.ts",
+		"src/sidebar.ts",
+		"src/split-pane.ts",
+		"src/state.ts",
+		"src/subagent-cost-chart.ts",
+		"src/subagent-cost-history.ts",
+		"src/subagent-cost-image.ts",
+		"src/subagent-usage-view.ts",
+		"src/subagent-usage.ts",
+		"src/text.ts",
+		"src/todos.ts",
+		"src/types.ts",
+		"src/workspace-pulse.ts"
+	]
+}

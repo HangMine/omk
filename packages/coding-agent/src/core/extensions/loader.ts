@@ -182,6 +182,7 @@ function getAliases(): Record<string, string> {
 		"omk-tui": omkTuiEntry,
 		"omk-ai": omkAiEntry,
 		"omk-ai/oauth": omkAiOauthEntry,
+		"omk-ai/prompt-hash": path.join(path.dirname(omkAiEntry), "prompt-hash.js"),
 		typebox: typeboxEntry,
 		"typebox/compile": typeboxCompileEntry,
 		"typebox/value": typeboxValueEntry,

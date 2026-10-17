@@ -92,7 +92,7 @@ export default function promptUrlWidgetExtension(omk: ExtensionAPI) {
 	};
 
 	omk.on("before_agent_start", async (event, ctx) => {
-		if (!ctx.hasUI) return;
+		if (!ctx.hasUI || event.messageType !== "user") return;
 		const match = extractPromptMatch(event.prompt);
 		if (!match) {
 			return;
