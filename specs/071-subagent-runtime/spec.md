@@ -23,15 +23,31 @@ Spec order (Tech Lead): **072 baseline → 071 runtime → 073 auto v5**; 074 pr
 
 ## Loop guard (always on)
 Any one trigger stops the subagent and returns a typed error with the reason to the lead; the runtime never retries on its own.
-1. Depth 1: subagents cannot spawn subagents (existing `nesting.ts`, now enforced with a test that the tool is absent at depth 1).
+1. Depth = min(`OMK_SUBAGENT_MAX_DEPTH`, 1) (amended 2026-10-17, Tech Lead round 2): unset or invalid (not a non-negative integer) → 1;
+   `0` disables spawning (the top-level session gets no `subagent` tool); values > 1 are clamped to 1. So subagents can never spawn
+   subagents: a worker at depth 1 has no `subagent` tool (existing `nesting.ts`, enforced with a test that the tool is absent at depth 1),
+   and a worker that still calls `subagent` is stopped (`nested_spawn`).
 2. Per-subagent caps on turns, wall time and billed tokens = **2 × max of the 20 runs in 072, per task family** (larger of the two if a single value is needed), locked in this spec before any A/B, never changed after.
    **Scope:** these 072 caps (18 turns, 70,254 billed tokens per worker, 5.70 s wall; sha256 5c4339659def…837582) are for **mock regression tests only**.
    Real-model caps come from 073's real-model baseline and are locked there before its A/B.
    Hitting a cap returns a **partial-completion** result (Claude Code `maxTurns` behaviour).
-3. The same tool with structurally equal arguments **and the same result** **3 times in a row** stops it (N=3; amended 2026-10-17 after Tech Lead review: polling whose output changes is not a loop, following OpenHands StuckDetector action+observation; loops whose output keeps changing without progress are caught by rule 4 or the caps). Built on `core/identical-loop.ts` (today warn 3 / stop 6,
-   only under `OMK_IDENTICAL_LOOP`): in subagents it is always on, and it also catches **same error 3×** and **A·B ping-pong 6×**
-   (OpenHands stuck detector patterns).
-4. **5 turns** with no file change and no new tool output stop it (K=5).
+3. Repetition rules (`src/core/subagent-loop-guard.ts`; always on in subagents; the lead keeps `core/identical-loop.ts`, today warn 3 / stop 6
+   only under `OMK_IDENTICAL_LOOP`, which compares tool name + arguments only). Patterns follow OpenHands StuckDetector (MIT, ported with header):
+   - **identical_call:** the same tool with structurally equal arguments (key order independent, `util.isDeepStrictEqual`) **and the same
+     result** (text, error flag, image content digests) **3 times in a row** stops it (N=3; amended 2026-10-17 after Tech Lead review:
+     polling whose output changes is not a loop, following OpenHands action+observation; loops whose output keeps changing without
+     progress are caught by rule 4 or the caps).
+   - **same_error:** the same error text in **3 separate turns in a row**; parallel calls failing together in one turn count once.
+     A successful result resets the streak.
+     **No-match exception (approved 2026-10-17, narrow):** a `bash` call whose command's last stage (after the last unquoted `|`, `||`, `&&`,
+     `;` or newline, skipping leading `VAR=value` assignments) runs `grep`, `egrep`, `fgrep` or `rg`, and that exits with code 1 with empty
+     output, is "no match" (exit 1 = no match, 2 = error for both grep and rg). It neither counts toward nor resets same_error.
+     Any other exit code, or any output, still counts. The same grep repeated with the same empty result still stops via identical_call.
+   - **ping_pong:** A·B alternation over **6 calls**: each call and its result equal the one two steps earlier, and A ≠ B
+     (A·A·A… is identical_call or polling, not ping-pong).
+4. **no_progress:** **5 finished tool turns in a row** with no file change (a successful file-mutating tool call) and no new tool output
+   stop it (K=5). Output is compared by text plus image content digest, so different images with the same caption are new output; an
+   empty output from a new call counts as new. A text-only turn is the worker's answer, not a stalled turn.
 5. Ultra mode gets the same cap of 4 concurrent (behaviour change, see below).
 6. **Shared run budget:** besides the per-subagent caps, one turn and billed-token cap is shared by the lead and all workers
    (OpenHands shared counter, PR #3703); 4 workers each at their own cap still cannot exceed it.
@@ -78,8 +94,9 @@ including subagents; parallelisable and order-dependent tasks reported separatel
 - A 5th concurrent subagent is rejected with `busy` instead of waiting.
 - Ultra mode is capped at 4 concurrent (was uncapped).
 - Loop guard is on in the default path (no flag, `OMK_SUBAGENT_RUNTIME` unset): a worker that repeats the same call with the same result 3×,
-  hits the same error in 3 turns in a row (parallel calls failing together in one turn count once), ping-pongs A·B over 6 calls, makes no progress for 5 turns or calls `subagent` is stopped and returned as an error
-  with its partial result. Depth is fixed at 1: `OMK_SUBAGENT_MAX_DEPTH` is no longer read (it could raise depth, or set 0 to disable spawning).
+  hits the same error in 3 turns in a row (parallel calls failing together in one turn count once; grep/rg "no match" excluded), ping-pongs A·B over 6 calls, makes no progress for 5 turns or calls `subagent` is stopped and returned as an error
+  with its partial result.
+- `OMK_SUBAGENT_MAX_DEPTH` values > 1 are clamped to 1 (they used to allow nested subagents). `0` still disables spawning; unset or invalid → 1.
 
 ## Concurrency vs resource tier (Tech Lead ②, 인호 confirming via OMK)
 072: normal tier caps heavy processes at 2 (`resource-admission-config.ts:47`), constrained/critical at 1. Decision ②: limit = min(4, tier cap), rest `busy`.
