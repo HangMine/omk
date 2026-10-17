@@ -24,6 +24,8 @@ Spec order (Tech Lead): **072 baseline → 071 runtime → 073 auto v5**; 074 pr
 Any one trigger stops the subagent and returns a typed error with the reason to the lead; the runtime never retries on its own.
 1. Depth 1: subagents cannot spawn subagents (existing `nesting.ts`, now enforced with a test that the tool is absent at depth 1).
 2. Per-subagent caps on turns, wall time and billed tokens = **2 × max of the 20 runs in 072, per task family** (larger of the two if a single value is needed), locked in this spec before any A/B, never changed after.
+   **Scope:** these 072 caps (18 turns, 70,254 billed tokens per worker, 5.70 s wall; sha256 5c4339659def…837582) are for **mock regression tests only**.
+   Real-model caps come from 073's real-model baseline and are locked there before its A/B.
    Hitting a cap returns a **partial-completion** result (Claude Code `maxTurns` behaviour).
 3. The same tool with identical arguments **3 times in a row** stops it (N=3). Built on `core/identical-loop.ts` (today warn 3 / stop 6,
    only under `OMK_IDENTICAL_LOOP`): in subagents it is always on, and it also catches **same error 3×** and **A·B ping-pong 6×**
@@ -74,6 +76,10 @@ including subagents; parallelisable and order-dependent tasks reported separatel
 ## Behaviour changes (CHANGELOG "Behavior changes", confirmed at OMK final approval against 근빈's rules)
 - A 5th concurrent subagent is rejected with `busy` instead of waiting.
 - Ultra mode is capped at 4 concurrent (was uncapped).
+
+## Open decision (인호): concurrency vs resource tier
+072 found today's effective concurrency is 2: the normal resource tier caps heavy processes at 2 (`resource-admission-config.ts:47`), constrained/critical at 1.
+① 4 overrides the tier, or ② a request above the tier cap is also rejected with `busy` (normal tier then really runs 2). Proposal ②; Behavior changes would list the real concurrency per tier.
 
 ## Decisions (Tech Lead, OMK, 2026-10-17)
 N=3, K=5, caps = 2 × max of 072 runs per family, loop mocks 100, no pending confirmed. No open questions remain; caps get filled in from 072.
