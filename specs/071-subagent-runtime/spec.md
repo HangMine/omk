@@ -83,7 +83,7 @@ including subagents; parallelisable and order-dependent tasks reported separatel
 Behavior changes lists the real concurrency per tier. Raising normal to 4 is decided separately. 072 addendum (true 4, `normalMaxHeavyProcesses: 4` in settings.json, no source change): wall 2.70 → 2.06 s,
 peak RSS 472 → 777 MB, CPU and billed tokens unchanged. Until decided: default 2, README documents the setting. The step-3 optimisation baseline
 ("4 concurrent peak RSS −20 %") is 777 MB **(mock)**: judged on mock; real-model RSS is only recorded in 073.
-Mock wall time understates the gain of 4 (only queue wait is saved); the +150 MB per worker is model-independent.
+Mock wall time understates the gain of 4 (only queue wait is saved); the +150 MB per worker is a mock measurement, real workers are checked in 073.
 
 ## Caps: two kinds
 - **Mock caps** (072, sha256 locked) are used only in 071 tests.
