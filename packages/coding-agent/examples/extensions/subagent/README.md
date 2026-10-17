@@ -234,6 +234,7 @@ Project agents override user agents with the same name when `agentScope: "both"`
 - **Chain mode**: Stops at first failing step, reports which step failed, and preserves completed earlier steps
 - **Graph mode**: Rejects malformed graphs before spawn; a failed wave prevents all downstream starts and preserves completed node evidence
 - **Duplicate prevention**: A cutoff with no new checkpoint or streamed evidence is not retried
+- **Loop guard (always on, spec 071)**: A worker is stopped on the 3rd identical tool call in a row with the same result (a repeated call whose output changes, such as polling, is not stopped), the same error in 3 turns in a row (parallel failures in one turn count once), an A·B ping-pong over 6 calls, 5 turns without a file change or new tool output, or any `subagent` call from a worker. Depth = min(`OMK_SUBAGENT_MAX_DEPTH`, 1): unset or invalid → 1, `0` disables spawning, values > 1 clamp to 1. A bash `grep`/`rg` that exits 1 with no output is "no match" and does not count as an error. The stop is returned as an error (`subagent.loop_guard.<rule>`, typed `loopGuard` in details) with the partial output, and is never retried
 
 ## Limitations
 

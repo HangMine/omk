@@ -48,6 +48,7 @@ export function mergeResult(target: SingleResult, source: SingleResult): void {
 	target.attemptId = source.attemptId;
 	target.process = source.process;
 	target.stream = source.stream;
+	if (source.loopGuard) target.loopGuard = source.loopGuard;
 }
 
 export function mergeForUpdate(base: SingleResult, partial: SingleResult): SingleResult {
