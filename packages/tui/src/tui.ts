@@ -13,6 +13,7 @@ import type { Terminal } from "./terminal.ts";
 import { finishTerminalFrame } from "./terminal-final-frame.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
 import { isTermuxSession, REPAINT_BUDGET_SCREENS, ResizeResync } from "./terminal-resync.ts";
+import { findChangedLines } from "./tui-line-diff.ts";
 import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
 
 /**
@@ -697,6 +698,7 @@ export class TUI extends Container {
 			this.doRender(options.finalLines);
 		}
 		this.stopped = true;
+		this.renderRequested = false;
 		if (this.renderTimer) {
 			clearTimeout(this.renderTimer);
 			this.renderTimer = undefined;
@@ -722,9 +724,12 @@ export class TUI extends Container {
 				if (this.stopped || !this.renderRequested) {
 					return;
 				}
-				this.renderRequested = false;
-				this.lastRenderAt = performance.now();
-				this.doRender();
+				if (this.terminal.getOutputStats?.().backpressured) this.scheduleRender();
+				else {
+					this.renderRequested = false;
+					this.lastRenderAt = performance.now();
+					this.doRender();
+				}
 			});
 			return;
 		}
@@ -738,10 +743,19 @@ export class TUI extends Container {
 			return;
 		}
 		const elapsed = performance.now() - this.lastRenderAt;
-		const delay = Math.max(0, TUI.MIN_RENDER_INTERVAL_MS - elapsed);
+		const delay = Math.max(
+			0,
+			this.terminal.getOutputStats?.().backpressured
+				? TUI.MIN_RENDER_INTERVAL_MS
+				: TUI.MIN_RENDER_INTERVAL_MS - elapsed,
+		);
 		this.renderTimer = setTimeout(() => {
 			this.renderTimer = undefined;
 			if (this.stopped || !this.renderRequested) {
+				return;
+			}
+			if (this.terminal.getOutputStats?.().backpressured) {
+				this.scheduleRender();
 				return;
 			}
 			this.renderRequested = false;
@@ -1250,11 +1264,7 @@ export class TUI extends Container {
 			this.cursorRow = Math.max(0, newLines.length - 1);
 			this.hardwareCursorRow = this.cursorRow;
 			// Reset max lines when clearing, otherwise track growth
-			if (clear) {
-				this.maxLinesRendered = newLines.length;
-			} else {
-				this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
-			}
+			this.maxLinesRendered = clear ? newLines.length : Math.max(this.maxLinesRendered, newLines.length);
 			const bufferLength = Math.max(height, newLines.length);
 			this.previousViewportTop = Math.max(0, bufferLength - height);
 			this.positionHardwareCursor(cursorPos, newLines.length);
@@ -1296,27 +1306,8 @@ export class TUI extends Container {
 			return;
 		}
 
-		// Find first and last changed lines
-		// Scan inward from both ends: unchanged rows compare by reference, and a
-		// change far above the viewport (which shifts every row below it) no longer
-		// costs a content comparison per history row.
-		let firstChanged = -1;
-		let lastChanged = -1;
-		const maxLines = Math.max(newLines.length, this.previousLines.length);
-		const rowDiffers = (i: number): boolean =>
-			(i < this.previousLines.length ? this.previousLines[i] : "") !== (i < newLines.length ? newLines[i] : "");
-		for (let i = 0; i < maxLines; i++) {
-			if (rowDiffers(i)) {
-				firstChanged = i;
-				break;
-			}
-		}
-		for (let i = maxLines - 1; firstChanged !== -1 && i >= firstChanged; i--) {
-			if (rowDiffers(i)) {
-				lastChanged = i;
-				break;
-			}
-		}
+		const changes = findChangedLines(this.previousLines, newLines, prevViewportTop);
+		let { firstChanged, lastChanged } = changes;
 		if (firstChanged !== -1) {
 			lastChanged = this.expandLastChangedForKittyImages(firstChanged, lastChanged);
 		}
@@ -1352,6 +1343,7 @@ export class TUI extends Container {
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousViewportTop = prevViewportTop;
 			this.previousHeight = height;
+			this.previousLines = newLines;
 			return;
 		}
 

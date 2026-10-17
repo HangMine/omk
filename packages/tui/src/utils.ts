@@ -164,6 +164,23 @@ export function normalizeTerminalOutput(str: string): string {
 	return result;
 }
 
+/** Remove ANSI, OSC, and APC control sequences while preserving visible text. */
+export function stripTerminalSequences(str: string): string {
+	if (!str.includes("\x1b")) return str;
+	let result = "";
+	let i = 0;
+	while (i < str.length) {
+		const ansi = extractAnsiCode(str, i);
+		if (ansi) {
+			i += ansi.length;
+			continue;
+		}
+		result += str[i];
+		i++;
+	}
+	return result;
+}
+
 /**
  * Extract ANSI escape sequences from a string at the given position.
  */

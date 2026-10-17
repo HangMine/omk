@@ -18,11 +18,13 @@
  */
 
 import { EventEmitter } from "events";
+import { parseUnmodifiedKittyPrintableCodepoint } from "./kitty-printable-codepoint.ts";
 
 const ESC = "\x1b";
 const BRACKETED_PASTE_START = "\x1b[200~";
 const BRACKETED_PASTE_END = "\x1b[201~";
 
+const TERMINAL_REPLY_HEADER_PATTERN = /^\x1b(?:\](?:1[01];|4;\d{1,3};|7501;\?)|P>\||_G(?:[a-z]=\d+,)*[a-z]=\d+;)/;
 /**
  * Check if a string is a complete escape sequence or needs more data
  */
@@ -176,17 +178,6 @@ function isCompleteApcSequence(data: string): "complete" | "incomplete" {
 	}
 
 	return "incomplete";
-}
-
-/**
- * Split accumulated buffer into complete sequences
- */
-function parseUnmodifiedKittyPrintableCodepoint(sequence: string): number | undefined {
-	const match = sequence.match(/^\x1b\[(\d+)(?::\d*)?(?::\d+)?u$/);
-	if (!match) return undefined;
-
-	const codepoint = parseInt(match[1]!, 10);
-	return codepoint >= 32 ? codepoint : undefined;
 }
 
 function extractCompleteSequences(buffer: string): { sequences: string[]; remainder: string } {
@@ -376,6 +367,8 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
 		}
 
 		if (this.buffer.length > 0) {
+			// Delimited terminal replies must not become text or a BEL shortcut between fragments.
+			if (TERMINAL_REPLY_HEADER_PATTERN.test(this.buffer)) return;
 			this.timeout = setTimeout(() => {
 				const flushed = this.flush();
 

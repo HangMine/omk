@@ -111,5 +111,5 @@ export {
 	TUI,
 } from "./tui.ts";
 // Utilities
-export { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils.ts";
+export { sliceByColumn, stripTerminalSequences, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils.ts";
 export { WindowedContainer, type WindowedRenderStats } from "./windowed-container.ts";

@@ -204,6 +204,11 @@ describe("isImageLine", () => {
 });
 
 describe("detectCapabilities", () => {
+	it("detects Herdr Kitty images before outer terminal variables", () => {
+		withEnv({ TERM_PROGRAM: "Herdr", COLORTERM: "truecolor", WEZTERM_PANE: "1" }, () => {
+			assert.deepStrictEqual(detectCapabilities(), { images: "kitty", trueColor: true, hyperlinks: true });
+		});
+	});
 	it("defaults to hyperlinks: false for unknown terminals", () => {
 		withEnv({}, () => {
 			const caps = detectCapabilities();

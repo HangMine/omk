@@ -83,6 +83,15 @@ describe("StdinBuffer", () => {
 	});
 
 	describe("Partial Escape Sequences", () => {
+		it("keeps fragmented terminal color replies out of key input after the timeout", (t) => {
+			t.mock.timers.enable({ apis: ["setTimeout"] });
+			processInput("\x1b]11;rgb:aaaa/");
+			t.mock.timers.tick(100);
+			assert.deepStrictEqual(emittedSequences, []);
+			processInput("bbbb/cccc\x07");
+			assert.deepStrictEqual(emittedSequences, ["\x1b]11;rgb:aaaa/bbbb/cccc\x07"]);
+			buffer.destroy();
+		});
 		it("should buffer incomplete mouse SGR sequence", async () => {
 			processInput("\x1b");
 			assert.deepStrictEqual(emittedSequences, []);
