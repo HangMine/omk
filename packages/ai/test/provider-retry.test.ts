@@ -101,6 +101,12 @@ describe("retryProviderRequest", () => {
 });
 
 describe("isRetryableAssistantError", () => {
+	it.each(["The upstream provider returned an error", "provider returned error"])(
+		"retries upstream gateway error: %s",
+		(errorMessage) => {
+			expect(isRetryableAssistantError({ stopReason: "error", errorMessage } as never)).toBe(true);
+		},
+	);
 	it("does not retry quota exhaustion text, even wrapped in a retry-delay error", () => {
 		expect(
 			isRetryableAssistantError({

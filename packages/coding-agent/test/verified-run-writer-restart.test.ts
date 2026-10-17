@@ -175,7 +175,7 @@ describe("immutable-input writer restart", () => {
 		const { coordinator, command, approval, state, runPath } = await interrupted();
 		const owner = acquireSessionOwnerLeaseSync(journalPath(runPath));
 		try {
-			await expect(coordinator.restartWriter(command, approval)).rejects.toThrow(/owner/);
+			await expect(coordinator.restartWriter(command, approval)).rejects.toThrow(/another OMK process|owner/);
 		} finally {
 			owner.release();
 		}

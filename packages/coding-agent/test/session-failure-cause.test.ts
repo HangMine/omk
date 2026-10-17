@@ -150,6 +150,18 @@ describe("providerFailureCause", () => {
 			code: "protocol",
 		});
 	});
+
+	it("classifies a permanent invalid_request_error as configuration, not a retryable protocol fault", () => {
+		// Left on the protocol default, the termination card tells the operator
+		// to inspect tool/message consistency for a request the provider will
+		// reject again unchanged.
+		expect(
+			providerFailureCause(
+				assistantError('400 {"error":{"type":"invalid_request_error","message":"temperature is out of range"}}'),
+				0,
+			),
+		).toEqual({ area: "configuration", code: "invalid" });
+	});
 });
 
 describe("preflightFailureCause", () => {

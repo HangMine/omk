@@ -119,6 +119,7 @@ export {
 	isContentSafetyStopMessage,
 	isNoSafetyFailoverModel,
 	isOrphanToolCallIdError,
+	isPermanentInvalidRequestMessage,
 	isStickySafetyModel,
 	isTransientProviderErrorMessage,
 	type ProviderResilienceSettings,

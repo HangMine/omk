@@ -121,6 +121,20 @@ export function sameDurableFileGeneration(
 }
 
 export function readDurableFileSnapshot(path: string): DurableFileSnapshot | null {
+	// Another session appending to the same file is a normal race, not a failure:
+	// a consistent snapshot is required, so re-read a bounded number of times
+	// before surfacing the race to the caller.
+	const maxAttempts = 3;
+	for (let attempt = 1; ; attempt += 1) {
+		try {
+			return readDurableFileSnapshotOnce(path);
+		} catch (error) {
+			if (!(error instanceof DurableFileReadRaceError) || attempt >= maxAttempts) throw error;
+		}
+	}
+}
+
+function readDurableFileSnapshotOnce(path: string): DurableFileSnapshot | null {
 	let fd: number;
 	try {
 		fd = openSync(path, "r");

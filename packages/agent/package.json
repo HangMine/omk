@@ -22,7 +22,7 @@
 		"CHANGELOG.md"
 	],
 	"scripts": {
-		"clean": "shx rm -rf dist",
+		"clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
 		"build": "tsgo -p tsconfig.build.json",
 		"test": "vitest --run",
 		"test:harness": "vitest --run --config vitest.harness.config.ts",
@@ -54,9 +54,9 @@
 	},
 	"devDependencies": {
 		"@types/node": "24.12.4",
-		"@vitest/coverage-v8": "3.2.6",
+		"@vitest/coverage-v8": "4.1.11",
 		"fast-check": "4.9.0",
 		"typescript": "5.9.3",
-		"vitest": "3.2.6"
+		"vitest": "4.1.11"
 	}
 }

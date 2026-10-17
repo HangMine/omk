@@ -113,6 +113,15 @@ describe("classifyProviderError (typed precedence)", () => {
 		expect(classifyProviderError({ text: "rate limit exceeded" }).retryable).toBe(true);
 	});
 
+	it("text-only invalid_request_error is permanent even without a status field", () => {
+		const result = classifyProviderError({
+			text: '{"error":{"type":"invalid_request_error","message":"temperature is out of range"}}',
+		});
+		expect(result.kind).toBe("permanent_request");
+		expect(result.retryable).toBe(false);
+		expect(result.basis).toBe("known_permanent");
+	});
+
 	it("an empty input is unclassified and non-retryable", () => {
 		const result = classifyProviderError({});
 		expect(result.kind).toBe("unclassified");

@@ -25,9 +25,13 @@ function configurationNextAction(message: string): string {
 	if (/compaction cannot shrink/i.test(message)) {
 		return "The system prompt, tool schemas and latest input alone overflow this model's input window, so compaction cannot help. Switch to a larger-context model with /model, or disable unused MCP servers.";
 	}
-	return /does not provide an export named/i.test(message)
-		? "Provider code failed to load. Quit and restart OMK so the rebuilt adapter is imported; /new session does not reload modules."
-		: "This model or client is not valid for the current login. Switch with /model or fix provider/client settings; /new session will not grant access.";
+	if (/does not provide an export named/i.test(message)) {
+		return "Provider code failed to load. Quit and restart OMK so the rebuilt adapter is imported; /new session does not reload modules.";
+	}
+	if (/invalid_request_error/i.test(message)) {
+		return "The provider rejected this request and will reject the same payload again. Change the rejected parameter before retrying; /new session does not change it.";
+	}
+	return "This model or client is not valid for the current login. Switch with /model or fix provider/client settings; /new session will not grant access.";
 }
 
 /** The recovery step a terminated run's owner should take next. */

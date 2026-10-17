@@ -127,7 +127,7 @@ describe("frozen candidate recovery", () => {
 		const { coordinator, command, approval, runPath } = await frozen();
 		const lease = acquireSessionOwnerLeaseSync(journalPath(runPath));
 		try {
-			await expect(coordinator.resume(command, approval)).rejects.toThrow(/owner/);
+			await expect(coordinator.resume(command, approval)).rejects.toThrow(/another OMK process|owner/);
 		} finally {
 			lease.release();
 		}

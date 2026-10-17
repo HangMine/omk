@@ -2,8 +2,9 @@ import type { AssistantMessage, AssistantMessageEvent } from "../types.ts";
 
 // Generic event stream class for async iteration
 export class EventStream<T, R = T> implements AsyncIterable<T> {
-	private queue: T[] = [];
-	private waiting: ((value: IteratorResult<T>) => void)[] = [];
+	private queue: (T | undefined)[] = [];
+	private queueHead = 0;
+	private waiting = new Set<(value: IteratorResult<T>) => void>();
 	private done = false;
 	private finalResultPromise: Promise<R>;
 	private resolveFinalResult!: (result: R) => void;
@@ -20,45 +21,71 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 
 	push(event: T): void {
 		if (this.done) return;
-
-		if (this.isComplete(event)) {
+		const complete = this.isComplete(event);
+		if (complete) {
 			this.done = true;
 			this.resolveFinalResult(this.extractResult(event));
 		}
 
-		// Deliver to waiting consumer or queue it
-		const waiter = this.waiting.shift();
-		if (waiter) {
-			waiter({ value: event, done: false });
-		} else {
-			this.queue.push(event);
-		}
+		const waiter = this.waiting.values().next().value;
+		if (waiter) waiter({ value: event, done: false });
+		else this.queue.push(event);
+		// Terminal delivery must also release other consumers, even without end().
+		if (complete) this.end();
 	}
 
 	end(result?: R): void {
 		this.done = true;
-		if (result !== undefined) {
-			this.resolveFinalResult(result);
-		}
-		// Notify all waiting consumers that we're done
-		while (this.waiting.length > 0) {
-			const waiter = this.waiting.shift()!;
-			waiter({ value: undefined as any, done: true });
-		}
+		if (result !== undefined) this.resolveFinalResult(result);
+		for (const waiter of this.waiting) waiter({ value: undefined, done: true });
 	}
 
-	async *[Symbol.asyncIterator](): AsyncIterator<T> {
-		while (true) {
-			if (this.queue.length > 0) {
-				yield this.queue.shift()!;
-			} else if (this.done) {
-				return;
-			} else {
-				const result = await new Promise<IteratorResult<T>>((resolve) => this.waiting.push(resolve));
-				if (result.done) return;
-				yield result.value;
-			}
-		}
+	[Symbol.asyncIterator](): AsyncIterator<T> {
+		let closed = false;
+		const pending = new Set<(value: IteratorResult<T>) => void>();
+		const close = (): IteratorResult<T> => {
+			closed = true;
+			for (const waiter of pending) waiter({ value: undefined, done: true });
+			return { value: undefined, done: true };
+		};
+		const iterator: AsyncIterableIterator<T> = {
+			[Symbol.asyncIterator]: () => iterator,
+			next: (): Promise<IteratorResult<T>> => {
+				if (closed) return Promise.resolve({ value: undefined, done: true });
+				if (this.queueHead < this.queue.length) {
+					const value = this.queue[this.queueHead] as T;
+					// Release consumed payloads immediately, not at the next compaction.
+					this.queue[this.queueHead++] = undefined;
+					if (this.queueHead === this.queue.length) {
+						this.queue = [];
+						this.queueHead = 0;
+					} else if (this.queueHead >= 1024 && this.queueHead * 2 >= this.queue.length) {
+						this.queue = this.queue.slice(this.queueHead);
+						this.queueHead = 0;
+					}
+					return Promise.resolve({ value, done: false });
+				}
+				if (this.done) return Promise.resolve(close());
+				return new Promise((resolve) => {
+					const waiter = (value: IteratorResult<T>) => {
+						this.waiting.delete(waiter);
+						pending.delete(waiter);
+						resolve(value);
+					};
+					pending.add(waiter);
+					this.waiting.add(waiter);
+				});
+			},
+			return: (value?: T) => {
+				close();
+				return Promise.resolve({ value, done: true });
+			},
+			throw: (error: unknown) => {
+				close();
+				return Promise.reject(error);
+			},
+		};
+		return iterator;
 	}
 
 	result(): Promise<R> {

@@ -826,10 +826,10 @@ async function* parseSSE(response: Response, signal?: AbortSignal): AsyncGenerat
 			if (done) break;
 			buffer += decoder.decode(value, { stream: true });
 
-			let idx = buffer.indexOf("\n\n");
-			while (idx !== -1) {
-				const chunk = buffer.slice(0, idx);
-				buffer = buffer.slice(idx + 2);
+			let boundary = /\r?\n\r?\n/.exec(buffer);
+			while (boundary) {
+				const chunk = buffer.slice(0, boundary.index);
+				buffer = buffer.slice(boundary.index + boundary[0].length);
 
 				const dataLines = chunk
 					.split("\n")
@@ -848,7 +848,7 @@ async function* parseSSE(response: Response, signal?: AbortSignal): AsyncGenerat
 						}
 					}
 				}
-				idx = buffer.indexOf("\n\n");
+				boundary = /\r?\n\r?\n/.exec(buffer);
 			}
 		}
 	} finally {

@@ -133,6 +133,16 @@ export function isOrphanToolCallIdError(text: string | undefined): boolean {
 }
 
 /**
+ * A provider rejection of the request itself (`invalid_request_error`) that no
+ * sanitize or same-payload retry can heal. Orphan tool ids are the one known
+ * exception: they share the type but heal after transcript sanitize.
+ */
+export function isPermanentInvalidRequestMessage(text: string | undefined): boolean {
+	if (!text || isOrphanToolCallIdError(text)) return false;
+	return /invalid_request_error/i.test(text);
+}
+
+/**
  * Status-code-context match: a bare `500` inside a message body ("saved 500
  * records") is not a status code, so numeric matches require an adjacent
  * transport word — either a code-context word before the digits ("HTTP 429",
@@ -232,6 +242,9 @@ export function isTransientProviderErrorMessage(text: string | undefined): boole
 	// by retrying.
 	if (isClaudeCodeVersionTooOldMessage(text)) return false;
 	if (isCodexChatgptAccountUnsupportedModelMessage(text)) return false;
+	// A bare invalid_request_error used to match the pattern below and re-send
+	// the same rejected payload. Only the orphan tool_call_id shape heals.
+	if (isPermanentInvalidRequestMessage(text)) return false;
 	// `at capacity|high demand`: xAI serves overload as HTTP 429 whose body carries
 	// no status or limit token, so the message-level classifier misses it and the
 	// turn never auto-retries (observed 2026-09-03, xai/grok-4.6).

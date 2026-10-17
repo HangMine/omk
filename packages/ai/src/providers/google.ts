@@ -297,7 +297,7 @@ export const streamSimpleGoogle: StreamFunction<"google-generative-ai", SimpleSt
 	const effort = (clampedReasoning === "off" ? "high" : clampedReasoning) as ClampedThinkingLevel;
 	const googleModel = model as Model<"google-generative-ai">;
 
-	if (isGemini3ProModel(googleModel) || isGemini3FlashModel(googleModel) || isGemma4Model(googleModel)) {
+	if (isGemini3ProModel(googleModel) || isGeminiFlashOrArgonModel(googleModel) || isGemma4Model(googleModel)) {
 		return streamGoogle(model, context, {
 			...base,
 			thinking: {
@@ -406,8 +406,8 @@ function isGemini3ProModel(model: Model<"google-generative-ai">): boolean {
 	return /gemini-3(?:\.\d+)?-pro/.test(model.id.toLowerCase());
 }
 
-function isGemini3FlashModel(model: Model<"google-generative-ai">): boolean {
-	return /gemini-3(?:\.\d+)?-flash/.test(model.id.toLowerCase());
+function isGeminiFlashOrArgonModel(model: Model<"google-generative-ai">): boolean {
+	return /gemini-(?:3(?:\.\d+)?-flash|4-argon)/.test(model.id.toLowerCase());
 }
 
 function getThinkingLevel(effort: ClampedThinkingLevel, model: Model<"google-generative-ai">): GoogleThinkingLevel {

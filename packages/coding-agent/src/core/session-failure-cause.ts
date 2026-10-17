@@ -21,6 +21,7 @@ import {
 	hasStatusCodeLike,
 	isClaudeCodeVersionTooOldMessage,
 	isCodexChatgptAccountUnsupportedModelMessage,
+	isPermanentInvalidRequestMessage,
 	isQuotaExhaustionMessage,
 	isUpstreamUnavailableMessage,
 } from "./provider-resilience.ts";
@@ -83,6 +84,7 @@ export function providerFailureCause(message: AssistantMessage, contextWindow: n
 	if (
 		isClaudeCodeVersionTooOldMessage(text) ||
 		isCodexChatgptAccountUnsupportedModelMessage(text) ||
+		isPermanentInvalidRequestMessage(text) ||
 		isMissingEsmNamedExportMessage(text)
 	) {
 		return { area: "configuration", code: "invalid" };

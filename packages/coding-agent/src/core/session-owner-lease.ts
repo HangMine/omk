@@ -27,7 +27,11 @@ export class SessionOwnerLeaseHeldError extends Error {
 	readonly observation: DurableFileLockObservation;
 
 	constructor(observation: DurableFileLockObservation) {
-		super("Session has a live or indeterminate owner lease; automatic recovery is refused");
+		super(
+			observation.status === "live"
+				? `This session is open in another OMK process (pid ${observation.pid} on ${observation.host}); close it there or start a new session instead of resuming this one`
+				: "This session is locked by an indeterminate owner; retry after the other OMK process exits",
+		);
 		this.name = "SessionOwnerLeaseHeldError";
 		this.observation = observation;
 	}

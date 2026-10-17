@@ -18,6 +18,7 @@ import {
 	isCodexChatgptAccountUnsupportedModelMessage,
 	isContentSafetyStopMessage,
 	isOrphanToolCallIdError,
+	isPermanentInvalidRequestMessage,
 	isQuotaExhaustionMessage,
 	isTransientProviderErrorMessage,
 	isUpstreamUnavailableMessage,
@@ -147,6 +148,9 @@ export function classifyProviderError(input: ProviderErrorInput): ProviderErrorC
 	}
 	if (isOrphanToolCallIdError(text)) {
 		return { kind: "transcript_shape", retryable: true, failoverEligible: true, basis: "text_fallback" };
+	}
+	if (isPermanentInvalidRequestMessage(text)) {
+		return { kind: "permanent_request", retryable: false, failoverEligible: false, basis: "known_permanent" };
 	}
 	if (isAuthText(text)) {
 		return { kind: "auth", retryable: false, failoverEligible: false, basis: "text_fallback" };

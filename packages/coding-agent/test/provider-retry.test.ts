@@ -46,6 +46,18 @@ describe("isRetryableAssistantError", () => {
 	it("rejects permanent errors", () => {
 		expect(isRetryableAssistantError(errorMessage("Permission denied: read-only filesystem"), 0)).toBe(false);
 	});
+
+	it("does not retry a permanent invalid_request_error that nothing heals", () => {
+		// The typed classifier already refuses this shape. The live retry gate
+		// still treated every invalid_request_error as transient, so a parameter
+		// rejection re-sent the same request until the retry budget ran out.
+		expect(
+			isRetryableAssistantError(
+				errorMessage('400 {"error":{"type":"invalid_request_error","message":"temperature is out of range"}}'),
+				0,
+			),
+		).toBe(false);
+	});
 });
 
 describe("isEmptyStreamedCompletion", () => {

@@ -94,7 +94,7 @@ describe("generation-fenced selective DAG retry", () => {
 		const command = request(f, before);
 		const owner = acquireSessionOwnerLeaseSync(journalPath(f.runPath));
 		try {
-			await expect(f.coordinator.retryTasks(command, f.approval)).rejects.toThrow(/owner/);
+			await expect(f.coordinator.retryTasks(command, f.approval)).rejects.toThrow(/another OMK process|owner/);
 		} finally {
 			owner.release();
 		}

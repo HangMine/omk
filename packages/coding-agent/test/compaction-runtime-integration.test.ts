@@ -140,7 +140,7 @@ describe("compaction runtime transaction integration", () => {
 			harness.sessionManager.appendMessage({ role: "user", content: "late steering", timestamp: Date.now() });
 		});
 
-		await expect(harness.session.compact()).rejects.toThrow(/stale|changed during compaction/i);
+		await expect(harness.session.compact()).rejects.toThrow(/stale|changed since|changed during compaction/i);
 		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
 	});
 
@@ -165,7 +165,7 @@ describe("compaction runtime transaction integration", () => {
 			});
 		});
 
-		await expect(harness.session.compact()).rejects.toThrow(/stale|changed during compaction/i);
+		await expect(harness.session.compact()).rejects.toThrow(/stale|changed since|changed during compaction/i);
 		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
 	});
 
@@ -195,7 +195,7 @@ describe("compaction runtime transaction integration", () => {
 		});
 
 		// When/Then: commit compares the begin token to the newly read durable token and fails stale.
-		await expect(harness.session.compact()).rejects.toThrow(/stale|changed during compaction/i);
+		await expect(harness.session.compact()).rejects.toThrow(/stale|changed since|changed during compaction/i);
 		expect(secondManagerEntryId).toBeDefined();
 		expect(durableHeadSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
 		expect(SessionManager.open(sessionFile, harness.tempDir).getEntry(secondManagerEntryId ?? "")).toBeDefined();

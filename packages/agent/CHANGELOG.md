@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Removed the unreferenced internal module `tool-dag-read-aware.ts`. The scheduler's dependency index in `tool-dag-index.ts` already applies the same read/read no-conflict rule, and the module was never exported from the package entry, so no import can break.
+
 ## [1.4.3] - 2026-10-17
 
 ### Changed

@@ -164,6 +164,138 @@ describe("AgentSession compaction characterization", () => {
 		expect(harness.session.messages[0]?.role).toBe("compactionSummary");
 	});
 
+	it("falls back to the built-in summary when an extension declines with a reason", async () => {
+		// Reproduced regression: a deterministic compactor returns cancel+reason when
+		// it cannot fit its own summary. /compact must still shrink the context.
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			extensionFactories: [
+				(pi) => {
+					pi.on("session_before_compact", async () => ({
+						cancel: true,
+						reason: "fabric: no deterministic summary fits the continuity context target",
+					}));
+				},
+			],
+		});
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		const getStreamCallCount = useSummaryStreamFn(harness, "built-in summary after decline");
+
+		const result = await harness.session.compact();
+
+		expect(result.summary).toBe("built-in summary after decline");
+		expect(getStreamCallCount()).toBe(1);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+	});
+
+	it("names the declined handler when the built-in summary also fails", async () => {
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			extensionFactories: [
+				(pi) => {
+					pi.on("session_before_compact", async () => ({
+						cancel: true,
+						reason: "fabric: no raw cumulative source",
+					}));
+				},
+			],
+		});
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		// Non-rescueable failure: the ladder propagates instead of trimming, so the
+		// declined handler has to be named or the reason is lost.
+		harness.session.agent.streamFn = (model) => {
+			const stream = createAssistantMessageEventStream();
+			queueMicrotask(() => {
+				stream.push({
+					type: "error",
+					reason: "error",
+					error: {
+						...fauxAssistantMessage("", {
+							stopReason: "error",
+							errorMessage: "provider returned error 503 service unavailable",
+						}),
+						api: model.api,
+						provider: model.provider,
+						model: model.id,
+					},
+				});
+			});
+			return stream;
+		};
+
+		await expect(harness.session.compact()).rejects.toThrow(/extension declined: fabric: no raw cumulative source/);
+	});
+
+	it("keeps a bare cancel as an explicit veto", async () => {
+		const harness = await createHarness({
+			extensionFactories: [
+				(pi) => {
+					pi.on("session_before_compact", async () => ({ cancel: true }));
+				},
+			],
+		});
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		const getStreamCallCount = useSummaryStreamFn(harness, "must not be used");
+
+		await expect(harness.session.compact()).rejects.toThrow("Compaction cancelled");
+		expect(getStreamCallCount()).toBe(0);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+		// The veto stays a cancel, but the user is told it came from an extension that
+		// produced no summary instead of a bare, unexplained status.
+		expect(harness.session.lastTermination?.message).toContain("cancelled without producing a summary");
+	});
+
+	it("overrides a bare cancel when compaction is mandatory", async () => {
+		// Over the admission ceiling the session cannot send another request, so a veto
+		// that produces no summary must not strand it.
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			extensionFactories: [
+				(pi) => {
+					pi.on("session_before_compact", async () => ({ cancel: true }));
+				},
+			],
+		});
+		harnesses.push(harness);
+		seedAdmissionOverflowHistory(harness);
+		const getStreamCallCount = useSummaryStreamFn(harness, "summary from the mandatory fallback");
+
+		const result = await harness.session.compact();
+
+		expect(result.summary).toBe("summary from the mandatory fallback");
+		expect(getStreamCallCount()).toBe(1);
+	});
+
+	it("retries once when a parallel writer moves the head during summarization", async () => {
+		// Two sessions on one file are supported: the loser's summary is discarded
+		// (same source is pinned) but the manual /compact must not fail, so it is
+		// regenerated once against the refreshed head.
+		const harness = await createHarness({ withConfiguredAuth: false });
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		let appended = false;
+		const getStreamCallCount = useSummaryStreamFn(harness, "summary after the parallel append", () => {
+			if (appended) return;
+			appended = true;
+			// A real (non-inert) append lands while the summary is in flight, exactly
+			// like another session writing to the same file.
+			harness.sessionManager.appendMessage({
+				role: "user",
+				content: [{ type: "text", text: "written by the parallel session" }],
+				timestamp: Date.now(),
+			});
+		});
+
+		const result = await harness.session.compact();
+
+		expect(result.summary).toBe("summary after the parallel append");
+		expect(getStreamCallCount()).toBe(2);
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+	});
+
 	it("throws when compacting without a model", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);

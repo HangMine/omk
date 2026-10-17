@@ -55,6 +55,7 @@ import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth
 import { parseBangInvocation } from "./bang-skill-invocation.ts";
 import type { BashResult } from "./bash-executor.ts";
 import { type CompactionSettings, compactionHysteresisConfigFor } from "./compaction/compaction-headroom.ts";
+import * as compactionPolicy from "./compaction/concurrent-write-policy.ts";
 import {
 	type CompactionHysteresisState,
 	createCompactionHysteresisState,
@@ -3638,13 +3639,14 @@ export class AgentSession {
 		return this._shutdown.run(() => this._compact(customInstructions));
 	}
 
-	private async _compact(customInstructions?: string): Promise<CompactionResult> {
+	private async _compact(customInstructions?: string, retrying = false): Promise<CompactionResult> {
 		this._compactionAbortController = this._shutdown.beginCompaction(this._compactionAbortController);
 		this._emit({ type: "compaction_start", reason: "manual" });
 		let committedCompaction = false;
 		// Hoisted so a failure is attributed to the model that actually summarized,
 		// which `compaction.model` may make different from the session model.
-		let compactionModel: Model<Api> | undefined;
+		// `extensionDeclineReason` is named in the failure when the handler produced nothing.
+		let compactionModel: Model<Api> | undefined, extensionDeclineReason: string | undefined;
 
 		try {
 			await this._runBudget.abortAndJoin(this.isStreaming || this.isRetrying, () => this.abort());
@@ -3685,7 +3687,12 @@ export class AgentSession {
 				})) as SessionBeforeCompactResult | undefined;
 
 				if (result?.cancel) {
-					throw new Error("Compaction cancelled");
+					const cancellation = compactionPolicy.decideHookCancellation(
+						result.reason,
+						compactionPolicy.compactionContext(this, "manual", sessionInputTokenLimit),
+					);
+					extensionDeclineReason = cancellation.declineReason;
+					if (cancellation.veto) throw new Error("Compaction cancelled");
 				}
 
 				if (result?.compaction) {
@@ -3757,13 +3764,21 @@ export class AgentSession {
 			});
 			return compactionResult;
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			const aborted = message === "Compaction cancelled" || (error instanceof Error && error.name === "AbortError");
-			const stale = /stale|session changed during compaction|already compacted/i.test(message);
-			let compactionCode: "aborted" | "stale" | "failed" | "quota_exhausted" = "failed";
-			if (aborted) compactionCode = "aborted";
-			else if (stale) compactionCode = "stale";
-			else if (isQuotaExhaustionMessage(message)) compactionCode = "quota_exhausted";
+			// Another session on the same file can move the durable head while this summary
+			// is generated; regenerate once against the new head instead of failing /compact.
+			const outcome = compactionPolicy.compactionFailureOutcome({
+				error,
+				retrying,
+				controllerAborted: this._compactionAbortController?.signal.aborted === true,
+				declineReason: extensionDeclineReason,
+				quotaExhausted: isQuotaExhaustionMessage,
+			});
+			if (outcome.retry) {
+				this._compactionAbortController = undefined;
+				this._reconnectToAgent();
+				return await this._compact(customInstructions, true);
+			}
+			const { aborted, message } = outcome;
 			const timestamp = new Date().toISOString();
 			this._publishTermination(
 				classifySessionTermination({
@@ -3772,7 +3787,7 @@ export class AgentSession {
 					timestamp,
 					source: "observed",
 					message: terminationMessage(message, "Manual compaction failed."),
-					cause: { area: "compaction", code: compactionCode },
+					cause: { area: "compaction", code: outcome.code },
 					sideEffects: committedCompaction ? "confirmed" : "none",
 					...(compactionModel
 						? { provider: compactionModel.provider, model: compactionModel.id }
@@ -3787,8 +3802,10 @@ export class AgentSession {
 				result: undefined,
 				aborted,
 				willRetry: false,
-				errorMessage: aborted ? undefined : `Compaction failed: ${message}`,
+				errorMessage: outcome.cancelStatus ?? (aborted ? undefined : `Compaction failed: ${message}`),
 			});
+			// The thrown message is what /compact surfaces; keep the original as cause.
+			if (extensionDeclineReason !== undefined) throw new Error(message, { cause: error });
 			throw error;
 		} finally {
 			this._compactionAbortController = undefined;
@@ -3976,6 +3993,7 @@ export class AgentSession {
 		reason: "overflow" | "threshold",
 		willRetry: boolean,
 		emergency = reason === "overflow" || this._thresholdCompactionEmergency,
+		retrying = false,
 	): Promise<boolean> {
 		const configuredSettings = this.settingsManager.getCompactionSettings();
 		// Emergency threshold compaction (including admission recovery) uses the tight overflow ladder.
@@ -3987,7 +4005,8 @@ export class AgentSession {
 		this._emit({ type: "compaction_start", reason });
 		this._autoCompactionAbortController = new AbortController();
 		// Hoisted so the failure message names the model that actually summarized.
-		let compactionModel: Model<Api> | undefined;
+		// `extensionDeclineReason` is named in the failure when the handler produced nothing.
+		let compactionModel: Model<Api> | undefined, extensionDeclineReason: string | undefined;
 
 		try {
 			if (!this.model) {
@@ -4056,14 +4075,17 @@ export class AgentSession {
 				})) as SessionBeforeCompactResult | undefined;
 
 				if (extensionResult?.cancel) {
-					this._emit({
-						type: "compaction_end",
-						reason,
-						result: undefined,
-						aborted: true,
-						willRetry: false,
-					});
-					return false;
+					// A veto stays a veto while compaction is optional; over the admission
+					// ceiling or during overflow recovery the built-in ladder still runs.
+					const cancellation = compactionPolicy.decideHookCancellation(
+						extensionResult.reason,
+						compactionPolicy.compactionContext(this, reason, sessionInputTokenLimit),
+					);
+					if (cancellation.veto) {
+						this._emit(compactionPolicy.cancellationEvent(reason));
+						return false;
+					}
+					extensionDeclineReason = cancellation.declineReason;
 				}
 
 				if (extensionResult?.compaction) {
@@ -4177,7 +4199,14 @@ export class AgentSession {
 			// re-trigger; a clean "stop" with nothing queued still ends the loop.
 			return willResume;
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : "compaction failed";
+			const failure = error instanceof Error ? error.message : "compaction failed";
+			// Same parallel-writer case as the manual path, one regenerated attempt.
+			const abortedController = this._autoCompactionAbortController?.signal.aborted === true;
+			if (compactionPolicy.shouldRegenerateAfterConcurrentWrite(error, retrying, abortedController)) {
+				this._autoCompactionAbortController = undefined;
+				return await this._runAutoCompaction(reason, willRetry, emergency, true);
+			}
+			const errorMessage = compactionPolicy.declineMessage(failure, extensionDeclineReason);
 			const modelLabel = compactionModel ? ` (${compactionModel.provider}/${compactionModel.id})` : "";
 			this._emit({
 				type: "compaction_end",

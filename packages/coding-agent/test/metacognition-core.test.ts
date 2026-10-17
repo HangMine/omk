@@ -242,6 +242,22 @@ describe("algorithm D — verifier meta-evaluation", () => {
 			isStagnant(key, [{ key: progressKey(key), newEvidence: true, resolvedObligations: 0, newValidChecks: 0 }], 2),
 		).toBe(false);
 	});
+	it("a changed approach is a new attempt, not another repetition of the old one", () => {
+		const key = {
+			goalScope: "g",
+			candidateFamily: "c",
+			errorClass: "e",
+			approach: "a",
+			checkMethod: "t",
+			sourceFamily: "s",
+		};
+		const switched = { ...key, approach: "b" };
+		const history = [
+			{ key: progressKey(key), newEvidence: false, resolvedObligations: 0, newValidChecks: 0 },
+			{ key: progressKey(key), newEvidence: false, resolvedObligations: 0, newValidChecks: 0 },
+		];
+		expect(isStagnant(switched, history, 2)).toBe(false);
+	});
 	it("net switch value subtracts both action and switch cost", () => {
 		expect(netSwitchValue(2, 0.5, 0.3)).toBeCloseTo(1.2, 12);
 		expect(netSwitchValue(0.5, 0.5, 0.3)).toBeCloseTo(-0.3, 12);

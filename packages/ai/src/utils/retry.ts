@@ -44,7 +44,7 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
 
 	// Wrapper/provider text for transient upstream failures, including OpenRouter
 	// "Provider returned error" responses (#2264).
-	"provider.?returned.?error",
+	"provider.?returned.?(?:an.?)?error",
 
 	// Network, proxy, and fetch transport failures. This includes OpenAI Codex
 	// raw-fetch failures such as "upstream connect", "connection refused", and

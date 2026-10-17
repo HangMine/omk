@@ -87,6 +87,64 @@ describe("AgentHarness threshold auto-compaction", () => {
 		expect((await session.getEntries()).some((entry) => entry.type === "compaction")).toBe(true);
 	});
 
+	it("falls back to the built-in summary when a hook declines with a reason", async () => {
+		const registration = registerFauxProvider({
+			models: [{ id: "small-context", reasoning: false, contextWindow: 2_000, maxTokens: 200 }],
+		});
+		registrations.push(registration);
+		const model = registration.getModel();
+		if (!model) throw new Error("Faux model missing");
+		registration.setResponses([
+			() => fauxAssistantMessage("## Goal\nFallback summary"),
+			() => fauxAssistantMessage("final answer"),
+		]);
+		const session = new Session(new InMemorySessionStorage());
+		await session.appendMessage(userMessage("old request"));
+		await session.appendMessage(assistantWithUsage(model));
+		const harness = new AgentHarness({
+			env: new NodeExecutionEnv({ cwd: process.cwd() }),
+			session,
+			model,
+			getApiKeyAndHeaders: async () => ({ apiKey: "test-key" }),
+			compaction: { enabled: true, reserveTokens: 500, keepRecentTokens: 100, maxUsageRatio: 0.9 },
+		});
+		harness.on("session_before_compact", () => ({
+			cancel: true,
+			reason: "deterministic compactor: no summary fits the budget",
+		}));
+
+		const result = await harness.prompt("latest request");
+
+		expect(result.content).toContainEqual({ type: "text", text: "final answer" });
+		expect((await session.getEntries()).some((entry) => entry.type === "compaction")).toBe(true);
+	});
+
+	it("keeps a bare hook cancel as a veto", async () => {
+		const registration = registerFauxProvider({
+			models: [{ id: "small-context", reasoning: false, contextWindow: 2_000, maxTokens: 200 }],
+		});
+		registrations.push(registration);
+		const model = registration.getModel();
+		if (!model) throw new Error("Faux model missing");
+		registration.setResponses([() => fauxAssistantMessage("final answer")]);
+		const session = new Session(new InMemorySessionStorage());
+		await session.appendMessage(userMessage("old request"));
+		await session.appendMessage(assistantWithUsage(model));
+		const harness = new AgentHarness({
+			env: new NodeExecutionEnv({ cwd: process.cwd() }),
+			session,
+			model,
+			getApiKeyAndHeaders: async () => ({ apiKey: "test-key" }),
+			compaction: { enabled: true, reserveTokens: 500, keepRecentTokens: 100, maxUsageRatio: 0.9 },
+		});
+		harness.on("session_before_compact", () => ({ cancel: true }));
+
+		const result = await harness.prompt("latest request");
+
+		expect(result.content).toContainEqual({ type: "text", text: "final answer" });
+		expect((await session.getEntries()).some((entry) => entry.type === "compaction")).toBe(false);
+	});
+
 	it("skips automatic compaction without explicit summarization auth", async () => {
 		const registration = registerFauxProvider({
 			models: [{ id: "small-context", reasoning: false, contextWindow: 2_000, maxTokens: 200 }],

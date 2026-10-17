@@ -3383,7 +3383,11 @@ export class InteractiveMode {
 					this.statusContainer.clear();
 				}
 				if (event.aborted) {
-					this.showStatus(event.reason === "manual" ? "Compaction cancelled" : "Auto-compaction cancelled");
+					// An extension that declined to summarize says so; otherwise the bare default.
+					this.showStatus(
+						event.errorMessage ??
+							(event.reason === "manual" ? "Compaction cancelled" : "Auto-compaction cancelled"),
+					);
 				} else if (event.result) {
 					this.chatContainer.clear();
 					this.rebuildChatFromMessages();

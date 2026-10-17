@@ -19,7 +19,7 @@ baseline below is history, not current truth.
 | Tier floor reservation | yes | context-budget-v2 planner | when V2 enabled | `context-budget-v2-tier-floor` tests | working tree | not measured |
 | Reasoning router v4 | yes | `/think auto` lane | opt-in | router tests | released | classification only, not success-probability calibration |
 | Workload permit pool | yes | resource admission | default | pool tests | released | not measured |
-| Provider retry/failover classification | yes | `provider-retry`, `session-failure-cause` | default | resilience/classification tests | released | not measured |
+| Provider retry/failover classification | yes | `provider-retry` → `AgentSession._prepareRetry`; `session-failure-cause` → `classifyRunTermination` | default | resilience/classification tests. A non-orphan `invalid_request_error` is permanent on both paths; orphan `tool_call_id` still sanitizes and retries. Not a measured reduction in wasted retries. | released | not measured |
 | MCP descriptor injection screen | yes | `mcp/manager` import path | default | quarantine tests | released | pattern rule score, not calibrated risk |
 | verified-run coordinator + evidence | yes | verified-run paths | opt-in command | coordinator/evidence tests | working tree | scope-limited binding, not general correctness |
 | Atomic commit planner (`planAtomicCommits`) | yes | public agent API only; no live commit caller | explicit function call | local planner/API/property tests, not a CI receipt | working tree | not measured |

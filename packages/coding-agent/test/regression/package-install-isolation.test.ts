@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from "vitest";
 import { DefaultPackageManager } from "../../src/core/package-manager.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
 
@@ -21,7 +21,8 @@ describe("package install failure isolation (regression)", () => {
 	let settingsManager: SettingsManager;
 	let packageManager: DefaultPackageManager;
 	let previousOfflineEnv: string | undefined;
-	let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+	let consoleErrorSpy: MockInstance<typeof console.error>;
+	let runCommandMock: Mock<(command: string, args: string[], options?: { cwd?: string }) => Promise<void>>;
 
 	const createPackageManager = (packages: string[]): DefaultPackageManager => {
 		settingsManager = SettingsManager.inMemory({ packages });
@@ -30,9 +31,15 @@ describe("package install failure isolation (regression)", () => {
 			agentDir,
 			settingsManager,
 		});
-		// Legacy global npm lookups shell out; keep the test hermetic.
-		vi.spyOn(packageManager as never, "runCommandSync").mockImplementation(() => {
-			throw new Error("legacy lookup unavailable");
+		runCommandMock = vi.fn<typeof runCommandMock>().mockRejectedValue(new Error("Unexpected package command"));
+		// Replace the process boundary on this test-owned instance without casting private members.
+		Object.defineProperties(packageManager, {
+			runCommand: { value: runCommandMock },
+			runCommandSync: {
+				value: () => {
+					throw new Error("legacy lookup unavailable");
+				},
+			},
 		});
 		return packageManager;
 	};
@@ -71,19 +78,16 @@ describe("package install failure isolation (regression)", () => {
 		const manager = createPackageManager([brokenSource, "npm:good-pkg"]);
 
 		const goodPackagePath = join(agentDir, "npm", "node_modules", "good-pkg");
-		const runCommandSpy = vi
-			.spyOn(manager as never, "runCommand")
-			.mockImplementation(async (...callArgs: unknown[]) => {
-				const [command, args] = callArgs as [string, string[]];
-				if (command === "git") {
-					throw new Error("fatal: repository not found");
-				}
-				if (args[0] === "install" && args.includes("good-pkg")) {
-					writeNpmPackage("good-pkg", "1.0.0");
-					return;
-				}
-				throw new Error(`Unexpected runCommand: ${command} ${args.join(" ")}`);
-			});
+		const runCommandSpy = runCommandMock.mockImplementation(async (command, args) => {
+			if (command === "git") {
+				throw new Error("fatal: repository not found");
+			}
+			if (args[0] === "install" && args.includes("good-pkg")) {
+				writeNpmPackage("good-pkg", "1.0.0");
+				return;
+			}
+			throw new Error(`Unexpected runCommand: ${command} ${args.join(" ")}`);
+		});
 
 		// The broken git source comes first; resolve() must not reject and must
 		// still install and load the npm package configured after it.
@@ -94,7 +98,7 @@ describe("package install failure isolation (regression)", () => {
 		).toBe(true);
 		// The git clone was attempted, then the loop continued to the npm install.
 		expect(runCommandSpy.mock.calls.some(([command]) => command === "git")).toBe(true);
-		expect(runCommandSpy.mock.calls.some(([, args]) => (args as string[]).includes("good-pkg"))).toBe(true);
+		expect(runCommandSpy.mock.calls.some(([, args]) => args.includes("good-pkg"))).toBe(true);
 		// The failure is reported as a warning that names the failing source.
 		expect(warningCalls().some((line) => line.includes(brokenSource) && line.includes("repository not found"))).toBe(
 			true,
@@ -107,7 +111,7 @@ describe("package install failure isolation (regression)", () => {
 
 		// A working copy is already installed, but at a different version than pinned.
 		const installedPath = writeNpmPackage("pinned-pkg", "1.0.0");
-		vi.spyOn(manager as never, "runCommand").mockRejectedValue(new Error("registry unreachable"));
+		runCommandMock.mockRejectedValue(new Error("registry unreachable"));
 
 		const result = await manager.resolve();
 
@@ -123,7 +127,7 @@ describe("package install failure isolation (regression)", () => {
 		const brokenGit = "git:github.com/broken/repo";
 		const brokenNpm = "npm:missing-pkg";
 		const manager = createPackageManager([brokenGit, brokenNpm]);
-		vi.spyOn(manager as never, "runCommand").mockRejectedValue(new Error("network down"));
+		runCommandMock.mockRejectedValue(new Error("network down"));
 
 		const result = await manager.resolve();
 

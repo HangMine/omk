@@ -59,7 +59,7 @@ describe("verified-run durable commit", () => {
 	});
 
 	it("refuses another writer while the owner is alive", () => {
-		expect(() => acquireSessionOwnerLeaseSync(journalPath(root))).toThrow(/owner/);
+		expect(() => acquireSessionOwnerLeaseSync(journalPath(root))).toThrow(/another OMK process|owner/);
 	});
 
 	it("fences a released owner even if it retained the journal object", () => {

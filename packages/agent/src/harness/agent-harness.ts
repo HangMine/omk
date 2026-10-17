@@ -858,7 +858,8 @@ export class AgentHarness<
 			customInstructions: options.customInstructions,
 			signal,
 		});
-		if (hookResult?.cancel) {
+		if (hookResult?.cancel && hookResult.reason === undefined) {
+			// A bare cancel is an explicit veto; with a reason the hook could not summarize.
 			if (options.automatic) return undefined;
 			throw new AgentHarnessError("compaction", "Compaction cancelled");
 		}

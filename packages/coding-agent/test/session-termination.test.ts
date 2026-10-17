@@ -133,6 +133,24 @@ describe("classifySessionTermination", () => {
 		expect(termination.nextAction).toMatch(/\/new session does not reload modules/i);
 	});
 
+	it("tells the operator to change a rejected request instead of starting a new session", () => {
+		const termination = classifySessionTermination({
+			sessionId: "session-1",
+			runId: "run-params",
+			timestamp: NOW,
+			source: "observed",
+			message: '400 {"error":{"type":"invalid_request_error","message":"temperature is out of range"}}',
+			cause: { area: "configuration", code: "invalid" },
+			sideEffects: "none",
+			provider: "openai",
+			model: "gpt-4.1",
+		});
+		expect(termination.retryable).toBe(false);
+		expect(termination.safeToAutoRetry).toBe(false);
+		expect(termination.nextAction).toMatch(/same payload/i);
+		expect(termination.nextAction).toMatch(/\/new session does not change it/i);
+	});
+
 	it("does not diagnose an opaque Devin protocol error as an orphan tool call", () => {
 		const termination = classifySessionTermination({
 			sessionId: "session-1",
