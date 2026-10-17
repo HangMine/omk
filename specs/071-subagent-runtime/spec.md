@@ -28,7 +28,7 @@ Any one trigger stops the subagent and returns a typed error with the reason to 
    **Scope:** these 072 caps (18 turns, 70,254 billed tokens per worker, 5.70 s wall; sha256 5c4339659def…837582) are for **mock regression tests only**.
    Real-model caps come from 073's real-model baseline and are locked there before its A/B.
    Hitting a cap returns a **partial-completion** result (Claude Code `maxTurns` behaviour).
-3. The same tool with identical arguments **3 times in a row** stops it (N=3). Built on `core/identical-loop.ts` (today warn 3 / stop 6,
+3. The same tool with structurally equal arguments **and the same result** **3 times in a row** stops it (N=3; amended 2026-10-17 after Tech Lead review: polling whose output changes is not a loop, following OpenHands StuckDetector action+observation; loops whose output keeps changing without progress are caught by rule 4 or the caps). Built on `core/identical-loop.ts` (today warn 3 / stop 6,
    only under `OMK_IDENTICAL_LOOP`): in subagents it is always on, and it also catches **same error 3×** and **A·B ping-pong 6×**
    (OpenHands stuck detector patterns).
 4. **5 turns** with no file change and no new tool output stop it (K=5).
