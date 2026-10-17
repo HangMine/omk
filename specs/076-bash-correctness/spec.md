@@ -83,6 +83,7 @@ description: "bash correctness for 1.5.0: a signal-killed command is an error, t
 
 - A tool other than bash that streams a large partial text now has it in the timeout result (capped at 50 KB / 2000 lines by `truncateTail`). Before, it got only the notice.
 - A signal death that the user expected to be harmless (for example a command that kills its own shell on purpose) is now an error. That is the intended fix.
+- `withPartialOutput`은 마지막 partial만 남긴다. Earlier streamed snapshots are not merged, so a later partial that replaces text can lose earlier text.
 
 ## Non-goals
 
@@ -96,5 +97,5 @@ description: "bash correctness for 1.5.0: a signal-killed command is an error, t
 - `packages/coding-agent/src/core/tools/bash-operations.ts`, `bash-local-operations.ts`, `bash.ts`
 - `packages/coding-agent/src/core/tools/write.ts`
 - `packages/agent/src/tool-timeout.ts`, `packages/agent/src/tool-execution-boundary.ts`
+- `packages/agent/src/index.ts` (export `runToolCallWithTimeout` for the package-boundary test import)
 - `packages/coding-agent/test/spec076-bash-correctness.test.ts`, `packages/agent/test/tool-timeout-partial-output.test.ts`
-- `packages/coding-agent/CHANGELOG.md`

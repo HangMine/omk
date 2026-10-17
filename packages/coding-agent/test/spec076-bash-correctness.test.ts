@@ -6,8 +6,8 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveToolTimeoutMs, runToolCallWithTimeout } from "omk-agent-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { resolveToolTimeoutMs, runToolCallWithTimeout } from "../../agent/src/tool-timeout.ts";
 import { type BashOperations, createBashTool } from "../src/core/tools/bash.ts";
 import { createLocalBashOperations } from "../src/core/tools/bash-local-operations.ts";
 import { createWriteTool } from "../src/core/tools/write.ts";
@@ -92,6 +92,32 @@ describe("spec 076 #3: a signal-killed command is an error", () => {
 		const tool = createBashTool(process.cwd(), { operations });
 		const result = await tool.execute("c4", { command: "true" }, undefined, undefined);
 		expect(textOf(result.content)).toBe("remote ok\n");
+	});
+});
+
+describe("spec 076 Req 2.4: abort and timeout keep their own message", () => {
+	it("abort wins over the SIGKILL used to stop the command", async () => {
+		const tool = createBashTool(process.cwd());
+		const controller = new AbortController();
+		setTimeout(() => controller.abort(), 300);
+		const run = tool.execute(
+			"c5",
+			{ command: "echo before-abort; sleep 5", timeout: 10 },
+			controller.signal,
+			undefined,
+		);
+		await expect(run).rejects.toThrow(/before-abort\n+Command aborted/);
+	});
+
+	it("inner timeout wins over the SIGKILL used to stop the command", async () => {
+		const tool = createBashTool(process.cwd());
+		const run = tool.execute("c6", { command: "echo before-timeout; sleep 5", timeout: 1 }, undefined, undefined);
+		const error = await run.then(
+			() => "",
+			(e: unknown) => String(e),
+		);
+		expect(error).toContain("before-timeout");
+		expect(error).toContain("Command timed out after 1 seconds");
 	});
 });
 

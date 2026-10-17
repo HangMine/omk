@@ -2,12 +2,6 @@
 
 ## [Unreleased]
 
-### Fixed
-
-- A bash command killed by a signal (for example the OOM killer or `kill -9`) is now reported as an error ending in `Command terminated by signal <NAME>` instead of a success; SIGKILL adds a possible out-of-memory hint. A null exit code without a signal, including from custom `BashOperations`, still succeeds. (spec 076)
-- When the outer tool timeout (`toolTimeouts`, 300 s for bash by default) fires, the timeout result now keeps the text the tool had already streamed, capped at the usual 2000 lines / 50 KB tail and followed by the unchanged timeout notice and any full-output path. Results with no streamed text are unchanged. Honouring a per-call bash `timeout` above the outer timer is not part of this fix. (spec 076)
-- `write` reports the UTF-8 byte count it wrote instead of the UTF-16 string length, so Korean or emoji content no longer under-reports its size. (spec 076)
-
 ## [1.4.3] - 2026-10-17
 
 ### Added
