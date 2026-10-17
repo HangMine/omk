@@ -30,6 +30,11 @@ Any one trigger stops the subagent and returns a typed error with the reason to 
    (OpenHands stuck detector patterns).
 4. **5 turns** with no file change and no new tool output stop it (K=5).
 5. Ultra mode gets the same cap of 4 concurrent (behaviour change, see below).
+6. **Shared run budget:** besides the per-subagent caps, one turn and billed-token cap is shared by the lead and all workers
+   (OpenHands shared counter, PR #3703); 4 workers each at their own cap still cannot exceed it.
+7. **Stopped worker = error:** a worker stopped by a cap or the loop guard is reported as an error with its partial result,
+   never as an empty success (OpenHands #3742).
+8. **Resume keeps limits:** a resumed subagent keeps its caps and the amount already used.
 
 ## Git gate (always on)
 - **Per project:** worktrees live under `<project>/.omk/worktrees/<task>`, each on a new branch from freshly fetched `origin/main`
@@ -52,6 +57,7 @@ Mock, Bench Analyst, 20 runs unless stated, Node >=22.19, `OMK_TRUST_PROJECT=0`,
 4. **Flag off:** first request byte-identical to main.
 5. **Loop guard:** 100 deliberately looping mocks (same call, same error, A·B ping-pong, self re-spawn) all stop inside the caps;
    orphans 0, automatic retries 0. 20 normal tasks: wrongly stopped 0.
+   Shared budget never exceeded with 4 workers; stopped workers reported as error 100 % (empty success 0); caps and usage unchanged after resume (unit test).
 6. **Git:** 4 concurrent, 20 runs: main conflicts 0, dirty worktrees 0, force-push 0. 20 deliberate-conflict scenarios: wrong merges 0,
    conflicts detected 20/20. 20 mocks that skip the docs or git check: all marked incomplete (20/20); normal runs wrongly marked 0.
 7. **Confinement:** `../`, absolute and symlink escapes all refused (unit tests).
