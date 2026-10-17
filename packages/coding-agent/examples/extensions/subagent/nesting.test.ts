@@ -5,6 +5,7 @@ import {
 	childSubagentEnv,
 	currentSubagentDepth,
 	DEFAULT_SUBAGENT_MAX_DEPTH,
+	maxSubagentDepth,
 	SUBAGENT_DEPTH_ENV,
 } from "./nesting.ts";
 
@@ -30,7 +31,7 @@ describe("subagent nesting guard", () => {
 		expect(canSpawnSubagents(child)).toBe(false);
 	});
 
-	it("increments depth for each generation; spec 071 ignores a raised OMK_SUBAGENT_MAX_DEPTH", () => {
+	it("increments depth for each generation; spec 071 clamps a raised OMK_SUBAGENT_MAX_DEPTH to 1", () => {
 		const grandchild = childSubagentEnv(childSubagentEnv({ OMK_SUBAGENT_MAX_DEPTH: "2" }));
 		expect(currentSubagentDepth(grandchild)).toBe(2);
 		expect(canSpawnSubagents(childSubagentEnv({ OMK_SUBAGENT_MAX_DEPTH: "2" }))).toBe(false);
@@ -47,15 +48,27 @@ describe("subagent nesting guard", () => {
 		expect(registeredToolNames({ [SUBAGENT_DEPTH_ENV]: "1" })).toEqual([]);
 	});
 
-	it("spec 071 rule 1: depth is fixed at 1 regardless of OMK_SUBAGENT_MAX_DEPTH or OMK_SUBAGENT_RUNTIME", () => {
+	it("spec 071 rule 1: depth = min(OMK_SUBAGENT_MAX_DEPTH, 1); unset -> 1, 5 -> 1, invalid -> 1", () => {
 		expect(DEFAULT_SUBAGENT_MAX_DEPTH).toBe(1);
 		for (const env of [{}, { OMK_SUBAGENT_RUNTIME: "0" }, { OMK_SUBAGENT_RUNTIME: "1" }]) {
-			for (const max of [undefined, "0", "3"]) {
+			for (const max of [undefined, "1", "5", "lots", "-2", ""]) {
 				const top = max === undefined ? env : { ...env, OMK_SUBAGENT_MAX_DEPTH: max };
+				expect(maxSubagentDepth(top)).toBe(1);
 				expect(canSpawnSubagents(top)).toBe(true);
+				expect(registeredToolNames(top)).toEqual(["subagent"]);
 				expect(canSpawnSubagents(childSubagentEnv(top))).toBe(false);
-				expect(registeredToolNames({ ...top, [SUBAGENT_DEPTH_ENV]: "1" })).toEqual([]);
+				expect(registeredToolNames(childSubagentEnv(top))).toEqual([]);
 			}
+		}
+	});
+
+	it("spec 071 rule 1: OMK_SUBAGENT_MAX_DEPTH=0 disables spawning (the top-level session gets no subagent tool)", () => {
+		for (const env of [{}, { OMK_SUBAGENT_RUNTIME: "0" }, { OMK_SUBAGENT_RUNTIME: "1" }]) {
+			const top = { ...env, OMK_SUBAGENT_MAX_DEPTH: "0" };
+			expect(maxSubagentDepth(top)).toBe(0);
+			expect(canSpawnSubagents(top)).toBe(false);
+			expect(registeredToolNames(top)).toEqual([]);
+			expect(registeredToolNames(childSubagentEnv(top))).toEqual([]);
 		}
 	});
 });

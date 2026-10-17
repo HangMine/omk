@@ -121,6 +121,28 @@ function loopSummary(tasks: readonly string[], results: readonly SingleResult[])
 	return summary;
 }
 
+/** Optional metrics dump for reports (set LOOP_GUARD_METRICS_FILE); the assertions above do not depend on it. */
+function writeMetrics(name: string, tasks: readonly string[], results: readonly SingleResult[]): void {
+	const file = process.env.LOOP_GUARD_METRICS_FILE;
+	if (!file) return;
+	const byRule: Record<string, number> = {};
+	for (const result of results) {
+		const rule = result.loopGuard?.rule ?? (result.exitCode === 0 ? "completed" : "error");
+		byRule[rule] = (byRule[rule] ?? 0) + 1;
+	}
+	const max = (pick: (result: SingleResult) => number) => Math.max(0, ...results.map(pick));
+	const metrics = {
+		name,
+		n: tasks.length,
+		byRule,
+		maxTurns: max((result) => result.usage.turns),
+		maxBilledTokens: max(billed),
+		maxElapsedMs: Math.round(max((result) => result.process?.elapsedMs ?? 0)),
+		caps: MOCK_CAPS,
+	};
+	fs.appendFileSync(file, `${JSON.stringify(metrics)}\n`);
+}
+
 const CLEAN = { emptySuccess: 0, orphans: 0, retries: 0, overCap: 0, wrongRule: 0, noPartial: 0 };
 
 describe("spec 071 loop guard is always on (no flag)", () => {
@@ -130,6 +152,7 @@ describe("spec 071 loop guard is always on (no flag)", () => {
 		);
 		expect(tasks).toHaveLength(100);
 		const results = await runAll(tasks, undefined);
+		writeMetrics("loops-default", tasks, results);
 		expect(results).toHaveLength(100);
 		expect(loopSummary(tasks, results)).toEqual({ stopped: 100, ...CLEAN });
 	}, 300_000);
@@ -139,14 +162,16 @@ describe("spec 071 loop guard is always on (no flag)", () => {
 		async (flag) => {
 			const tasks = Object.keys(LOOPS).flatMap((scenario) => [`${scenario}:0`, `${scenario}:1`]);
 			const results = await runAll(tasks, flag);
+			writeMetrics(`loops-flag-${flag}`, tasks, results);
 			expect(loopSummary(tasks, results)).toEqual({ stopped: 10, ...CLEAN });
 		},
 		120_000,
 	);
 
-	it("lets 120 varied normal tasks (10 families incl. polling, retries, re-reads) finish: 0 wrong stops", async () => {
+	it("lets 120 varied normal tasks (10 families incl. polling, retries, re-reads, grep/rg no match) finish: 0 wrong stops", async () => {
 		const tasks = Array.from({ length: 120 }, (_, seed) => `normal:${seed}`);
 		const results = await runAll(tasks, undefined);
+		writeMetrics("normal-default", tasks, results);
 		expect(results).toHaveLength(120);
 		expect(
 			results.filter((result) => result.loopGuard || result.exitCode !== 0).map((result) => result.task),

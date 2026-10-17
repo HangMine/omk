@@ -134,7 +134,7 @@ function normal() {
 			["bash", { command: "git status --porcelain" }, ""],
 			["bash", { command: "git log -1 --format=%s" }, `feat: mod${seed}`],
 		],
-		// 5: exploring many files, a few missing
+		// 5: exploring many files, a few missing, then three searches with no match (bash grep/rg exit 1, no output)
 		() => [
 			...base,
 			...Array.from({ length: 6 }, (_, k) =>
@@ -142,6 +142,12 @@ function normal() {
 					? ["read", { path: `src/missing${seed}-${k}.ts` }, `ENOENT: no such file, open 'src/missing${seed}-${k}.ts'`, true]
 					: ["read", { path: `src/part${seed}-${k}.ts` }, `export const p${k} = ${seed};`],
 			),
+			...[`grep -rn "deprecatedApi(" src`, `rg -n 'legacy_\\w+' src`, `grep -rn FIXME src/mod${seed}.ts`].map((command) => [
+				"bash",
+				{ command },
+				"(no output)\n\nCommand exited with code 1",
+				true,
+			]),
 		],
 		// 6: alternating test/edit with changing results (not a ping-pong)
 		() => [

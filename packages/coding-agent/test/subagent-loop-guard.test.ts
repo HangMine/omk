@@ -28,6 +28,7 @@
  */
 import type { AssistantMessage, Message, ToolResultMessage } from "omk-ai";
 import { describe, expect, it } from "vitest";
+import { isSearchNoMatch, lastShellStage } from "../src/core/shell-search-no-match.ts";
 import {
 	createSubagentLoopGuard,
 	type LoopGuardStop,
@@ -234,6 +235,73 @@ describe("spec 071 loop guard rules", () => {
 			}
 		}
 		expect(guard.observe(assistant([], "moves: U D L R"))).toBeUndefined();
+	});
+
+	describe("grep/rg no-match exception (exit 1, empty output)", () => {
+		const noMatch = "Command exited with code 1";
+		const bash = (command: string, output = noMatch, isError = true) => ({
+			tool: "bash",
+			args: { command },
+			output,
+			isError,
+		});
+		it("three different greps with no match do not stop (incl. rg, pipes, env prefix, absolute path)", () => {
+			const steps = [
+				bash('grep -n "deprecatedApi(" src/widget.ts'),
+				bash(`grep -n "legacy_\\w+" src/widget.ts`, `(no output)\n\n${noMatch}`),
+				bash("rg -n 'a|b' src"),
+				bash("cat src/widget.ts | grep -c FIXME"),
+				bash("cd src && LC_ALL=C /usr/bin/grep -rn TODO ."),
+				bash("egrep 'x|y' a.ts 2>&1"),
+			];
+			expect(run(fresh(), [...steps, { text: "no deprecated calls" }]).stop).toBeUndefined();
+		});
+		it("the same grep three times with the same empty result still stops via identical_call", () => {
+			const same = bash('grep -n "FIXME" src/widget.ts');
+			expect(run(fresh(), [same, same, same])).toMatchObject({ at: 2, stop: { rule: "identical_call" } });
+		});
+		it("grep exit 2 counts toward same_error", () => {
+			const err = "Command exited with code 2";
+			const { stop, at } = run(fresh(), [bash("grep x a", err), bash("grep y a", err), bash("grep z a", err)]);
+			expect(at).toBe(2);
+			expect(stop).toMatchObject({ rule: "same_error", count: 3 });
+		});
+		it("rg: exit 1 empty is not counted, exit 2 is", () => {
+			expect(run(fresh(), [bash("rg a"), bash("rg b"), bash("rg c"), { text: "none" }]).stop).toBeUndefined();
+			const err =
+				"rg: d: IO error for operation on d: No such file or directory (os error 2)\n\nCommand exited with code 2";
+			expect(run(fresh(), [bash("rg a d", err), bash("rg b d", err), bash("rg c d", err)]).stop?.rule).toBe(
+				"same_error",
+			);
+		});
+		it("exit 1 with any output, or from a non-search last stage, still counts", () => {
+			const withOutput = `grep: warning: stray \\\n\n${noMatch}`;
+			expect(
+				run(fresh(), [bash("grep a f", withOutput), bash("grep b f", withOutput), bash("grep c f", withOutput)])
+					.stop?.rule,
+			).toBe("same_error");
+			expect(
+				run(fresh(), [bash("grep a f | head"), bash("grep b f | head"), bash("grep c f | head")]).stop?.rule,
+			).toBe("same_error");
+			expect(run(fresh(), [bash("make t1"), bash("make t2"), bash("make t3")]).stop?.rule).toBe("same_error");
+		});
+		it("finds the last shell stage, ignoring quoted separators and redirections", () => {
+			expect(lastShellStage(`grep -E "a|b;c" f`)).toBe(`grep -E "a|b;c" f`);
+			expect(lastShellStage("cd x && cat f | rg y 2>&1")).toBe("rg y 2>&1");
+			expect(lastShellStage("grep a f; ")).toBe("grep a f");
+			expect(lastShellStage("rg a f &>/dev/null")).toBe("rg a f &>/dev/null");
+			expect(isSearchNoMatch("bash", { command: "rg a" }, noMatch)).toBe(true);
+			expect(isSearchNoMatch("bash", { command: "grep a f || true" }, noMatch)).toBe(false);
+			expect(isSearchNoMatch("read", { command: "grep a" }, noMatch)).toBe(false);
+			expect(isSearchNoMatch("bash", { command: "grep a" }, "Command exited with code 2")).toBe(false);
+		});
+
+		it("a no-match neither counts toward nor resets the error streak", () => {
+			const boom = (i: number) => bash(`make t${i}`, "boom");
+			const { stop, at } = run(fresh(), [boom(1), bash("grep x a"), boom(2), boom(3)]);
+			expect(at).toBe(3);
+			expect(stop).toMatchObject({ rule: "same_error", count: 3 });
+		});
 	});
 
 	it("A·B ping-pong compares args structurally (key order does not matter)", () => {

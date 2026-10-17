@@ -10,6 +10,7 @@
  *  - identical_call: same tool, structurally equal args AND the same result, 3 times in a row (N=3).
  *                    A repeated call whose output changes (polling) is not a loop.
  *  - same_error:     the same error text in 3 turns in a row (parallel calls in one turn count once).
+ *                    A bash grep/egrep/fgrep/rg that exits 1 with empty output is "no match", not an error.
  *  - ping_pong:      A·B alternation over 6 calls whose results alternate the same way.
  *  - no_progress:    K=5 finished tool turns in a row with no file change and no new tool output.
  *  - nested_spawn:   a worker calls the `subagent` tool (depth 1: workers cannot spawn workers).
@@ -46,6 +47,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { Message } from "omk-ai";
 import type { LoopRecord } from "./identical-loop.ts";
 import { isFileMutatingTool } from "./progress-stall.ts";
+import { isSearchNoMatch } from "./shell-search-no-match.ts";
 
 export const SUBAGENT_LOOP_GUARD_RULES = {
 	identicalCalls: 3,
@@ -271,7 +273,9 @@ export function createSubagentLoopGuard(options: SubagentLoopGuardOptions = {}):
 				need,
 				message.toolName,
 			);
-		if (message.isError) {
+		if (message.isError && isSearchNoMatch(message.toolName, record?.args, text)) {
+			// "No match" is neither an error nor a success: the streak is left as it is.
+		} else if (message.isError) {
 			// Parallel calls failing together in one turn (e.g. all skipped after a provider abort) are one attempt.
 			if (errorStreak?.text !== text) errorStreak = { text, count: 1, turn: turns };
 			else if (errorStreak.turn !== turns) errorStreak = { text, count: errorStreak.count + 1, turn: turns };
