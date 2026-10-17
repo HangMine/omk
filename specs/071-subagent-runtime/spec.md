@@ -23,7 +23,7 @@ Spec order (Tech Lead): **072 baseline → 071 runtime → 073 auto v5**; 074 pr
 ## Loop guard (always on)
 Any one trigger stops the subagent and returns a typed error with the reason to the lead; the runtime never retries on its own.
 1. Depth 1: subagents cannot spawn subagents (existing `nesting.ts`, now enforced with a test that the tool is absent at depth 1).
-2. Per-subagent caps on turns, wall time and billed tokens = **2 × p99 of the 072 baseline**, locked in this spec before any A/B, never changed after.
+2. Per-subagent caps on turns, wall time and billed tokens = **2 × max of the 20 runs in 072, per task family** (larger of the two if a single value is needed), locked in this spec before any A/B, never changed after.
    Hitting a cap returns a **partial-completion** result (Claude Code `maxTurns` behaviour).
 3. The same tool with identical arguments **3 times in a row** stops it (N=3). Built on `core/identical-loop.ts` (today warn 3 / stop 6,
    only under `OMK_IDENTICAL_LOOP`): in subagents it is always on, and it also catches **same error 3×** and **A·B ping-pong 6×**
@@ -76,4 +76,4 @@ including subagents; parallelisable and order-dependent tasks reported separatel
 - Ultra mode is capped at 4 concurrent (was uncapped).
 
 ## Decisions (Tech Lead, OMK, 2026-10-17)
-N=3, K=5, caps = 2 × p99 of 072, loop mocks 100, no pending confirmed. No open questions remain; caps get filled in from 072.
+N=3, K=5, caps = 2 × max of 072 runs per family, loop mocks 100, no pending confirmed. No open questions remain; caps get filled in from 072.
