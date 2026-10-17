@@ -79,7 +79,7 @@ describe("spec 076 #3: a signal-killed command is an error", () => {
 	it("SIGTERM is reported without the memory hint", async () => {
 		const tool = createBashTool(process.cwd());
 		const run = tool.execute("c3", { command: "kill -TERM $$" }, undefined, undefined);
-		await expect(run).rejects.toThrow(/^Command terminated by signal SIGTERM$/);
+		await expect(run).rejects.toThrow(/^\(no output\)\n\nCommand terminated by signal SIGTERM$/);
 	});
 
 	it("custom operations that return only a null exit code still succeed", async () => {
