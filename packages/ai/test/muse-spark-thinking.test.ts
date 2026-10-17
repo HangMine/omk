@@ -64,6 +64,8 @@ describe("Muse Spark thinking levels", () => {
 				"muse-spark-1.2-contributor",
 				"muse-spark-1.3",
 				"muse-spark-1.3-contributor",
+				// The 2026-10-14 catalog refresh added the Wonder tier.
+				"muse-wonder-1.0",
 			]);
 		});
 
@@ -81,7 +83,7 @@ describe("Muse Spark thinking levels", () => {
 			["meta", "muse-spark-1.3"],
 			["meta", "muse-spark-1.3-contributor"],
 			["openrouter", "meta/muse-spark-1.3"],
-			["opencode", "muse-spark-1.3-contributor-free"],
+			["opencode", "muse-spark-1.3"],
 			["opencode-go", "muse-spark-1.3-contributor"],
 		] as const)("exposes thinking up to max on %s (%s)", (provider, id) => {
 			const model = getModels(provider).find((candidate) => candidate.id === id);

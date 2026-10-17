@@ -10,7 +10,8 @@ describe("GPT-5.6 context metadata", () => {
 		expect(family.length).toBeGreaterThan(0);
 		expect(
 			family
-				.filter((model) => model.contextWindow !== 1_000_000)
+				// models.dev and OpenCode Go declare 1,050,000 for several GPT-5.6 routes.
+				.filter((model) => model.contextWindow !== 1_000_000 && model.contextWindow !== 1_050_000)
 				.map((model) => `${model.provider}/${model.id}:${model.contextWindow}`),
 		).toEqual([]);
 	});

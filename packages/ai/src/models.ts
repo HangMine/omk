@@ -10,9 +10,10 @@ for (const [provider, models] of Object.entries(MODELS)) {
 	const providerModels = new Map<string, Model<Api>>();
 	for (const [id, model] of Object.entries(models)) {
 		const generated = model as Model<Api>;
-		const registered = generated.id.toLowerCase().includes("gpt-5.6")
-			? { ...generated, contextWindow: 1_000_000 }
-			: generated;
+		const registered =
+			provider !== "opencode-go" && generated.id.toLowerCase().includes("gpt-5.6")
+				? { ...generated, contextWindow: 1_000_000 }
+				: generated;
 		providerModels.set(id, provider === "xai" ? applyGrokThinking(registered) : registered);
 	}
 	modelRegistry.set(provider, providerModels);

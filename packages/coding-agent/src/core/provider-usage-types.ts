@@ -27,6 +27,7 @@ export type UsageKind =
 	| "grok"
 	| "devin"
 	| "commandcode"
+	| "opencode-go"
 	| "qwen-token-plan"
 	| "unavailable";
 export type CredentialCandidate = { readonly provider: string; readonly oauthOnly: boolean };

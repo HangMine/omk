@@ -1,7 +1,122 @@
 # 모델 목록·thinking 갱신 기록
 
-확인일: 2026-10-09. 생성기와 공급자 어댑터를 수정한 뒤 `npm run models:refresh`로
-두 카탈로그를 재생성했다. 생성 파일을 손으로 수정하지 않았다.
+확인일: 2026-10-17. 생성 파일은 손으로 수정하지 않고 생성기로 갱신한다.
+
+## 2026-10-17 OpenCode Go 카탈로그와 추론 제어
+
+[공식 Go 문서](https://opencode.ai/v2/docs/console/go),
+[실시간 모델 목록](https://opencode.ai/inference/go/v1/models),
+[models.dev](https://models.dev/api.json)를 대조했다. 공식 API의 37개 중 도구 지원과
+한도를 확인할 수 있는 36개를 등록한다. `omen-alpha`는 ID만 확인돼 임의 한도나
+추론 단계를 만들지 않고 경고와 함께 보류한다.
+
+Go 항목은 32 → 36개다. `beam-free`, `gemini-4-argon-contributor`, `glm-5.1`,
+`kimi-k2.6`, `minimax-m2.5`, `qwen3.6-plus`, `qwen3.7-max`, `step-5-preview`를 추가하거나
+복원했다. API에서 빠진 `cat-jam-free`, `step-5-preview-free`, `deepseek-v4-flash`,
+`deepseek-v4-flash-vision-exp`는 제거했다. Flash는 `deepseek-v4.1-flash`를 사용한다.
+
+models.dev의 deprecated 표기만으로 Go가 여전히 제공하는 ID를 삭제하지 않는다.
+보조 목록에서 빠진 6개 legacy 항목은 마지막 Go 사양을 보존하되 실시간 목록에 있을
+때만 포함한다. 해당 가격과 한도는 과거 기록이며 현재 요금 보장이 아니다.
+MiniMax M2.5는 공개 모델 한도와 미가격값 0을 사용하며, 무료라는 뜻이 아니다.
+현재 모델의 기본 가격도 장문과 peak/off-peak 구간 전체를 표현하지 않는다.
+
+### 전송 경로
+
+| API | endpoint |
+| --- | --- |
+| Chat Completions | `https://opencode.ai/inference/go/openai/v1/chat/completions` |
+| Responses | `https://opencode.ai/inference/go/openai/v1/responses` |
+| Messages | `https://opencode.ai/inference/go/anthropic/v1/messages` |
+| Gemini | `https://opencode.ai/inference/go/google/v1beta/models/<id>:streamGenerateContent` |
+
+모델마다 API가 다르므로 공급자 전체의 baseUrl을 한 주소로 덮어쓰지 않는다.
+MiniMax M2.7은 기존 Bearer 인증 호환을 위해 Chat Completions를 유지한다.
+
+### 추론 수준
+
+| 모델 | OMK 제어 |
+| --- | --- |
+| GLM-5.2 / GLM-5.3와 Flash | `high/max` / `low/high/max` |
+| Kimi K3 | `max`, off 없음 |
+| Kimi K2.7 Code, MiniMax M2.5/M2.7 | 고정 사고를 high로 표시, effort를 보내지 않음 |
+| Kimi K2.6, GLM-5.1, MiMo, LongCat | `off/high`, toggle만 전송 |
+| DeepSeek V4.1 Flash / V4 Pro | `off/low/high/max` / `off/high/max` |
+| Grok 4.6/4.7 | `low/medium/high/xhigh`, off 없음 |
+| GPT-5.6 Luna와 GPT-6 Luna | `off/low/medium/high/xhigh/max`, off는 Responses `none` |
+| Muse Spark Contributor | `minimal`부터 `xhigh`, OMK max는 xhigh 별칭, off 없음 |
+| Hy3 / Hy4 preview | `off/low/high` / `off/high` |
+| Beam Free, Space Bunny | `low/medium/high/xhigh/max`, off 없음 |
+| Step 5 Preview, Gemini 4 Argon Contributor | `low/medium/high`, off 없음 |
+| Claude Haiku 5.5 | `off/low/medium/high/xhigh/max`, adaptive와 output_config.effort |
+| 현재 Qwen Messages와 MiniMax M3 | 예산 기반 off부터 high, 전달할 수 없는 상위 effort 숨김 |
+
+legacy Qwen3.6 Plus와 Qwen3.7 Max는 기존 Chat Completions toggle을 유지한다.
+MiMo와 LongCat은 `thinking.type`, legacy Qwen은 `enable_thinking`을 사용한다.
+Chat Completions 모델의 사고 내용은 `reasoning_content`로 재전송한다.
+Haiku는 [공식 migration](https://platform.claude.com/docs/en/models/haiku-5-5/migration-guide)에
+맞춰 거부되는 manual budget 대신 adaptive를 사용하고 temperature를 생략한다.
+Argon은 native `thinkingLevel`을 보내며 SDK에서 off를 요청해도 최저 LOW로만 내려간다.
+[공식 thinking 문서](https://platform.claude.com/docs/en/build-with-claude/thinking)의 토글과
+노력 수준을 서로 다른 제어로 취급한다.
+
+### 세션과 로컬 적용
+
+공개 stream/streamSimple 경로는 sessionId가 있으면 `x-opencode-session`과 OMK user agent를
+공식 HTTPS Go 주소에 추가한다. caching을 꺼도 세션 헤더는 유지한다. 사용자 헤더가
+우선하며 임의 proxy 주소에는 자동 전송하지 않는다. 직접 adapter 호출은 호출자가
+헤더를 제공해야 한다.
+
+Contributor는 데이터 정책이 다르다. Go 문서는 Gemini 4 Argon Contributor와 Muse Spark
+Contributor의 입력과 출력을 학습에 사용할 수 있다고 명시한다. 카탈로그 등록이
+비공개 코드 전송 동의나 모델 자동 선택을 의미하지 않는다.
+
+워크스페이스 Privacy 설정이 학습 엔드포인트를 막고 있으면 요청은 라우팅 전에 400으로
+끊긴다. 실제 오류 원문은 `This Go model trains on request data. Allow paid endpoints that
+train on request data in your workspace's Privacy settings to use it.`이며, 같은 게이트가
+Muse Spark Contributor에도 적용된다([upstream 보고](https://github.com/anomalyco/opencode/issues/44495)과
+동일 계열). 해제는 Console의 해당 워크스페이스 `Settings`의 Privacy 항목에서 학습을
+허용해야 하며, URL은 오류가 안내하는 `https://opencode.ai/workspace/<workspace-id>/go`
+형식이다. 이는 계정 정책 변경이므로 저장소나 `models.json`으로 우회하지 않고, 켠 뒤에는
+비공개 코드를 보내지 않는다. 학습을 피하려면 같은 모델의 일반 등급 경로를 쓴다:
+`opencode/gemini-4-argon`(Console pay-as-you-go, 한시 50% 할인), `openrouter/google/gemini-4-argon`,
+`google` 직결(GEMINI_API_KEY), `google-vertex`. Go 플랜은 contributor 등급만 제공한다.
+
+Go만 갱신하려면 다음 명령을 사용한다. 다른 공급자와 이미지 목록은 보존한다.
+
+```bash
+npm --prefix packages/ai run generate-models -- --opencode-go-only
+```
+
+전체 `npm run models:refresh`도 새 Go 경로를 사용한다. 2026-10-17 최종 전체 재생성은
+종료 0으로 완료했고 40 providers, 1,932 → 2,041 routes를 기록했다. native
+Anthropic Messages/Bedrock/OpenCode/Vercel Claude 5.5 route는 adapter의
+adaptive/off/replay 계약이 아직 완전하지 않아 생성기 필터에서 계속 제외했다.
+Copilot(OpenAI-compatible), OpenCode Go(Messages+forceAdaptiveThinking), OpenRouter,
+Devin route는 각자의 선언을 유지한다. 이미지 카탈로그는 61 → 63개다.
+HTTP 실패, 잘못된 메타데이터와 빈 결과는 쓰기 전에 실패한다.
+`models.json`의 동일 ID custom model은 내장 항목보다 우선하므로 과거 effort나 compat,
+baseUrl도 별도로 확인한다. [모델 설정](models.md)을 참고한다.
+현재 프로세스와 별도 설치 엔진은 소스 변경만으로 바뀌지 않는다.
+
+검사는 카탈로그, payload, 네 API의 세션 헤더와 실패 경계를 확인한다. 표적 vitest
+466개 통과, 실키 검사 9개 제외, 생성기 guard 5개 통과, 전체 타입 검사와 문서 링크,
+module-size, import-cycle 검사는 종료 0이다. 첫 `npm run check`는 다른 작업의 임시
+package.json 8개 파싱 오류에서 멈췄고, 그 파일들이 정리된 뒤 재실행한 전체 검사는 종료 0이다.
+
+같은 날 상태 레일 USAGE에 OpenCode Go를 추가했다. Console의 고정 상태 endpoint
+`/console/api/go/status`가 돌려주는 세 개의 계획 창(첫 사용 후 5시간 rolling, UTC 주,
+유료 기간)을 기존 quota 파이프라인으로 표시한다. 인증은 저장된 OAuth user token이며,
+API key만 있는 자격은 검증된 quota endpoint가 없어 호출하지 않는다. 오류/오프라인
+때에는 값을 추정하지 않고 `usage unavailable`만 표시한다.
+
+로컬 models.json은 보호 백업 후 Go 항목만 8 → 36개로 정정했다. 실제 설치 엔진에도
+같은 Go 변경만 적용해 AI 패키지를 빌드했고, 설치 엔진의 `npm run check`는 종료 0이다.
+새 CLI 프로세스에서 구형 ID 없이 정확히 36개가 표시되며, 설치 dist의 대표 추론
+payload 5개를 외부 전송 없이 확인했다. 다른 공급자와 이미지 카탈로그는 보존했다.
+진행 중인 세션은 메모리에 남은 이전 adapter를 사용하므로 재시작해야 한다.
+
+공급자 추론, 계정별 entitlement, 실제 reasoning 양과 청구액은 검증하지 않았다.
 
 ## 2026-10-09 갱신: Mistral Large 4와 OpenCode Zen
 

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- DeepSeek V4.1 Flash's dated `-1017` snapshot joins the catalog on OpenRouter (`deepseek/deepseek-v4.1-flash-1017`) and `vercel-ai-gateway`. Both routes keep the base model's `off`/`low`/`high`/`max` effort ladder; the gateway route rides the same forced adaptive-effort Messages envelope as `deepseek/deepseek-v4.1-flash`. OpenRouter lists a 1,048,576-token context with a 393,216-token output cap at $0.15/$0.60 (cache read $0.003); the gateway lists 1,000,000/384,000 at the same pricing. The generator's Vercel rule now matches dated snapshots, and kilo/nano-gpt carry the same id but are not OMK providers (checked 2026-10-17).
+
+- Gemini 4 Argon (`gemini-4-argon`, released 2026-10-13) joins the catalog on the `google`, `google-vertex`, `opencode` and `vercel-ai-gateway` routes and OpenRouter (`google/gemini-4-argon` and its `:batch` variant). Google's thinking doc lists it On (medium) with `low`/`medium`/`high` and no off level, so the native routes expose exactly those three; OpenRouter's own mandatory declaration gives the same ladder. The OpenRouter `:batch` route declares a 943,718-token output cap instead of 65,536 and $1/$5 pricing (cache write $0.1875).
+
+- Model catalog refreshed from live sources on 2026-10-17: 40 providers, 1,932 to 2,041 routes. The removals are upstream: the refreshed sources no longer select those routes, which does not prove provider deprecation. Claude Haiku 5.5 and Sonnet 5.5 remain on the Copilot, OpenCode Go, OpenRouter and Devin routes; native Anthropic Messages, Bedrock, OpenCode and Vercel routes stay deferred until their adaptive/off/replay contract is implemented. The image catalog moves 61 to 63 with `black-forest-labs/flux-3-image`, `bytedance-seed/seedream-5-0-flash` and the other refreshed entries. OpenRouter's `xiaomi/mimo-v2.6-flash` model-level context moved to 1,050,000 (Pro followed on 2026-09-30) and the pinned guard now reads the current value. Together renamed its `deepseek-ai/DeepSeek-V4-Pro` route to the dated `-0813` id; the successor keeps the predecessor's toggle contract, and the generator rule now matches both ids.
+
 ## [1.4.3] - 2026-10-17
 
 ### Changed

@@ -22,6 +22,7 @@ import { DEEPSEEK_COMPLETIONS_COMPAT, deepSeekNativeModels } from "./catalog-dee
 import { cursorModels } from "./catalog-cursor.ts";
 import { devinModels } from "./catalog-devin.ts";
 import { workbuddyModels } from "./catalog-workbuddy.ts";
+import { fetchOpenCodeGoModels } from "./catalog-opencode-go.ts";
 import { catalogPricePerMillion } from "./catalog-pricing.ts";
 import { applyCurrentThinkingMetadata, applyGpt6AstraUltraAlias, openRouterThinkingMap } from "./catalog-thinking.ts";
 
@@ -1415,7 +1416,6 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 		// - null/undefined/@ai-sdk/openai-compatible → openai-completions
 		const opencodeVariants = [
 			{ key: "opencode", provider: "opencode", basePath: "https://opencode.ai/zen" },
-			{ key: "opencode-go", provider: "opencode-go", basePath: "https://opencode.ai/zen/go" },
 		] as const;
 
 		for (const variant of opencodeVariants) {
@@ -1459,30 +1459,10 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					compat = { ...(compat ?? {}), supportsReasoningEffort: false };
 				}
 
-				if ((variant.provider === "opencode" || variant.provider === "opencode-go") && modelId === "kimi-k2.6") {
+				if (modelId === "kimi-k2.6") {
 					// OpenCode Kimi K2.6 accepts Anthropic-style thinking objects
 					// and rejects string thinking values or combined reasoning_effort.
 					compat = { ...(compat ?? {}), thinkingFormat: "deepseek", supportsReasoningEffort: false };
-				}
-
-				// Fix known mismatches between models.dev npm data and actual
-				// OpenCode Go endpoint behaviour. models.dev reports these models
-				// as @ai-sdk/anthropic, but the OpenCode Go endpoints either don't
-				// accept Anthropic SDK auth (MiniMax M2.7) or are served through
-				// the OpenAI-compatible /v1/chat/completions path (Qwen 3.5/3.6).
-				// Switch them to openai-completions so requests use Bearer auth
-				// and the standard /v1/chat/completions endpoint.
-				if (variant.provider === "opencode-go") {
-					if (modelId === "minimax-m2.7") {
-						api = "openai-completions";
-						baseUrl = `${variant.basePath}/v1`;
-					}
-					if (modelId === "qwen3.5-plus" || modelId === "qwen3.6-plus") {
-						api = "openai-completions";
-						baseUrl = `${variant.basePath}/v1`;
-						// Qwen/DashScope uses enable_thinking at the top level.
-						compat = { ...(compat ?? {}), thinkingFormat: "qwen" };
-					}
 				}
 
 				models.push({
@@ -1785,6 +1765,12 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 }
 
 async function generateModels() {
+	if (process.argv.includes("--opencode-go-only")) {
+		const goModels = await fetchOpenCodeGoModels();
+		const preserved: Model<Api>[] = Object.values(MODELS).flatMap((models) => Object.values(models));
+		writeModelCatalog([...preserved.filter((model) => model.provider !== "opencode-go"), ...goModels]);
+		return;
+	}
 	// Static-catalog fast paths: regenerate one provider's entries from its
 	// recorded source without re-fetching every upstream catalog.
 	if (process.argv.includes("--workbuddy-only")) {
@@ -1810,6 +1796,7 @@ async function generateModels() {
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
 	const zylooModels = await fetchZylooModels();
+	const openCodeGoModels = await fetchOpenCodeGoModels();
 
 	// Combine models (models.dev has priority)
 	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...zylooModels].filter(
@@ -2729,7 +2716,8 @@ async function generateModels() {
 	// exact tier each id carries. Append them after the family-wide passes so a rule such as
 	// "Fable exposes xhigh/max" cannot widen a `claude-fable-5-1-high` lane. The --devin-only and
 	// --cursor-only fast paths already bypass those passes; a full run must match them.
-	allModels.push(...devinModels(), ...cursorModels(), ...workbuddyModels());
+	// Go uses its own route-declared metadata, unaffected by family-wide guesses.
+	allModels.push(...openCodeGoModels, ...devinModels(), ...cursorModels(), ...workbuddyModels());
 
 	writeModelCatalog(allModels);
 }
@@ -2766,13 +2754,13 @@ export const MODELS = {
 		const sortedModelIds = Object.keys(models).sort();
 		for (const modelId of sortedModelIds) {
 			const model = models[modelId];
-			output += `\t\t"${model.id}": {\n`;
-			output += `\t\t\tid: "${model.id}",\n`;
-			output += `\t\t\tname: "${model.name}",\n`;
-			output += `\t\t\tapi: "${model.api}",\n`;
-			output += `\t\t\tprovider: "${model.provider}",\n`;
+			output += `\t\t${JSON.stringify(model.id)}: {\n`;
+			output += `\t\t\tid: ${JSON.stringify(model.id)},\n`;
+			output += `\t\t\tname: ${JSON.stringify(model.name)},\n`;
+			output += `\t\t\tapi: ${JSON.stringify(model.api)},\n`;
+			output += `\t\t\tprovider: ${JSON.stringify(model.provider)},\n`;
 			if (model.baseUrl !== undefined) {
-				output += `\t\t\tbaseUrl: "${model.baseUrl}",\n`;
+				output += `\t\t\tbaseUrl: ${JSON.stringify(model.baseUrl)},\n`;
 			}
 			if (model.headers) {
 				output += `\t\t\theaders: ${JSON.stringify(model.headers)},\n`;

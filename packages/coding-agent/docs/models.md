@@ -26,6 +26,9 @@ The [2026-09-30 catalog refresh](model-catalog-refresh.md) records new models,
 provider-specific thinking ladders, and verification limits. Model discovery does
 not prove that an account can invoke that model.
 
+The [OpenCode Go catalog refresh](model-catalog-refresh.md) records the 2026-10-17 live-ID refresh,
+API-family endpoints, exact thinking controls, and models.json override caveats.
+
 ## Minimal Example
 
 For local models (Ollama, LM Studio, vLLM), only `id` is required per model:

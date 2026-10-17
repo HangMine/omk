@@ -173,20 +173,20 @@ describe("openai-completions cacheControlFormat", () => {
 	});
 
 	it("preserves Anthropic-style cache markers for OpenRouter Anthropic models", async () => {
-		const model = getModel("openrouter", "anthropic/claude-sonnet-4");
+		const model = getModel("openrouter", "anthropic/claude-sonnet-4.5");
 		const params = await capturePayload(model);
 		expectAnthropicCacheMarkers(params);
 	});
 
 	it("adds a 1h ttl when cacheRetention is long", async () => {
-		const model = getModel("openrouter", "anthropic/claude-sonnet-4");
+		const model = getModel("openrouter", "anthropic/claude-sonnet-4.5");
 		const params = await capturePayload(model, { cacheRetention: "long" });
 		expectAnthropicCacheMarkers(params, { type: "ephemeral", ttl: "1h" });
 	});
 
 	it("resolves the default retention from OMK_CACHE_RETENTION", async () => {
 		process.env.OMK_CACHE_RETENTION = "long";
-		const model = getModel("openrouter", "anthropic/claude-sonnet-4");
+		const model = getModel("openrouter", "anthropic/claude-sonnet-4.5");
 		const params = await capturePayload(model);
 		expectAnthropicCacheMarkers(params, { type: "ephemeral", ttl: "1h" });
 	});

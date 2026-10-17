@@ -50,14 +50,16 @@ describe("getSupportedThinkingLevels", () => {
 		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "low", "high", "xhigh", "max"]);
 	});
 
-	it("includes only high/xhigh plus off for DeepSeek V4 Flash on opencode-go", () => {
-		const model = getModel("opencode-go", "deepseek-v4-flash");
+	it("uses the live Go DeepSeek V4 Pro high/max contract, not the delisted Flash alias", () => {
+		const model = getModel("opencode-go", "deepseek-v4-pro");
 		expect(model).toBeDefined();
-		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "high", "xhigh"]);
+		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "high", "max"]);
 	});
 
-	// OpenCode Go Kimi K2.6 left the catalog when models.dev marked it deprecated (2026-09-30).
-	// openai-completions-tool-choice.test.ts keeps its request contract under a local fixture.
+	it("restores still-served Go Kimi K2.6 with only its thinking toggle", () => {
+		const model = getModel("opencode-go", "kimi-k2.6");
+		expect(getSupportedThinkingLevels(model)).toEqual(["off", "high"]);
+	});
 
 	it("includes only high for OpenCode Grok Build", () => {
 		const model = getModel("opencode", "grok-build-0.1");

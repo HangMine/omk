@@ -135,6 +135,9 @@ describe("Mistral Large 4 documented routes", () => {
 		] as const) {
 			for (const model of getModels(provider)) {
 				if (model.api !== "anthropic-messages" && model.api !== "bedrock-converse-stream") continue;
+				// A gateway may opt in explicitly once its adaptive/off/replay contract is implemented.
+				if ((model as { compat?: { forceAdaptiveThinking?: boolean } }).compat?.forceAdaptiveThinking === true)
+					continue;
 				expect(model.id, provider).not.toMatch(/(?:^|[/.])claude-(?:sonnet|haiku)-5[.-]5(?=[.@:-]|$)/);
 			}
 		}

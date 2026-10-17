@@ -47,6 +47,10 @@ export function applyGpt6AstraUltraAlias(model: Model<Api>): void {
 // models.dev declares low~max on the openai, azure, opencode, and github-copilot Responses routes
 // (checked 2026-09-30). OpenRouter carries its own mandatory declaration.
 const GPT61_SOL_ID = /^gpt-6\.1-sol(?:-pro)?$/;
+// Vercel fronts V4.1 Flash and its dated snapshots (the `-1017` rollout was published
+// 2026-10-17) with anthropic-messages; the Messages effort ladder matches the same
+// none/low/high/max contract the base route carries.
+const VERCEL_DEEPSEEK_V41_FLASH_ID = /^deepseek\/deepseek-v4\.1-flash(?:-\d{4})?$/;
 
 /** New documented families not covered by the legacy generator's version checks. */
 export function applyCurrentThinkingMetadata(model: Model<Api>): void {
@@ -59,7 +63,7 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 		// Mistral's preview exposes only none/high; Zen forwards the same Chat Completions contract.
 		model.thinkingLevelMap = { off: "none", minimal: null, low: null, medium: null, high: "high", xhigh: null, max: null, ultra: null };
 	}
-	if (model.provider === "vercel-ai-gateway" && model.id === "deepseek/deepseek-v4.1-flash" && model.api === "anthropic-messages") {
+	if (model.provider === "vercel-ai-gateway" && VERCEL_DEEPSEEK_V41_FLASH_ID.test(model.id) && model.api === "anthropic-messages") {
 		model.thinkingLevelMap = { minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" };
 		// Messages effort is separate from a token budget; do not collapse max through clampReasoning().
 		model.compat = { ...model.compat, forceAdaptiveThinking: true };
@@ -171,9 +175,12 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 		};
 		if (model.api === "anthropic-messages") model.compat = { ...model.compat, forceAdaptiveThinking: true };
 	}
+	// gemini-4-argon (2026-10-13) keeps the 3.7/3.8 Flash contract: Google's thinking doc
+	// lists it On (medium) with low/medium/high only, so there is no real off level.
+	// https://ai.google.dev/gemini-api/docs/thinking (checked 2026-10-14)
 	if (
 		(model.api === "google-generative-ai" || model.api === "google-vertex") &&
-		/^gemini-3\.[78]-flash(?:-|$)/.test(model.id)
+		/^(?:gemini-3\.[78]-flash|gemini-4-argon)(?:-|$)/.test(model.id)
 	) {
 		model.thinkingLevelMap = { off: null, minimal: null, low: "LOW", medium: "MEDIUM", high: "HIGH" };
 	}

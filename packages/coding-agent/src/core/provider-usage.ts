@@ -1,9 +1,10 @@
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { CLAUDE_CODE_EXTERNAL_USER_AGENT, type ProviderRateLimitSnapshot, type ProviderRateLimitWindow } from "omk-ai";
 import type { AgentSession } from "./agent-session.ts";
 import { fetchCommandCodeUsage } from "./provider-usage-commandcode.ts";
 import { fetchDevinUsage } from "./provider-usage-devin.ts";
+import { fetchOpenCodeGoUsage } from "./provider-usage-go.ts";
+import { type QwenCliRunner, runQwenCli } from "./provider-usage-qwen-cli.ts";
 import { clampPercent, usageText } from "./provider-usage-text.ts";
 import type {
 	CodexUsageSnapshot,
@@ -19,6 +20,9 @@ import type {
 	UsageKind,
 } from "./provider-usage-types.ts";
 
+export type { QwenCliRunner } from "./provider-usage-qwen-cli.ts";
+
+export { buildQwenCliEnvironment } from "./provider-usage-qwen-cli.ts";
 export type {
 	CodexUsageSnapshot,
 	SubscriptionUsageSnapshot,
@@ -46,32 +50,6 @@ const QWEN_CLI_ARGS = ["usage", "summary", "--format", "json"] as const;
 const qwenBillingArgs = (month: string): readonly string[] =>
 	["billing", "breakdown", "--from", month, "--to", month, "--group-by", "model", "--format", "json"] as const;
 const QWEN_CONNECT_HINT = "connect: npm i -g @qwencloud/qwencloud-cli && qwencloud auth login";
-const QWEN_CLI_ENV_KEYS = [
-	"PATH",
-	"Path",
-	"HOME",
-	"USERPROFILE",
-	"HOMEDRIVE",
-	"HOMEPATH",
-	"APPDATA",
-	"LOCALAPPDATA",
-	"XDG_CONFIG_HOME",
-	"XDG_DATA_HOME",
-	"XDG_CACHE_HOME",
-	"TMPDIR",
-	"TEMP",
-	"TMP",
-	"SystemRoot",
-	"WINDIR",
-	"ComSpec",
-	"PATHEXT",
-	"LANG",
-	"LC_ALL",
-	"LC_CTYPE",
-	"TERM",
-	"SSL_CERT_FILE",
-	"SSL_CERT_DIR",
-] as const;
 
 type UsageSession = Pick<AgentSession, "state" | "modelRegistry">;
 type FetchJsonResult = { readonly status: number; readonly payload?: unknown };
@@ -93,6 +71,7 @@ const VISIBLE_USAGE_PROVIDERS = [
 	"meta",
 	"devin",
 	"commandcode",
+	"opencode-go",
 ] as const;
 const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 	"openai-codex": source("CODEX", "codex", [{ provider: "openai-codex", oauthOnly: true }]),
@@ -137,6 +116,9 @@ const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 	]),
 	// Command Code Provider API: billing + 5H/7D windows via /alpha with the stored API key.
 	commandcode: source("COMMAND CODE", "commandcode", [{ provider: "commandcode", oauthOnly: false }]),
+	// OpenCode Go: plan windows (5-hour rolling, UTC week, paid period) through the
+	// fixed Console status endpoint with the stored OAuth user token.
+	"opencode-go": source("OPENCODE GO", "opencode-go", [{ provider: "opencode-go", oauthOnly: true }]),
 };
 
 function source(
@@ -237,6 +219,8 @@ export async function loadSubscriptionUsage(
 				return await fetchDevinUsage(usageSource.label, credential.apiKey, fetchImpl);
 			case "commandcode":
 				return await fetchCommandCodeUsage(usageSource.label, credential.apiKey, fetchImpl);
+			case "opencode-go":
+				return await fetchOpenCodeGoUsage(usageSource.label, credential.apiKey, fetchImpl);
 			default:
 				return { label: usageSource.label, windows: [], message: "usage unavailable" };
 		}
@@ -309,19 +293,6 @@ export function parseKimiUsageSnapshot(
 }
 
 /** Result of one `qwencloud` invocation; `missing` means the CLI is not installed. */
-export type QwenCliResult =
-	| { readonly kind: "missing" }
-	| { readonly kind: "ran"; readonly exitCode: number; readonly stdout: string };
-export type QwenCliRunner = (args: readonly string[], timeoutMs: number) => Promise<QwenCliResult>;
-
-export function buildQwenCliEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-	const childEnvironment: NodeJS.ProcessEnv = {};
-	for (const key of QWEN_CLI_ENV_KEYS) {
-		const value = source[key];
-		if (value !== undefined) childEnvironment[key] = value;
-	}
-	return childEnvironment;
-}
 
 /** Parse `qwencloud usage summary --format json` → the token-plan 7-day window. */
 export function parseQwenTokenPlanUsage(value: unknown): readonly SubscriptionUsageWindow[] | undefined {
@@ -423,34 +394,6 @@ function paygFallbackMessage(payload: unknown): string {
 	const period = record(record(payload)?.period);
 	const from = typeof period?.from === "string" ? period.from.slice(0, 7) : undefined;
 	return `no token plan · PAYG ${currency}${cost.toFixed(2)}${from ? ` (${from})` : ""}`;
-}
-
-function runQwenCli(args: readonly string[], timeoutMs: number): Promise<QwenCliResult> {
-	return new Promise((resolve) => {
-		const binary = process.env.QWENCLOUD_CLI ?? "qwencloud";
-		execFile(
-			binary,
-			[...args],
-			{
-				timeout: timeoutMs,
-				maxBuffer: MAX_USAGE_RESPONSE_BYTES,
-				windowsHide: true,
-				env: buildQwenCliEnvironment(process.env),
-			},
-			(error, stdout) => {
-				if (!error) {
-					resolve({ kind: "ran", exitCode: 0, stdout });
-					return;
-				}
-				const errno = (error as NodeJS.ErrnoException).code;
-				if (errno === "ENOENT") {
-					resolve({ kind: "missing" });
-					return;
-				}
-				resolve({ kind: "ran", exitCode: typeof errno === "number" ? errno : 1, stdout: stdout ?? "" });
-			},
-		);
-	});
 }
 
 export function parseGrokUsageSnapshot(value: unknown): readonly SubscriptionUsageWindow[] | undefined {

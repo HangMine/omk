@@ -2,6 +2,7 @@ import "./providers/register-builtins.ts";
 
 import { getApiProvider } from "./api-registry.ts";
 import { getEnvApiKey } from "./env-api-keys.ts";
+import { openCodeHeaders } from "./providers/opencode-headers.ts";
 import type {
 	Api,
 	AssistantMessage,
@@ -19,14 +20,16 @@ function hasExplicitApiKey(apiKey: string | undefined): apiKey is string {
 	return typeof apiKey === "string" && apiKey.trim().length > 0;
 }
 
-function withEnvApiKey<TOptions extends StreamOptions>(
+function withProviderOptions<TOptions extends StreamOptions>(
 	model: Model<Api>,
 	options: TOptions | undefined,
 ): TOptions | undefined {
-	if (hasExplicitApiKey(options?.apiKey)) return options;
+	const headers = openCodeHeaders(model, options?.sessionId, options?.headers);
+	const resolved = headers ? ({ ...options, headers } as TOptions) : options;
+	if (hasExplicitApiKey(resolved?.apiKey)) return resolved;
 	const apiKey = getEnvApiKey(model.provider);
-	if (!apiKey) return options;
-	return { ...options, apiKey } as TOptions;
+	if (!apiKey) return resolved;
+	return { ...resolved, apiKey } as TOptions;
 }
 
 function resolveApiProvider(api: Api) {
@@ -43,7 +46,7 @@ export function stream<TApi extends Api>(
 	options?: ProviderStreamOptions,
 ): AssistantMessageEventStream {
 	const provider = resolveApiProvider(model.api);
-	return provider.stream(model, context, withEnvApiKey(model, options) as StreamOptions);
+	return provider.stream(model, context, withProviderOptions(model, options) as StreamOptions);
 }
 
 export async function complete<TApi extends Api>(
@@ -82,7 +85,7 @@ export function streamSimple<TApi extends Api>(
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
 	const provider = resolveApiProvider(model.api);
-	return provider.streamSimple(model, context, withEnvApiKey(model, options));
+	return provider.streamSimple(model, context, withProviderOptions(model, options));
 }
 
 Object.defineProperty(streamSimple, BUILTIN_STREAM_FN, { value: true });
