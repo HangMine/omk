@@ -515,6 +515,10 @@ This section tracks planned work. Nothing here ships until it is merged and rele
 | Subagent runtime | Planning | Up to 4 subagents run at once; a fifth request is refused instead of queued. Each subagent gets its own git worktree. |
 | Parallel session protocol | Planning | A written contract for messages, file ownership locks, completion and failure reports, and cancel propagation between parallel sessions. |
 | Reasoning auto v5 for subagents | Planning | Builds on auto v4 after a memory and CPU baseline for subagents. |
+| Subagent loop guard and git pre-checks | Planning | Always on for subagents, with no flag. A subagent cannot start another subagent, and it stops after 3 identical calls in a row, 3 repeated errors, an A/B ping-pong, or 5 turns without progress. Before reporting done it must leave a clean `git status`, updated docs, and a conflict-free `git merge-tree` against main. |
+| Image previews and model image size (spec 075) | Planning | Tool-result images get the same 6-line, 80-column preview limit as prompt attachments, with a one-line text fallback. Images sent to the model follow the provider's documented resize rule; saved originals stay full size. |
+
+Behavior changes planned for 1.5.0: a fifth concurrent subagent request is refused with a typed `busy` error instead of waiting, and Ultra mode gets the same limit of 4 concurrent subagents.
 
 On hold:
 
