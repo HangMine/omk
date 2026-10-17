@@ -6,7 +6,6 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveToolTimeoutMs, runToolCallWithTimeout } from "omk-agent-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type BashOperations, createBashTool } from "../src/core/tools/bash.ts";
 import { createLocalBashOperations } from "../src/core/tools/bash-local-operations.ts";
@@ -28,34 +27,6 @@ afterAll(() => {
 function textOf(content: ReadonlyArray<{ type: string; text?: string }>): string {
 	return content.map((block) => (block.type === "text" ? (block.text ?? "") : "")).join("");
 }
-
-describe("spec 076 #1: outer tool timeout keeps the output seen so far", () => {
-	it("the timeout result contains the streamed line and the unchanged notice", async () => {
-		const tool = createBashTool(process.cwd());
-		const timeoutMs = resolveToolTimeoutMs(tool, { toolTimeouts: { bash: 1000 } }, "bash");
-		const outcome = await runToolCallWithTimeout({
-			toolCallId: "c1",
-			toolName: "bash",
-			timeoutMs,
-			signal: undefined,
-			start: (sig, onUpdate) =>
-				tool.execute("c1", { command: "echo partial-line; sleep 3; echo done", timeout: 10 }, sig, onUpdate),
-			emitUpdate: () => {},
-			emitLateSettlement: () => {},
-			toErrorResult: (e) => ({ content: [{ type: "text", text: String(e) }], details: undefined }),
-		});
-		expect(outcome.terminalDisposition).toBe("timeout");
-		const text = textOf(outcome.result.content);
-		expect(text).toContain("partial-line");
-		expect(text).not.toContain("done");
-		expect(
-			text.endsWith(
-				'Tool "bash" timed out after 1000ms. Cancellation was requested; execution may still be running.',
-			),
-		).toBe(true);
-		expect(text.indexOf("partial-line")).toBeLessThan(text.indexOf("timed out"));
-	});
-});
 
 describe("spec 076 #3: a signal-killed command is an error", () => {
 	it("local operations report the signal", async () => {

@@ -55,7 +55,7 @@ description: "bash correctness for 1.5.0: a signal-killed command is an error, t
 
 ### Requirement 1 - Audit repros become regression tests (Priority: P0)
 
-1. The three repros from `/workspace/omk-he-audit-repro/zz-audit-repro.test.ts` for items #1 and #3 (outer timeout drops partial output; ops return no signal; tool reports success for `kill -9 $$`) plus a #15 repro (write with Korean text) are added to `packages/coding-agent/test/spec076-bash-correctness.test.ts` with assertions, and fail on main `b94639dec6` before the fixes (recorded in the commit message).
+1. The audit repros are split by package boundary: the #1 repro (outer timeout drops partial output) lives in `packages/agent/test/tool-timeout-partial-output.test.ts`, and the #3 repros (ops return no signal; tool reports success for `kill -9 $$`) plus the #15 repro (write with Korean text) live in `packages/coding-agent/test/spec076-bash-correctness.test.ts`. Both files fail on main `b94639dec6` before the fixes (recorded in the commit message). The coding-agent file does not import `packages/agent/src` directly.
 
 ### Requirement 2 - Signal exit (Priority: P0)
 
@@ -97,5 +97,4 @@ description: "bash correctness for 1.5.0: a signal-killed command is an error, t
 - `packages/coding-agent/src/core/tools/bash-operations.ts`, `bash-local-operations.ts`, `bash.ts`
 - `packages/coding-agent/src/core/tools/write.ts`
 - `packages/agent/src/tool-timeout.ts`, `packages/agent/src/tool-execution-boundary.ts`
-- `packages/agent/src/index.ts` (export `runToolCallWithTimeout` for the package-boundary test import)
 - `packages/coding-agent/test/spec076-bash-correctness.test.ts`, `packages/agent/test/tool-timeout-partial-output.test.ts`
