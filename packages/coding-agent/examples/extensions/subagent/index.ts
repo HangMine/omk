@@ -22,9 +22,11 @@ import type { Message } from "omk-ai";
 import { StringEnum } from "omk-ai";
 import { Container, Markdown, Spacer, Text } from "omk-tui";
 import {
+	createSubagentLoopGuard,
 	type ExtensionAPI,
 	getAgentDir,
 	getMarkdownTheme,
+	type SubagentLoopGuard,
 	withFileMutationQueue,
 	workerProjectTrustEnv,
 } from "open-multi-agent-kit";
@@ -347,6 +349,7 @@ async function runSingleAgentAttempt(
 	signal: AbortSignal | undefined,
 	onUpdate: ResultUpdateCallback | undefined,
 	workerExtensionArgs: WorkerExtensionArgsFn,
+	loopGuard: SubagentLoopGuard,
 ): Promise<SubagentAttemptResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) throw new Error(`Unknown agent: ${agentName}`);
@@ -439,7 +442,7 @@ async function runSingleAgentAttempt(
 		args.push(`Task: ${task}`);
 		const workerCwd = cwd ?? defaultCwd;
 		const projectTrust = await workerProjectTrustEnv({ parentCwd: defaultCwd, workerCwd, signal });
-		const stream = createSubagentStream(currentResult, onUpdate ? emitUpdate : undefined, signal);
+		const stream = createSubagentStream(currentResult, onUpdate ? emitUpdate : undefined, signal, loopGuard);
 		const invocation = getOmkInvocation(args);
 		const processResult = await runManagedProcess({
 			command: invocation.command,
@@ -533,6 +536,8 @@ async function runSingleAgent(
 					details: makeDetails([partial]),
 				})
 		: undefined;
+	// Spec 071: always on, one guard per logical task, so resumed attempts keep the usage already counted.
+	const loopGuard = createSubagentLoopGuard();
 	if (unbounded) {
 		return (
 			await runSingleAgentAttempt(
@@ -547,6 +552,7 @@ async function runSingleAgent(
 				signal,
 				reportUpdate,
 				workerExtensionArgs,
+				loopGuard,
 			)
 		).result;
 	}
@@ -579,6 +585,7 @@ async function runSingleAgent(
 				signal,
 				input.onUpdate,
 				workerExtensionArgs,
+				loopGuard,
 			),
 	});
 }

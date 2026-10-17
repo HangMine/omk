@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import registerSubagent from "./index.ts";
-import { canSpawnSubagents, childSubagentEnv, currentSubagentDepth, SUBAGENT_DEPTH_ENV } from "./nesting.ts";
+import {
+	canSpawnSubagents,
+	childSubagentEnv,
+	currentSubagentDepth,
+	DEFAULT_SUBAGENT_MAX_DEPTH,
+	SUBAGENT_DEPTH_ENV,
+} from "./nesting.ts";
 
 function registeredToolNames(env: NodeJS.ProcessEnv): string[] {
 	const saved = { ...process.env };
@@ -24,10 +30,10 @@ describe("subagent nesting guard", () => {
 		expect(canSpawnSubagents(child)).toBe(false);
 	});
 
-	it("increments depth for each generation and honours a raised max depth", () => {
+	it("increments depth for each generation; spec 071 ignores a raised OMK_SUBAGENT_MAX_DEPTH", () => {
 		const grandchild = childSubagentEnv(childSubagentEnv({ OMK_SUBAGENT_MAX_DEPTH: "2" }));
 		expect(currentSubagentDepth(grandchild)).toBe(2);
-		expect(canSpawnSubagents(childSubagentEnv({ OMK_SUBAGENT_MAX_DEPTH: "2" }))).toBe(true);
+		expect(canSpawnSubagents(childSubagentEnv({ OMK_SUBAGENT_MAX_DEPTH: "2" }))).toBe(false);
 		expect(canSpawnSubagents(grandchild)).toBe(false);
 	});
 
@@ -39,5 +45,17 @@ describe("subagent nesting guard", () => {
 	it("does not register the subagent tool in a child at the limit", () => {
 		expect(registeredToolNames({})).toEqual(["subagent"]);
 		expect(registeredToolNames({ [SUBAGENT_DEPTH_ENV]: "1" })).toEqual([]);
+	});
+
+	it("spec 071 rule 1: depth is fixed at 1 regardless of OMK_SUBAGENT_MAX_DEPTH or OMK_SUBAGENT_RUNTIME", () => {
+		expect(DEFAULT_SUBAGENT_MAX_DEPTH).toBe(1);
+		for (const env of [{}, { OMK_SUBAGENT_RUNTIME: "0" }, { OMK_SUBAGENT_RUNTIME: "1" }]) {
+			for (const max of [undefined, "0", "3"]) {
+				const top = max === undefined ? env : { ...env, OMK_SUBAGENT_MAX_DEPTH: max };
+				expect(canSpawnSubagents(top)).toBe(true);
+				expect(canSpawnSubagents(childSubagentEnv(top))).toBe(false);
+				expect(registeredToolNames({ ...top, [SUBAGENT_DEPTH_ENV]: "1" })).toEqual([]);
+			}
+		}
 	});
 });

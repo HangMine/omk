@@ -77,6 +77,9 @@ including subagents; parallelisable and order-dependent tasks reported separatel
 ## Behaviour changes (CHANGELOG "Behavior changes", confirmed at OMK final approval against 근빈's rules)
 - A 5th concurrent subagent is rejected with `busy` instead of waiting.
 - Ultra mode is capped at 4 concurrent (was uncapped).
+- Loop guard is on in the default path (no flag, `OMK_SUBAGENT_RUNTIME` unset): a worker that repeats the same call with the same result 3×,
+  hits the same error in 3 turns in a row (parallel calls failing together in one turn count once), ping-pongs A·B over 6 calls, makes no progress for 5 turns or calls `subagent` is stopped and returned as an error
+  with its partial result. Depth is fixed at 1: `OMK_SUBAGENT_MAX_DEPTH` is no longer read (it could raise depth, or set 0 to disable spawning).
 
 ## Concurrency vs resource tier (Tech Lead ②, 인호 confirming via OMK)
 072: normal tier caps heavy processes at 2 (`resource-admission-config.ts:47`), constrained/critical at 1. Decision ②: limit = min(4, tier cap), rest `busy`.

@@ -194,12 +194,8 @@ export {
 	decideGoalContinuation,
 } from "./core/goal-continuation.ts";
 export { isSessionModelOverflow, shouldSkipCompactionCheck } from "./core/compaction-gate.ts";
-export {
-	detectIdenticalLoop,
-	type LoopDetection,
-	type LoopPolicy,
-	type LoopRecord,
-} from "./core/identical-loop.ts";
+export { detectIdenticalLoop, type LoopDetection, type LoopPolicy, type LoopRecord } from "./core/identical-loop.ts";
+export { createSubagentLoopGuard, type LoopGuardStop, type SubagentLoopGuard } from "./core/subagent-loop-guard.ts";
 export {
 	type PromptPreset,
 	type PromptPresetId,
