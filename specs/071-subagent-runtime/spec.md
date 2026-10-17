@@ -2,7 +2,7 @@
 
 Status: **spec draft**, no implementation. Base: origin/main `fd495fd77b`. Criteria below are Tech Lead's fixed 1.5.0 criteria
 (2026-10-17, room) and must not change after measuring. Order: protocol spec (1) → **this runtime (2)** → optimisation (3) → auto v5 (4);
-step 0 (baseline) is measured on main before any of it. Spec number: 066-070 are taken by local branches; 071 is free.
+Spec order (Tech Lead): **072 baseline → 071 runtime → 073 auto v5**; 074 protocol (docs + types) may be written alongside 071. Spec number: 066-070 are taken by local branches; 071 is free.
 
 ## What exists (reuse, do not rewrite)
 - Subagent extension `packages/coding-agent/examples/extensions/subagent/` (~7.6k lines): parallel mode 8 tasks / 4 concurrent outside Ultra
@@ -23,9 +23,13 @@ step 0 (baseline) is measured on main before any of it. Spec number: 066-070 are
 ## Loop guard (always on)
 Any one trigger stops the subagent and returns a typed error with the reason to the lead; the runtime never retries on its own.
 1. Depth 1: subagents cannot spawn subagents (existing `nesting.ts`, now enforced with a test that the tool is absent at depth 1).
-2. Per-subagent caps on turns, wall time and billed tokens (values set in the protocol spec, fixed before measuring).
-3. The same tool with identical arguments **3 times in a row** stops it.
-4. No progress for K turns (no file change and no new tool output hash) stops it. K is fixed before measuring.
+2. Per-subagent caps on turns, wall time and billed tokens = **2 × p99 of the 072 baseline**, locked in this spec before any A/B, never changed after.
+   Hitting a cap returns a **partial-completion** result (Claude Code `maxTurns` behaviour).
+3. The same tool with identical arguments **3 times in a row** stops it (N=3). Built on `core/identical-loop.ts` (today warn 3 / stop 6,
+   only under `OMK_IDENTICAL_LOOP`): in subagents it is always on, and it also catches **same error 3×** and **A·B ping-pong 6×**
+   (OpenHands stuck detector patterns).
+4. **5 turns** with no file change and no new tool output stop it (K=5).
+5. Ultra mode gets the same cap of 4 concurrent (behaviour change, see below).
 
 ## Git gate (always on)
 - **Per project:** worktrees live under `<project>/.omk/worktrees/<task>`, each on a new branch from freshly fetched `origin/main`
@@ -46,9 +50,10 @@ Mock, Bench Analyst, 20 runs unless stated, Node >=22.19, `OMK_TRUST_PROJECT=0`,
 2. **Abort:** 100 aborts → 0 orphan processes; all children exit within 2 s.
 3. **Isolation:** same-file conflicts between subagents 0 (per-subagent worktree).
 4. **Flag off:** first request byte-identical to main.
-5. **Loop guard:** 20 deliberately looping mocks (OMK asked for 100: run 100) all stop inside the caps; 0 orphans.
-6. **Git:** 4 concurrent, 20 runs: main conflicts 0, dirty worktrees 0, force-push 0; a run missing the docs or git check is counted as failed;
-   a deliberately conflicting scenario produces 0 wrong merges.
+5. **Loop guard:** 100 deliberately looping mocks (same call, same error, A·B ping-pong, self re-spawn) all stop inside the caps;
+   orphans 0, automatic retries 0. 20 normal tasks: wrongly stopped 0.
+6. **Git:** 4 concurrent, 20 runs: main conflicts 0, dirty worktrees 0, force-push 0. 20 deliberate-conflict scenarios: wrong merges 0,
+   conflicts detected 20/20. 20 mocks that skip the docs or git check: all marked incomplete (20/20); normal runs wrongly marked 0.
 7. **Confinement:** `../`, absolute and symlink escapes all refused (unit tests).
 
 ## Step 0 baseline (record only, no verdict; measured on main before this spec lands)
@@ -60,6 +65,9 @@ including subagents; parallelisable and order-dependent tasks reported separatel
 - `.git/info/exclude` is per clone; worktrees share it with the main checkout (intended).
 - Process-tree RSS on Linux needs `/proc` walking; macOS numbers come from `ps` and are reported separately.
 
-## Open questions (Tech Lead)
-1. Turn / time / token caps and no-progress K: propose turns 40, 15 min, 400k billed tokens, K = 5 — approve or set.
-2. Loop-guard run count: Tech Lead said 20, OMK said 100 — proposal 100 (cheap on mock).
+## Behaviour changes (CHANGELOG "Behavior changes", confirmed at OMK final approval against 근빈's rules)
+- A 5th concurrent subagent is rejected with `busy` instead of waiting.
+- Ultra mode is capped at 4 concurrent (was uncapped).
+
+## Decisions (Tech Lead, OMK, 2026-10-17)
+N=3, K=5, caps = 2 × p99 of 072, loop mocks 100, no pending confirmed. No open questions remain; caps get filled in from 072.
