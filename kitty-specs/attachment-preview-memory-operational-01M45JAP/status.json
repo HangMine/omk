@@ -1,0 +1,58 @@
+{
+  "event_count": 9,
+  "last_event_id": "01M45MJHRA9PS4Z6D60YZ9B82R",
+  "materialized_at": "2026-10-05T08:58:34.122437+00:00",
+  "mission_number": "",
+  "mission_slug": "attachment-preview-memory-operational-01M45JAP",
+  "mission_type": "software-dev",
+  "summary": {
+    "approved": 1,
+    "blocked": 0,
+    "canceled": 0,
+    "claimed": 0,
+    "done": 0,
+    "for_review": 0,
+    "in_progress": 0,
+    "in_review": 0,
+    "planned": 0
+  },
+  "work_packages": {
+    "WP01": {
+      "actor": "pi",
+      "agent": "pi",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "assignee": "pi-root",
+      "force_count": 1,
+      "lane": "approved",
+      "last_event_id": "01M45MJHRA9PS4Z6D60YZ9B82R",
+      "last_transition_at": "2026-10-05T08:58:34.122437+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "기존 RED/GREEN 수정의 운영 반영을 현재 root agent가 직접 수행; canonical build와 compiled smoke 검증 완료",
+        "Canonical attribution correction required by recorded metadata review",
+        "현재 root agent 직접 수행, source 및 운영 검증 결과 evidence.md",
+        "52/52 운영 회귀, scoped full check, canonical build/compiled smoke 통과; 직접 리뷰 증거 analysis-report.md",
+        "현재 root agent의 직접 self-review 승인; 독립 리뷰로 주장하지 않음. 관련 검증은 직접 실행했고 no_coverage는 별도 미검증 항목이다."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review": null,
+      "review_result": {
+        "reference": "review-cycle://attachment-preview-memory-operational-01M45JAP/WP01-operational-attachment-memory/review-cycle-2.md",
+        "reviewer": "pi-root-self-review",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 2197054,
+      "shell_pid_created_at": "1791190679.87",
+      "subtasks": {
+        "T001": "done",
+        "T002": "done",
+        "T003": "done",
+        "T004": "done",
+        "T005": "done",
+        "T006": "done"
+      }
+    }
+  }
+}

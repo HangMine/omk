@@ -142,7 +142,10 @@ describe("createAdaptOrchApiClientFromEnv", () => {
 	it("defaults to the hosted origin and honours an override", async () => {
 		const { calls, fetch } = recordingFetch({ subject_id: "s1" });
 		await createAdaptOrchApiClientFromEnv(fetch, { ADAPTORCH_API_KEY: "ado_k" })?.whoami();
-		expect(calls[0]?.url).toBe(`${ADAPTORCH_DEFAULT_API_URL}/v1/whoami`);
+		// Pin the literal: comparing against the constant passed for any value, so a dead
+		// host (api.adaptorch.com is NXDOMAIN) shipped as the default unnoticed.
+		expect(ADAPTORCH_DEFAULT_API_URL).toBe("https://adaptorch.com");
+		expect(calls[0]?.url).toBe("https://adaptorch.com/v1/whoami");
 
 		const override = recordingFetch({ subject_id: "s1" });
 		await createAdaptOrchApiClientFromEnv(override.fetch, {

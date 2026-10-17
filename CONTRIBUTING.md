@@ -32,6 +32,13 @@ npm test
 
 All gates must pass. `npm run check` only verifies: it never rewrites a file, and CI fails if the tree is dirty afterwards. Use `npm run format` to apply Biome's fixes, then commit the result. Add or update tests for behavioral changes and update the matching file under `packages/coding-agent/docs/` when public behavior changes.
 
+The dependency-pin and TypeScript-import guards exclude the scan-root-relative `docs/work` tree because it holds local experiments, not product source. This does not exclude other documentation, nested `docs/work` paths, examples, or `.omk/skills` and `.omk/extensions`. To inspect scratch inputs deliberately, pass that directory as the scan root:
+
+```bash
+node scripts/check-pinned-deps.mjs docs/work
+node scripts/check-ts-relative-imports.mjs docs/work
+```
+
 Do not edit release sections in the root `README.md`; `scripts/sync-readme-releases.mjs` generates them from changelogs. Package changelog entries are maintained as part of the release process.
 
 If you add a provider under `packages/ai`, follow the provider test requirements in `AGENTS.md`.

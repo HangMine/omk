@@ -12,6 +12,7 @@ const ignoredDirectoryPaths = new Set([
 	".omk/npm",
 	".omk/runs",
 	".omk/worktrees",
+	join("docs", "work"),
 	join("vendor", "oh-my-pi"),
 ]);
 // The pre-existing third-party scratch tree is only the exact `~` child of the scan root.

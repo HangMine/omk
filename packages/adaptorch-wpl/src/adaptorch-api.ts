@@ -108,7 +108,7 @@ function readErrorFields(body: unknown): { code?: string; message?: string } {
 }
 
 /** Default control-plane origin, overridable with `ADAPTORCH_API_URL`. */
-export const ADAPTORCH_DEFAULT_API_URL = "https://api.adaptorch.com";
+export const ADAPTORCH_DEFAULT_API_URL = "https://adaptorch.com";
 
 /**
  * Build a client from the environment: `ADAPTORCH_API_KEY` and an optional

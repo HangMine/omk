@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "mission_slug": "attachment-preview-memory-operational-01M45JAP",
+  "mission_id": "01M45JAPSR2D3F6YHT6PQ8W963",
+  "mission_branch": "kitty/mission-attachment-preview-memory-operational-01M45JAP",
+  "target_branch": "fix/attachment-memory-kitty-20261005",
+  "lanes": [
+    {
+      "lane_id": "lane-a",
+      "wp_ids": [
+        "WP01"
+      ],
+      "write_scope": [
+        ".claudeignore",
+        ".gitattributes",
+        ".gitignore",
+        ".kittify/canonical-events.jsonl",
+        ".kittify/config.yaml",
+        ".kittify/metadata.yaml",
+        "packages/coding-agent/docs/usage.md",
+        "packages/coding-agent/src/modes/interactive/components/attachment-strip.ts",
+        "packages/coding-agent/test/attachment-strip-memory.test.ts",
+        "packages/coding-agent/test/attachment-strip-width.test.ts"
+      ],
+      "predicted_surfaces": [
+        "api",
+        "artifact-rendering",
+        "legacy-cleanup"
+      ],
+      "depends_on_lanes": [],
+      "parallel_group": 0
+    }
+  ],
+  "computed_at": "2026-10-05T08:40:11.227326+00:00",
+  "computed_from": "dependency_graph+ownership",
+  "planning_artifact_wps": [],
+  "planning_commit_sha": "481a45fd02c9468456ca8e2605aa4f053d1723af"
+}

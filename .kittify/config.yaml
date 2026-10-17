@@ -1,0 +1,21 @@
+project:
+  uuid: 515ebbe1-c7d6-4a28-8125-a9b2f1c0a6d0
+  path_conventions:
+    workspace: packages/coding-agent/src/
+    tests: packages/coding-agent/test/
+    documentation: packages/coding-agent/docs/
+  slug: omk
+  node_id: 5a7369adb2e2
+  build_id: a14960d8-069d-5d61-83f3-f067a6dcc13c
+mission_type_activations:
+- software-dev
+- documentation
+- research
+- plan
+vcs:
+  type: git
+agents:
+  available:
+  - pi
+  auto_commit: false
+  lint_on_edit: false

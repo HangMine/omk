@@ -5,11 +5,13 @@ import ts from "typescript";
 const ignoredDirectories = new Set([".git", "coverage", "dist", "node_modules"]);
 const ignoredDirectoryPaths = new Set([
 	".pi",
+	".omk/external", // Foreign checkouts retain their own import convention.
 	".omk/git",
 	".omk/goals",
 	".omk/npm",
 	".omk/runs",
 	".omk/worktrees",
+	join("docs", "work"),
 	join("vendor", "oh-my-pi"),
 ]);
 // The pre-existing third-party scratch tree is only the exact `~` child of the scan root.

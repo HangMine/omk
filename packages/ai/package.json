@@ -69,7 +69,7 @@
 		"DEVIN-NOTICE"
 	],
 	"scripts": {
-		"clean": "shx rm -rf dist",
+		"clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
 		"generate-models": "node scripts/generate-models.ts",
 		"generate-image-models": "node scripts/generate-image-models.ts",
 		"build": "tsgo -p tsconfig.build.json",
@@ -112,6 +112,6 @@
 	"devDependencies": {
 		"@types/node": "24.12.4",
 		"canvas": "3.2.3",
-		"vitest": "3.2.6"
+		"vitest": "4.1.11"
 	}
 }

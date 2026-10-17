@@ -120,6 +120,7 @@ test("duplicate flags and unknown commands cannot write configuration", (t) => {
 test("npm and both binary packaging paths explicitly include public resources", () => {
 	const pkg = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
 	assert.ok(pkg.files.includes("resources"));
-	assert.ok(pkg.scripts["copy-binary-assets"].includes("shx cp -r resources dist/"));
+	assert.equal(pkg.scripts["copy-binary-assets"], "node scripts/copy-assets.mjs --binary");
+	assert.ok(readFileSync(join(packageDir, "scripts/copy-assets.mjs"), "utf8").includes('"resources"'));
 	assert.ok(readFileSync(new URL("../build-binaries.sh", import.meta.url), "utf8").includes('cp -r resources "$OUTPUT_DIR/$platform/"'));
 });

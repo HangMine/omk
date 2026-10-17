@@ -152,3 +152,39 @@ collect.sh
 
 # OpenWiki generated pages ARE versioned (the scheduled workflow opens PRs against them).
 # Local-only scratch inside the wiki can be ignored per-operator in .git/info/exclude.
+
+# Added by Spec Kitty CLI (auto-managed)
+.codex/
+.vibe/
+.letta/
+.windsurf/
+.gemini/
+.cursor/rules/spec-kitty.mdc
+.cursor/commands/
+.cursor/skills/
+.qwen/
+.kilocode/
+.augment/
+.amazonq/
+.kiro/
+.agent/
+.github/copilot/
+.agents/skills/
+.kittify/.dashboard
+.kittify/charter/context-state.json
+.kittify/derived/
+.kittify/dossiers/
+.kittify/encoding-provenance/
+.kittify/events/
+.kittify/lint-report.json
+.kittify/logs/
+.kittify/merge-state.json
+.kittify/migrations/
+.kittify/missions/__pycache__/
+.kittify/runtime/
+.kittify/skills-manifest.json
+.kittify/command-skills-manifest.json
+.kittify/sync-state.json
+.kittify/workspaces/
+.worktrees/
+kitty-ops/ops-index.jsonl
