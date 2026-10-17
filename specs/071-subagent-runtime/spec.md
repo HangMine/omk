@@ -13,7 +13,8 @@ Spec order (Tech Lead): **072 baseline → 071 runtime → 073 auto v5**; 074 pr
 - `packages/protocol/src/run-dag.ts` for task ordering.
 
 ## Decisions already fixed (Tech Lead)
-- **No pending:** a 5th concurrent request is rejected at once with a typed `busy` error (`{ code: "busy", running: 4, limit: 4 }`);
+- **No pending:** effective limit = min(4, resource-tier cap). A request above it is rejected at once with a typed `busy` error
+  (`{ code: "busy", running, limit, reason: "<tier name>" }`), so the lead sees the real cap and why. The resource tier is never disabled to reach 4;
   no hidden queue anywhere (no `p-limit`, no retry loop inside the runtime). The lead decides to do it itself or call again later.
 - **No new dependencies:** `child_process.fork()` + Node IPC, JSON-RPC 2.0 written in-house (protocol spec), results written to a file,
   only the path is returned to the lead.
@@ -77,9 +78,14 @@ including subagents; parallelisable and order-dependent tasks reported separatel
 - A 5th concurrent subagent is rejected with `busy` instead of waiting.
 - Ultra mode is capped at 4 concurrent (was uncapped).
 
-## Open decision (인호): concurrency vs resource tier
-072 found today's effective concurrency is 2: the normal resource tier caps heavy processes at 2 (`resource-admission-config.ts:47`), constrained/critical at 1.
-① 4 overrides the tier, or ② a request above the tier cap is also rejected with `busy` (normal tier then really runs 2). Proposal ②; Behavior changes would list the real concurrency per tier.
+## Concurrency vs resource tier (Tech Lead ②, 인호 confirming via OMK)
+072: normal tier caps heavy processes at 2 (`resource-admission-config.ts:47`), constrained/critical at 1. Decision ②: limit = min(4, tier cap), rest `busy`.
+Behavior changes lists the real concurrency per tier. Raising normal to 4 is decided separately from a true-4-concurrent memory run (072 addendum).
+
+## Caps: two kinds
+- **Mock caps** (072, sha256 locked) are used only in 071 tests.
+- **Real runs:** no turn or wall cap from mock numbers until 073 measures a real-model baseline; loops are stopped by N/K/same-error/ping-pong and
+  the shared run token cap. Turning subagents on by default requires real-model caps.
 
 ## Decisions (Tech Lead, OMK, 2026-10-17)
 N=3, K=5, caps = 2 × max of 072 runs per family, loop mocks 100, no pending confirmed. No open questions remain; caps get filled in from 072.
