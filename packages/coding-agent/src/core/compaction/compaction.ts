@@ -6,11 +6,10 @@
  */
 
 import type { AgentMessage, StreamFn, ThinkingLevel } from "omk-agent-core";
-import { uuidv7 } from "omk-agent-core";
-import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from "omk-ai";
-import { completeSimple, type RetryCallbacks, type RetryPolicy, retryAssistantCall } from "omk-ai";
+import type { AssistantMessage, Model, RetryCallbacks, RetryPolicy, SimpleStreamOptions, Usage } from "omk-ai";
 import type { CompactionSettings } from "./compaction-headroom.ts";
 import { type CompactFailoverOptions, withCompactionModelFailover } from "./model-failover.ts";
+import { completeSummarization } from "./summary-completion.ts";
 import { summaryTextOrThrow } from "./summary-response.ts";
 
 export {
@@ -23,6 +22,7 @@ export {
 	shouldCompact,
 } from "./compaction-headroom.ts";
 export type { CompactFailoverOptions } from "./model-failover.ts";
+export { completeSummarization } from "./summary-completion.ts";
 
 import { convertToLlm } from "../messages.ts";
 import { buildSessionContext, type CompactionEntry, type SessionEntry } from "../session-manager.ts";
@@ -514,34 +514,6 @@ function createSummarizationOptions(
 		options.reasoning = thinkingLevel;
 	}
 	return options;
-}
-
-/**
- * Shared choke point for every compaction/branch-summary summarization call. Wraps the
- * single LLM call in {@link retryAssistantCall} so transient stream drops (e.g.
- * `terminated`, socket close) honor the configured retry policy instead of failing
- * the whole compaction on the first attempt. Deterministic errors and aborts return
- * immediately (see {@link retryAssistantCall}).
- */
-export async function completeSummarization(
-	model: Model<any>,
-	context: Context,
-	options: SimpleStreamOptions,
-	streamFn?: StreamFn,
-	retry?: RetryPolicy,
-	callbacks?: RetryCallbacks,
-): Promise<AssistantMessage> {
-	// Summaries are standalone requests, so isolate routing and avoid cache writes that cannot be reused.
-	const requestOptions: SimpleStreamOptions = {
-		...options,
-		cacheRetention: "none",
-		sessionId: uuidv7(),
-	};
-	const produce = async (): Promise<AssistantMessage> =>
-		streamFn
-			? (await streamFn(model, context, requestOptions)).result()
-			: completeSimple(model, context, requestOptions);
-	return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
 }
 
 /**

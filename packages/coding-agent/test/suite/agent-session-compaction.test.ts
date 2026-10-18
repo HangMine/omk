@@ -397,6 +397,209 @@ describe("AgentSession compaction characterization", () => {
 		expect(harness.sessionManager.getEntries().some((entry) => entry.type === "compaction")).toBe(false);
 	});
 
+	it("retries a reasoning-exhausted summary once without reasoning and commits the retry", async () => {
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			models: [{ id: "faux-reasoning", reasoning: true }],
+			settings: { compaction: { enabled: true, reserveTokens: 8192, keepRecentTokens: 1 } },
+		});
+		harnesses.push(harness);
+		harness.session.setThinkingLevel("max");
+		seedCompactableSession(harness);
+		const reasoningLevels: Array<string | undefined> = [];
+		let calls = 0;
+		harness.session.agent.streamFn = (model, _context, options) => {
+			reasoningLevels.push(options?.reasoning);
+			calls++;
+			const stream = createAssistantMessageEventStream();
+			queueMicrotask(() => {
+				if (calls === 1) {
+					const message: AssistantMessage = {
+						...fauxAssistantMessage(""),
+						content: [{ type: "thinking", thinking: "planning the summary" }],
+						api: model.api,
+						provider: model.provider,
+						model: model.id,
+						usage: createUsage(6553),
+						stopReason: "length",
+					};
+					stream.push({ type: "done", reason: "length", message });
+					return;
+				}
+				const message: AssistantMessage = {
+					...fauxAssistantMessage("summary after the reasoning fallback"),
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
+					usage: createUsage(10),
+					stopReason: "stop",
+				};
+				stream.push({ type: "done", reason: "stop", message });
+			});
+			return stream;
+		};
+
+		const result = await harness.session.compact();
+
+		expect(result.summary).toContain("summary after the reasoning fallback");
+		expect(calls).toBe(2);
+		expect(reasoningLevels).toHaveLength(2);
+		expect(reasoningLevels[0]).toBeDefined();
+		expect(reasoningLevels[1]).toBeUndefined();
+		expect(harness.sessionManager.getEntries().some((entry) => entry.type === "compaction")).toBe(true);
+	});
+
+	it("lowers effort instead of disabling thinking when the model rejects disabled", async () => {
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			models: [{ id: "faux-reasoning", reasoning: true }],
+			settings: { compaction: { enabled: true, reserveTokens: 8192, keepRecentTokens: 1 } },
+		});
+		harnesses.push(harness);
+		harness.session.setThinkingLevel("max");
+		seedCompactableSession(harness);
+		Object.assign(harness.getModel(), {
+			thinkingLevelMap: {
+				off: null,
+				minimal: null,
+				low: "low",
+				medium: "medium",
+				high: "high",
+				xhigh: "xhigh",
+				max: "max",
+			},
+			compat: { supportsDisabledThinking: false },
+		});
+		const reasoningLevels: Array<string | undefined> = [];
+		const maxTokens: number[] = [];
+		let calls = 0;
+		harness.session.agent.streamFn = (model, _context, options) => {
+			reasoningLevels.push(options?.reasoning);
+			maxTokens.push(options?.maxTokens ?? 0);
+			calls++;
+			const stream = createAssistantMessageEventStream();
+			queueMicrotask(() => {
+				if (calls === 1) {
+					const message: AssistantMessage = {
+						...fauxAssistantMessage(""),
+						content: [{ type: "thinking", thinking: "planning the summary" }],
+						api: model.api,
+						provider: model.provider,
+						model: model.id,
+						usage: createUsage(6553),
+						stopReason: "length",
+					};
+					stream.push({ type: "done", reason: "length", message });
+					return;
+				}
+				const message: AssistantMessage = {
+					...fauxAssistantMessage("summary after the lower-effort fallback"),
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
+					usage: createUsage(10),
+					stopReason: "stop",
+				};
+				stream.push({ type: "done", reason: "stop", message });
+			});
+			return stream;
+		};
+
+		const result = await harness.session.compact();
+
+		expect(result.summary).toContain("summary after the lower-effort fallback");
+		expect(calls).toBe(2);
+		expect(reasoningLevels[1]).toBe("low");
+		expect(maxTokens[1]).toBeGreaterThan(maxTokens[0]);
+	});
+
+	it("auto-compaction retries a reasoning-exhausted summary and commits the retry", async () => {
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			models: [{ id: "faux-reasoning", reasoning: true }],
+			settings: { compaction: { enabled: true, reserveTokens: 8192, keepRecentTokens: 1 } },
+		});
+		harnesses.push(harness);
+		harness.session.setThinkingLevel("max");
+		seedCompactableSession(harness);
+		let calls = 0;
+		harness.session.agent.streamFn = (model) => {
+			calls++;
+			const stream = createAssistantMessageEventStream();
+			queueMicrotask(() => {
+				if (calls === 1) {
+					const message: AssistantMessage = {
+						...fauxAssistantMessage(""),
+						content: [{ type: "thinking", thinking: "planning the auto summary" }],
+						api: model.api,
+						provider: model.provider,
+						model: model.id,
+						usage: createUsage(6553),
+						stopReason: "length",
+					};
+					stream.push({ type: "done", reason: "length", message });
+					return;
+				}
+				const message: AssistantMessage = {
+					...fauxAssistantMessage("auto summary after the reasoning fallback"),
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
+					usage: createUsage(10),
+					stopReason: "stop",
+				};
+				stream.push({ type: "done", reason: "stop", message });
+			});
+			return stream;
+		};
+
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		await sessionInternals._runAutoCompaction("threshold", false);
+
+		const end = harness.eventsOfType("compaction_end").at(-1);
+		expect(end?.result?.summary).toContain("auto summary after the reasoning fallback");
+		expect(end?.errorMessage).toBeUndefined();
+		expect(calls).toBe(2);
+		const compaction = harness.sessionManager.getEntries().find((entry) => entry.type === "compaction");
+		expect(compaction?.type).toBe("compaction");
+		expect(compaction?.type === "compaction" ? compaction.summary : "").toContain(
+			"auto summary after the reasoning fallback",
+		);
+	});
+
+	it("does not commit an empty summary when the no-reasoning retry also exhausts the cap", async () => {
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			models: [{ id: "faux-reasoning", reasoning: true }],
+			settings: { compaction: { enabled: true, reserveTokens: 8192, keepRecentTokens: 1 } },
+		});
+		harnesses.push(harness);
+		harness.session.setThinkingLevel("max");
+		seedCompactableSession(harness);
+		let calls = 0;
+		harness.session.agent.streamFn = (model) => {
+			calls++;
+			const stream = createAssistantMessageEventStream();
+			queueMicrotask(() => {
+				const message: AssistantMessage = {
+					...fauxAssistantMessage(""),
+					content: [{ type: "thinking", thinking: "still planning" }],
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
+					usage: createUsage(6553),
+					stopReason: "length",
+				};
+				stream.push({ type: "done", reason: "length", message });
+			});
+			return stream;
+		};
+
+		await expect(harness.session.compact()).rejects.toThrow(/output limit before writing a summary/);
+		expect(calls).toBe(2);
+		expect(harness.sessionManager.getEntries().some((entry) => entry.type === "compaction")).toBe(false);
+	});
+
 	// pi-landstrip persists background-task snapshots through appendEntry while the
 	// summary streams; that used to discard every compaction with revision_mismatch.
 	function appendTaskSnapshotDuringSummary(harness: Harness): () => string | undefined {

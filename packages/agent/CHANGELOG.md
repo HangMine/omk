@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Harness compaction retries a reasoning-exhausted summary once at the model's lowest supported effort with a 2,048-token text reserve. Models that accept `thinking.type.disabled` still retry without reasoning. A second empty `length` result is returned unchanged so the caller can reject it.
+
 - Removed the unreferenced internal module `tool-dag-read-aware.ts`. The scheduler's dependency index in `tool-dag-index.ts` already applies the same read/read no-conflict rule, and the module was never exported from the package entry, so no import can break.
 
 ## [1.4.3] - 2026-10-17

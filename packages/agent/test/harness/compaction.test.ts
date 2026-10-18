@@ -2,6 +2,7 @@ import {
 	type AssistantMessage,
 	type FauxProviderRegistration,
 	fauxAssistantMessage,
+	fauxThinking,
 	type Message,
 	type Model,
 	registerFauxProvider,
@@ -595,6 +596,66 @@ describe("harness compaction", () => {
 		abortedFaux.setResponses([fauxAssistantMessage("", { stopReason: "aborted", errorMessage: "stopped" })]);
 		const abortedResult = await generateSummary(messages, abortedModel, 2000, "test-key");
 		expect(abortedResult).toMatchObject({ ok: false, error: { code: "aborted", message: "stopped" } });
+	});
+
+	it("retries a reasoning-exhausted summary once without reasoning", async () => {
+		const messages: AgentMessage[] = [createUserMessage("Summarize this.")];
+		const seenOptions: Array<Record<string, unknown> | undefined> = [];
+		const { faux, model } = createFauxModel(true);
+		faux.setResponses([
+			(_context, options) => {
+				seenOptions.push(options as Record<string, unknown> | undefined);
+				return fauxAssistantMessage(fauxThinking("thinking only"), { stopReason: "length" });
+			},
+			(_context, options) => {
+				seenOptions.push(options as Record<string, unknown> | undefined);
+				return fauxAssistantMessage("## Goal\nRetried summary");
+			},
+		]);
+
+		const summary = getOrThrow(
+			await generateSummary(messages, model, 2000, "test-key", undefined, undefined, undefined, undefined, "max"),
+		);
+
+		expect(summary).toContain("Retried summary");
+		expect(seenOptions).toHaveLength(2);
+		expect(seenOptions[0]).toMatchObject({ reasoning: "max" });
+		expect(seenOptions[1]).not.toHaveProperty("reasoning");
+	});
+
+	it("lowers effort and raises the cap when the model rejects disabled thinking", async () => {
+		const messages: AgentMessage[] = [createUserMessage("Summarize this.")];
+		const seenOptions: Array<Record<string, unknown> | undefined> = [];
+		const { faux, model } = createFauxModel(true);
+		model.thinkingLevelMap = {
+			off: null,
+			minimal: null,
+			low: "low",
+			medium: "medium",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+		};
+		Object.assign(model, { compat: { supportsDisabledThinking: false } });
+		faux.setResponses([
+			(_context, options) => {
+				seenOptions.push(options as Record<string, unknown> | undefined);
+				return fauxAssistantMessage(fauxThinking("thinking only"), { stopReason: "length" });
+			},
+			(_context, options) => {
+				seenOptions.push(options as Record<string, unknown> | undefined);
+				return fauxAssistantMessage("## Goal\nLower-effort summary");
+			},
+		]);
+
+		const summary = getOrThrow(
+			await generateSummary(messages, model, 2000, "test-key", undefined, undefined, undefined, undefined, "max"),
+		);
+
+		expect(summary).toContain("Lower-effort summary");
+		expect(seenOptions).toHaveLength(2);
+		expect(seenOptions[1]).toMatchObject({ reasoning: "low" });
+		expect(seenOptions[1]?.maxTokens).toBeGreaterThan(seenOptions[0]?.maxTokens as number);
 	});
 
 	it("clamps compaction summary maxTokens to the model output cap", async () => {

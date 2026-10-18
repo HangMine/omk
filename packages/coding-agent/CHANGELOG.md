@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Auto-compaction and branch summarization retry once when a reasoning model spends the whole output budget on thinking and returns no text. The retry uses the model's lowest supported effort and adds a 2,048-token text reserve; models that accept an explicit disable still retry without reasoning. If the retry also has no text, compaction still fails instead of committing an empty summary. The previous retry always deleted reasoning, which Claude Opus 5.5 rejects with HTTP 400.
+
 - A provider `invalid_request_error` that is not an orphan `tool_call_id` is no longer auto-retried, and the session termination card classifies it as a configuration fault. The previous retry gate treated every `invalid_request_error` as transient, so a rejected parameter was resent until the retry budget ran out, and the card then pointed at tool/message sanitizing. Orphan tool ids still sanitize and retry. The recovery text says to change the rejected parameter; `/new` does not change it.
 
 - `omk context bootstrap|status|refresh|show|verify` maintains a bounded, source-backed Project Context index with incremental metadata refresh, stale detection and selective expansion. Bootstrapped projects supply compact provider-neutral evidence at context discovery, without importing a mission state machine or weakening AGENTS precedence. See [Project Context](docs/project-context.md).

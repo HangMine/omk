@@ -5,10 +5,10 @@ import type {
 	Model,
 	RetryCallbacks,
 	RetryPolicy,
+	SimpleStreamOptions,
 	TextContent,
 	Usage,
 } from "omk-ai";
-import { completeSimple, retryAssistantCall } from "omk-ai";
 import type { AgentMessage, ThinkingLevel } from "../../types.ts";
 import {
 	convertToLlm,
@@ -24,6 +24,7 @@ import {
 	TURN_PREFIX_SUMMARIZATION_PROMPT,
 	UPDATE_SUMMARIZATION_PROMPT,
 } from "./summarization-prompts.ts";
+import { requestSummaryWithFallback } from "./summary-fallback.ts";
 import {
 	computeFileLists,
 	createFileOps,
@@ -486,18 +487,15 @@ export async function generateSummary(
 		},
 	];
 
-	const completionOptions =
+	const completionOptions: SimpleStreamOptions =
 		model.reasoning && thinkingLevel && thinkingLevel !== "off"
 			? { maxTokens, signal, apiKey, headers, reasoning: thinkingLevel }
 			: { maxTokens, signal, apiKey, headers };
 
-	const response = await retryAssistantCall(
-		() =>
-			completeSimple(
-				model,
-				{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
-				completionOptions,
-			),
+	const response = await requestSummaryWithFallback(
+		model,
+		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
+		completionOptions,
 		retryOptions?.retry,
 		signal,
 		retryOptions?.callbacks,
@@ -788,15 +786,12 @@ async function generateTurnPrefixSummary(
 		},
 	];
 
-	const response = await retryAssistantCall(
-		() =>
-			completeSimple(
-				model,
-				{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
-				model.reasoning && thinkingLevel && thinkingLevel !== "off"
-					? { maxTokens, signal, apiKey, headers, reasoning: thinkingLevel }
-					: { maxTokens, signal, apiKey, headers },
-			),
+	const response = await requestSummaryWithFallback(
+		model,
+		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
+		model.reasoning && thinkingLevel && thinkingLevel !== "off"
+			? { maxTokens, signal, apiKey, headers, reasoning: thinkingLevel }
+			: { maxTokens, signal, apiKey, headers },
 		retryOptions?.retry,
 		signal,
 		retryOptions?.callbacks,
