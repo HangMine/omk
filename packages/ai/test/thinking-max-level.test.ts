@@ -78,6 +78,10 @@ describe("max thinking level", () => {
 			if (provider === "openrouter" || provider === "cursor" || provider === "devin" || provider === "workbuddy")
 				continue;
 			for (const model of Object.values(models)) {
+				// A non-reasoning route has no effort levels to map. Experiential Labs'
+				// GLM-5.2 is one: its gateway surface rejects reasoning_effort even
+				// though the public route catalogue advertises upstream efforts.
+				if (!model.reasoning) continue;
 				// Mirrors isGlm5ReasoningEffortModel() in scripts/generate-models.ts: GLM-5.2 and later.
 				const glmMinorVersion = /glm-?5[.-]?p?(\d+)/i.exec(model.id);
 				if (glmMinorVersion !== null && Number(glmMinorVersion[1]) >= 2) {

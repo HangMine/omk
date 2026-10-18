@@ -149,6 +149,7 @@ ${chalk.bold("Environment Variables:")}
   AZURE_OPENAI_API_VERSION         - Azure OpenAI API version (default: v1)
   AZURE_OPENAI_DEPLOYMENT_NAME_MAP - Azure OpenAI model=deployment map (comma-separated)
   DEEPSEEK_API_KEY                 - DeepSeek API key
+  EXPLABS_API_KEY                  - Experiential Labs API key (falls back to EXPERIENTIAL_API_KEY)
   DEVIN_API_KEY                    - Devin CLI subscription session token (or /login devin)
   NVIDIA_API_KEY                   - NVIDIA NIM API key
   GEMINI_API_KEY                   - Google Gemini API key

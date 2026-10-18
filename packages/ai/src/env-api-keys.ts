@@ -107,6 +107,12 @@ function getApiKeyEnvVars(provider: string): readonly string[] | undefined {
 		return ["META_API_KEY", "META_MODEL_API_KEY", "MODEL_API_KEY"];
 	}
 
+	// The platform's Python examples use EXPLABS_API_KEY; its TypeSafe guide uses
+	// EXPERIENTIAL_API_KEY. Accept both, with the documented Python name first.
+	if (provider === "experientiallabs") {
+		return ["EXPLABS_API_KEY", "EXPERIENTIAL_API_KEY"];
+	}
+
 	const envMap: Record<string, string> = {
 		"ant-ling": "ANT_LING_API_KEY",
 		openai: "OPENAI_API_KEY",

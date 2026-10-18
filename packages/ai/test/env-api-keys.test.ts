@@ -6,6 +6,8 @@ const originalGhToken = process.env.GH_TOKEN;
 const originalGitHubToken = process.env.GITHUB_TOKEN;
 const originalZaiCodingCnApiKey = process.env.ZAI_CODING_CN_API_KEY;
 const originalZylooApiKey = process.env.ZYLOO_API_KEY;
+const originalExplabsApiKey = process.env.EXPLABS_API_KEY;
+const originalExperientialApiKey = process.env.EXPERIENTIAL_API_KEY;
 const originalMetaApiKey = process.env.META_API_KEY;
 const originalMetaModelApiKey = process.env.META_MODEL_API_KEY;
 const originalModelApiKey = process.env.MODEL_API_KEY;
@@ -39,6 +41,18 @@ afterEach(() => {
 		delete process.env.ZYLOO_API_KEY;
 	} else {
 		process.env.ZYLOO_API_KEY = originalZylooApiKey;
+	}
+
+	if (originalExplabsApiKey === undefined) {
+		delete process.env.EXPLABS_API_KEY;
+	} else {
+		process.env.EXPLABS_API_KEY = originalExplabsApiKey;
+	}
+
+	if (originalExperientialApiKey === undefined) {
+		delete process.env.EXPERIENTIAL_API_KEY;
+	} else {
+		process.env.EXPERIENTIAL_API_KEY = originalExperientialApiKey;
 	}
 
 	if (originalMetaApiKey === undefined) {
@@ -91,6 +105,20 @@ describe("environment API keys", () => {
 
 		expect(findEnvKeys("zyloo")).toEqual(["ZYLOO_API_KEY"]);
 		expect(getEnvApiKey("zyloo")).toBe("zyloo-token");
+	});
+
+	it("resolves Experiential Labs credentials from EXPLABS_API_KEY, then EXPERIENTIAL_API_KEY", () => {
+		delete process.env.EXPLABS_API_KEY;
+		delete process.env.EXPERIENTIAL_API_KEY;
+		process.env.EXPERIENTIAL_API_KEY = "experiential-token";
+
+		expect(findEnvKeys("experientiallabs")).toEqual(["EXPERIENTIAL_API_KEY"]);
+		expect(getEnvApiKey("experientiallabs")).toBe("experiential-token");
+
+		process.env.EXPLABS_API_KEY = "explabs-token";
+
+		expect(findEnvKeys("experientiallabs")).toEqual(["EXPLABS_API_KEY", "EXPERIENTIAL_API_KEY"]);
+		expect(getEnvApiKey("experientiallabs")).toBe("explabs-token");
 	});
 
 	// META_API_KEY is the name the Muse Code CLI onboarding sets, so a Muse Code user

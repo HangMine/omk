@@ -48,6 +48,7 @@ export type KnownProvider =
 	| "nvidia"
 	| "deepseek"
 	| "devin"
+	| "experientiallabs"
 	| "workbuddy"
 	| "cursor"
 	| "meta"

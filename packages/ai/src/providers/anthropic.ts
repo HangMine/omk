@@ -169,8 +169,8 @@ const INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14";
 function getAnthropicCompat(
 	model: Model<"anthropic-messages">,
 ): Required<Omit<AnthropicMessagesCompat, "forceAdaptiveThinking">> {
-	// Fable rejects `thinking.type.disabled`; every other Anthropic model accepts it.
-	const rejectsDisabledThinking = /(^|[/.])claude-fable-/.test(model.id);
+	// Fable and Opus 5.5 reject `thinking.type.disabled`; every other Anthropic model accepts it.
+	const rejectsDisabledThinking = /(^|[/.])claude-(?:fable-|opus-5(?:\.5|-5)(?:[^\d]|$))/.test(model.id);
 	// Auto-detect session affinity and cache control support from provider
 	const isFireworks = model.provider === "fireworks";
 	const isCloudflareAiGatewayAnthropic =

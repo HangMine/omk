@@ -145,6 +145,13 @@ describe("Anthropic thinking disable payload", () => {
 		},
 	);
 
+	it("uses adaptive low effort for Claude Opus 5.5 when reasoning is enabled", async () => {
+		const payload = await capturePayload(getModel("anthropic", "claude-opus-5-5"), { reasoning: "low" });
+
+		expect(payload.thinking).toEqual({ type: "adaptive", display: "summarized" });
+		expect(payload.output_config).toEqual({ effort: "low" });
+	});
+
 	it("still sends adaptive thinking for Fable when reasoning is enabled", async () => {
 		const payload = await capturePayload(getModel("anthropic", "claude-fable-5"), { reasoning: "medium" });
 

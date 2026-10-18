@@ -5,13 +5,14 @@ export const DEEPSEEK_COMPLETIONS_COMPAT = {
 	thinkingFormat: "deepseek",
 } as const satisfies OpenAICompletionsCompat;
 
-/** Native IDs from https://api-docs.deepseek.com/quick_start/pricing (2026-09-10).
+/** Native IDs from https://api-docs.deepseek.com/quick_start/pricing (2026-10-17).
+ * The API keeps `deepseek-flash` as the model name while serving DeepSeek-V4.1-Flash-1017.
  * Static cost uses peak rates; the numeric model schema cannot express time windows.
  */
 export function deepSeekNativeModels(): Model<"openai-completions">[] {
 	const flash: Model<"openai-completions"> = {
 		id: "deepseek-flash",
-		name: "DeepSeek V4.1 Flash",
+		name: "DeepSeek V4.1 Flash 1017",
 		api: "openai-completions",
 		baseUrl: "https://api.deepseek.com",
 		provider: "deepseek",
@@ -27,7 +28,7 @@ export function deepSeekNativeModels(): Model<"openai-completions">[] {
 		{
 			...flash,
 			id: "deepseek-v4-flash",
-			name: "DeepSeek V4.1 Flash (legacy alias)",
+			name: "DeepSeek V4.1 Flash 1017 (legacy alias)",
 			cost: { ...flash.cost },
 			compat: { ...flash.compat },
 		},

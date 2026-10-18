@@ -19,6 +19,7 @@ import type {
 	OpenAIResponsesCompat,
 } from "../src/types.ts";
 import { DEEPSEEK_COMPLETIONS_COMPAT, deepSeekNativeModels } from "./catalog-deepseek.ts";
+import { fetchExperientialModels } from "./catalog-experiential.ts";
 import { cursorModels } from "./catalog-cursor.ts";
 import { devinModels } from "./catalog-devin.ts";
 import { workbuddyModels } from "./catalog-workbuddy.ts";
@@ -1765,6 +1766,15 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 }
 
 async function generateModels() {
+	if (process.argv.includes("--experiential-only")) {
+		const experientialModels = await fetchExperientialModels();
+		const preserved: Model<Api>[] = Object.values(MODELS).flatMap((models) => Object.values(models));
+		writeModelCatalog([
+			...preserved.filter((model) => model.provider !== "experientiallabs"),
+			...experientialModels,
+		]);
+		return;
+	}
 	if (process.argv.includes("--opencode-go-only")) {
 		const goModels = await fetchOpenCodeGoModels();
 		const preserved: Model<Api>[] = Object.values(MODELS).flatMap((models) => Object.values(models));
@@ -1797,6 +1807,7 @@ async function generateModels() {
 	const aiGatewayModels = await fetchAiGatewayModels();
 	const zylooModels = await fetchZylooModels();
 	const openCodeGoModels = await fetchOpenCodeGoModels();
+	const experientialModels = await fetchExperientialModels();
 
 	// Combine models (models.dev has priority)
 	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...zylooModels].filter(
@@ -2717,7 +2728,13 @@ async function generateModels() {
 	// "Fable exposes xhigh/max" cannot widen a `claude-fable-5-1-high` lane. The --devin-only and
 	// --cursor-only fast paths already bypass those passes; a full run must match them.
 	// Go uses its own route-declared metadata, unaffected by family-wide guesses.
-	allModels.push(...openCodeGoModels, ...devinModels(), ...cursorModels(), ...workbuddyModels());
+	allModels.push(
+		...openCodeGoModels,
+		...devinModels(),
+		...cursorModels(),
+		...workbuddyModels(),
+		...experientialModels,
+	);
 
 	writeModelCatalog(allModels);
 }

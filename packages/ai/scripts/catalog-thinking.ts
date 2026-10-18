@@ -173,7 +173,8 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 			xhigh: "xhigh",
 			max: "max",
 		};
-		if (model.api === "anthropic-messages") model.compat = { ...model.compat, forceAdaptiveThinking: true };
+		if (model.api === "anthropic-messages")
+			model.compat = { ...model.compat, forceAdaptiveThinking: true, supportsDisabledThinking: false };
 	}
 	// gemini-4-argon (2026-10-13) keeps the 3.7/3.8 Flash contract: Google's thinking doc
 	// lists it On (medium) with low/medium/high only, so there is no real off level.

@@ -118,6 +118,7 @@ describe("Muse Spark thinking levels", () => {
 	describe("registry coverage", () => {
 		it("keeps gateway and version-specific Muse Spark effort ceilings", () => {
 			const unmapped = museSparkModels()
+				.filter(({ model }) => model.reasoning)
 				.filter(({ model }) => EFFORT_CARRYING_APIS.has(model.api))
 				.filter(({ provider, model }) => {
 					if (provider !== "openrouter") return model.thinkingLevelMap?.max !== "xhigh";
@@ -134,7 +135,7 @@ describe("Muse Spark thinking levels", () => {
 					.filter(({ model }) => EFFORT_CARRYING_APIS.has(model.api))
 					.map(({ provider }) => provider),
 			);
-			expect([...providers].sort()).toEqual(["meta", "opencode", "opencode-go", "openrouter"]);
+			expect([...providers].sort()).toEqual(["experientiallabs", "meta", "opencode", "opencode-go", "openrouter"]);
 		});
 
 		it("leaves the anthropic-messages variants unmapped, since that path ignores the map", () => {

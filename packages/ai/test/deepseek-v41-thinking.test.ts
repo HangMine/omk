@@ -25,6 +25,32 @@ describe("DeepSeek V4.1 Flash thinking", () => {
 		if (provider === "vercel-ai-gateway") expect(model.compat).toMatchObject({ forceAdaptiveThinking: true });
 	});
 
+	it("keeps the OpenRouter base snapshot distinct from the 1017 route", () => {
+		const base = getModels("openrouter").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash");
+		const snapshot = getModels("openrouter").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash-1017");
+		expect(base).toMatchObject({
+			maxTokens: 943718,
+			cost: { input: 0.0648, output: 0.144, cacheRead: 0.0016 },
+		});
+		expect(snapshot).toMatchObject({
+			maxTokens: 393216,
+			cost: { input: 0.15, output: 0.6, cacheRead: 0.003 },
+		});
+	});
+
+	it("keeps the Vercel base route distinct from the 1017 route", () => {
+		const base = getModels("vercel-ai-gateway").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash");
+		const snapshot = getModels("vercel-ai-gateway").find((entry) => entry.id === "deepseek/deepseek-v4.1-flash-1017");
+		expect(base).toMatchObject({
+			maxTokens: 32768,
+			cost: { input: 0.3, output: 1.2, cacheRead: 0.007 },
+		});
+		expect(snapshot).toMatchObject({
+			maxTokens: 384000,
+			cost: { input: 0.15, output: 0.6, cacheRead: 0.003 },
+		});
+	});
+
 	it.each(routes.filter((route) => route.provider === "openrouter"))(
 		"sends max through the OpenRouter reasoning field for $id",
 		async ({ id }) => {

@@ -1,6 +1,24 @@
 # 모델 목록·thinking 갱신 기록
 
-확인일: 2026-10-17. 생성 파일은 손으로 수정하지 않고 생성기로 갱신한다.
+확인일: 2026-10-18. 생성 파일은 손으로 수정하지 않고 생성기로 갱신한다.
+
+## 2026-10-18 Experiential Labs
+
+[모델 페이지](https://platform.experientiallabs.ai/models)와
+[공개 카탈로그 API](https://api.experientiallabs.ai/api/models), 인증이 필요한
+[OpenAI 호환 모델 목록](https://api.experientiallabs.ai/v1/models)을 대조했다. 전체 952개
+행 중 텍스트 출력, 도구 지원, 활성·라우팅 가능한 경로, `/v1/models` 호출 가능 조건을
+모두 만족하는 235개를 `experientiallabs` 공급자로 추가했다. Reasoning은 공개 라우트의
+상류 능력이 아니라 실제로 호출하는 `/v1/models` 표면을 기준으로 한다. 150개 모델이
+`thinkingLevelMap`을 가지며, `none`은 `off`로 매핑하고 선언되지 않은 단계는 `null`로
+숨겼다. 대표적으로 `glm-5.2`는 공개 라우트가 effort를 광고하지만 게이트웨이가
+`reasoning_effort`를 400으로 거부하므로 provider-default로 두고, `gpt-6-sol`과
+`gpt-6-luna`는 `/v1/models`가 선언한 `none/low/medium/high/xhigh/max`를 노출한다.
+
+전송 경로는 OpenAI 호환 `https://api.experientiallabs.ai/v1`이고, 키는
+`EXPLABS_API_KEY`를 먼저 읽고 없으면 `EXPERIENTIAL_API_KEY`를 읽는다. 이미지 입력은
+text/image만 표현하는 OMK 모델 스키마에 맞춰 반영했고, PDF·비디오·오디오 입력,
+임베딩·이미지·오디오 출력, 도구 미지원, 라우팅 불가 행은 텍스트 카탈로그에서 제외했다.
 
 ## 2026-10-17 OpenCode Go 카탈로그와 추론 제어
 

@@ -60,7 +60,6 @@ request instead of shrinking the budget. See
 [setup, protocol sources, and live-verification limits](../coding-agent/docs/providers.md#devin-cli)
 and the [SWE-2 harness](../coding-agent/docs/devin-harness.md).
 
-
 - **OpenAI**
 - **Ant Ling**
 - **Azure OpenAI (Responses)**
@@ -1153,6 +1152,7 @@ In Node.js environments, you can set environment variables to avoid passing API 
 | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` (e.g. `https://{resource}.openai.azure.com`) or `AZURE_OPENAI_RESOURCE_NAME`. Supports `*.openai.azure.com` and `*.cognitiveservices.azure.com`; root endpoints auto-normalize to `/openai/v1`. Optional: `AZURE_OPENAI_API_VERSION` (default `v1`), `AZURE_OPENAI_DEPLOYMENT_NAME_MAP`. |
 | Anthropic | `ANTHROPIC_API_KEY` or `ANTHROPIC_OAUTH_TOKEN` |
 | DeepSeek | `DEEPSEEK_API_KEY` |
+| Experiential Labs | `EXPLABS_API_KEY` (falls back to `EXPERIENTIAL_API_KEY`) |
 | NVIDIA NIM | `NVIDIA_API_KEY` |
 | Google | `GEMINI_API_KEY` |
 | Vertex AI | `GOOGLE_CLOUD_API_KEY` or `GOOGLE_CLOUD_PROJECT` (or `GCLOUD_PROJECT`) + `GOOGLE_CLOUD_LOCATION` + ADC |

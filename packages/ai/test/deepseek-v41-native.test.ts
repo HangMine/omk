@@ -8,6 +8,8 @@ afterEach(() => vi.unstubAllGlobals());
 // OpenCode Zen and Go front the same chat/completions gateway for this model
 // (https://opencode.ai/docs/zen/ and https://opencode.ai/docs/go/), so both carry
 // the native V4.1 contract: thinking toggle, low/high/max effort, max_tokens cap.
+// The direct DeepSeek API keeps `deepseek-flash` as its model name while serving
+// DeepSeek-V4.1-Flash-1017; the gateway routes expose only the undated id.
 const routes = [
 	{ provider: "deepseek", modelId: "deepseek-flash" },
 	{ provider: "opencode", modelId: "deepseek-v4.1-flash" },
@@ -22,7 +24,7 @@ describe("DeepSeek V4.1 Flash native model routes", () => {
 			expect(model).toBeDefined();
 			if (!model) throw new Error("Missing canonical DeepSeek Flash route");
 			expect(model).toMatchObject({
-				name: "DeepSeek V4.1 Flash",
+				name: provider === "deepseek" ? "DeepSeek V4.1 Flash 1017" : "DeepSeek V4.1 Flash",
 				api: "openai-completions",
 				input: ["text", "image"],
 				contextWindow: 1000000,
@@ -72,7 +74,7 @@ describe("DeepSeek V4.1 Flash native model routes", () => {
 	it("retains the old native Flash ID as a documented V4.1 compatibility alias", () => {
 		const alias = getModels("deepseek").find((entry) => entry.id === "deepseek-v4-flash");
 		expect(alias).toMatchObject({
-			name: "DeepSeek V4.1 Flash (legacy alias)",
+			name: "DeepSeek V4.1 Flash 1017 (legacy alias)",
 			input: ["text", "image"],
 			cost: { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 },
 		});

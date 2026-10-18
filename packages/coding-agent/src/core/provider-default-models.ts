@@ -11,6 +11,7 @@ const builtInDefaultModelPerProvider = {
 	nvidia: "nvidia/nemotron-3-super-120b-a12b",
 	deepseek: "deepseek-v4-pro",
 	devin: "swe-2",
+	experientiallabs: "claude-sonnet-5",
 	meta: "muse-spark-1.3",
 	google: "gemini-3.1-pro-preview",
 	"google-vertex": "gemini-3.1-pro-preview",
