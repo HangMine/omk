@@ -455,7 +455,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.0](.github/RELEASE_NOTES_v1.5.0.md)
+- [Release notes for v1.5.1](.github/RELEASE_NOTES_v1.5.1.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -546,6 +546,21 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.1
+
+### Fixed
+
+- Cloudflare `520` through `527` gateway responses and Explabs/OpenRouter free-limit quota bodies are classified as retryable provider failures. `Turn prefix summarization failed: 429 Go usage limit exceeded` is recognized through the quota classifier.
+- Quota exhaustion can now fail over to an authenticated `providerResilience.failoverCandidates` entry even when `--model` or `--provider` pinned the current model. Safety-stop failover remains pin-gated. Disable the new behavior with `providerResilience.autoFailoverOnQuotaExhaustion: false`.
+
+### Changed
+
+- The default `retry.maxRetries` is now `5`, giving 2s, 4s, 8s, 16s, and 32s backoff instead of stopping after 2s, 4s, and 8s.
+
+## [Unreleased]
+
+Release notes live in [RELEASE_NOTES_v1.5.1.md](.github/RELEASE_NOTES_v1.5.1.md).
+
 ## Release v1.5.0
 
 - Auto-compaction and branch summarization retry once when a reasoning model spends the whole output budget on thinking and returns no text. The retry uses the model's lowest supported effort and adds a 2,048-token text reserve; models that accept an explicit disable still retry without reasoning. If the retry also has no text, compaction still fails instead of committing an empty summary. The previous retry always deleted reasoning, which Claude Opus 5.5 rejects with HTTP 400.
@@ -582,15 +597,6 @@ Release notes live in [RELEASE_NOTES_v1.5.0.md](.github/RELEASE_NOTES_v1.5.0.md)
 - Stop context-overflow recovery after two staged compact-and-retry attempts without progress, including when one tool result exceeds the context window. Diagnostics identify the largest oversized result; print mode reports the failure on stderr and exits with status 1. Successful in-window text replies and consumed tool results reset the recovery counter. ([#141](https://github.com/dmae97/omk/pull/141))
 
 Release notes live in [RELEASE_NOTES_v1.4.3.md](.github/RELEASE_NOTES_v1.4.3.md).
-
-## Release v1.4.2
-
-### Fixed
-
-- Model selection with the context budget enabled scores each inactive skill once per prompt rebuild instead of repeating relevance calculations inside the sort comparator. Ranking, discovery-order ties, active/hidden filtering and query freshness are preserved. Regression tests cover the real model-picker callback and `AgentSession.setModel`; extension setup hooks remain awaited.
-- The agent harness exposes the optional before-compaction cancellation reason through `SessionBeforeCompactResult.reason`.
-
-Release notes live in [RELEASE_NOTES_v1.4.2.md](.github/RELEASE_NOTES_v1.4.2.md).
 
 <!-- releases:end -->
 

@@ -216,8 +216,7 @@ import {
 	resolveProviderResilience,
 	sameModelRouteCandidates,
 	shouldEjectStickySafetyModel,
-	shouldHonorQuotaFailover,
-	shouldHonorSafetyFailover,
+	shouldHonorProviderFailover,
 	stickySafetyBlockMessage,
 } from "./provider-resilience.ts";
 import {
@@ -4933,21 +4932,7 @@ export class AgentSession {
 	private async _maybeFailoverFromSafetyStop(message: AssistantMessage): Promise<string | undefined> {
 		const resilience = resolveProviderResilience(this.settingsManager.getProviderResilienceSettings());
 		const quotaExhausted = isQuotaExhaustionMessage(message.errorMessage);
-		// Quota exhaustion outlives a CLI pin: the pinned route cannot serve the
-		// next request until the billing window resets, so staying on it only ends
-		// the turn. Safety-stop failover stays pin-gated because a pinned model may
-		// be an intentional choice; quota failover can be disabled separately.
-		const failoverAllowed = quotaExhausted
-			? shouldHonorQuotaFailover({
-					autoFailoverOnQuotaExhaustion: resilience.autoFailoverOnQuotaExhaustion,
-				})
-			: shouldHonorSafetyFailover({
-					autoFailoverOnSafetyStop: resilience.autoFailoverOnSafetyStop,
-					modelPinned: this._modelPinned,
-					modelId: this.model?.id,
-					provider: this.model?.provider,
-				});
-		if (!failoverAllowed) {
+		if (!shouldHonorProviderFailover(quotaExhausted, resilience, this._modelPinned, this.model)) {
 			return undefined;
 		}
 		// Fire on safety-stop FPs AND on billing/quota exhaustion: both mean the

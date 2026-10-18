@@ -312,6 +312,26 @@ export function shouldHonorQuotaFailover(options: { readonly autoFailoverOnQuota
 	return options.autoFailoverOnQuotaExhaustion;
 }
 
+/** One gate for both failover triggers; quota ignores the CLI pin by default. */
+export function shouldHonorProviderFailover(
+	quotaExhausted: boolean,
+	resilience: ReturnType<typeof resolveProviderResilience>,
+	modelPinned: boolean,
+	model: { readonly id?: string; readonly provider?: string } | undefined,
+): boolean {
+	if (quotaExhausted) {
+		return shouldHonorQuotaFailover({
+			autoFailoverOnQuotaExhaustion: resilience.autoFailoverOnQuotaExhaustion,
+		});
+	}
+	return shouldHonorSafetyFailover({
+		autoFailoverOnSafetyStop: resilience.autoFailoverOnSafetyStop,
+		modelPinned,
+		modelId: model?.id,
+		provider: model?.provider,
+	});
+}
+
 export function shouldEjectStickySafetyModel(options: {
 	readonly blockStickySafetyModels: boolean;
 	readonly modelPinned: boolean;

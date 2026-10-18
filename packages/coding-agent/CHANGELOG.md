@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.1] - 2026-10-18
+
+### Fixed
+
+- Cloudflare `520` through `527` gateway responses and Explabs/OpenRouter free-limit quota bodies are classified as retryable provider failures. `Turn prefix summarization failed: 429 Go usage limit exceeded` is recognized through the quota classifier.
+- Quota exhaustion can now fail over to an authenticated `providerResilience.failoverCandidates` entry even when `--model` or `--provider` pinned the current model. Safety-stop failover remains pin-gated. Disable the new behavior with `providerResilience.autoFailoverOnQuotaExhaustion: false`.
+
+### Changed
+
+- The default `retry.maxRetries` is now `5`, giving 2s, 4s, 8s, 16s, and 32s backoff instead of stopping after 2s, 4s, and 8s.
+
 ## [Unreleased]
 
 ## [1.5.0] - 2026-10-18
