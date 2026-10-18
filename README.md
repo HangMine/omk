@@ -455,7 +455,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.4.3](.github/RELEASE_NOTES_v1.4.3.md)
+- [Release notes for v1.5.0](.github/RELEASE_NOTES_v1.5.0.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -546,6 +546,26 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.0
+
+- Auto-compaction and branch summarization retry once when a reasoning model spends the whole output budget on thinking and returns no text. The retry uses the model's lowest supported effort and adds a 2,048-token text reserve; models that accept an explicit disable still retry without reasoning. If the retry also has no text, compaction still fails instead of committing an empty summary. The previous retry always deleted reasoning, which Claude Opus 5.5 rejects with HTTP 400.
+
+- A compaction whose summary response ends `aborted` now reports `compaction.aborted` instead of `compaction.failed`.
+
+- A provider `invalid_request_error` that is not an orphan `tool_call_id` is no longer auto-retried, and the session termination card classifies it as a configuration fault. The previous retry gate treated every `invalid_request_error` as transient, so a rejected parameter was resent until the retry budget ran out, and the card then pointed at tool/message sanitizing. Orphan tool ids still sanitize and retry. The recovery text says to change the rejected parameter; `/new` does not change it.
+
+- `omk context bootstrap|status|refresh|show|verify` maintains a bounded, source-backed Project Context index with incremental metadata refresh, stale detection and selective expansion. Bootstrapped projects supply compact provider-neutral evidence at context discovery, without importing a mission state machine or weakening AGENTS precedence. See [Project Context](packages/coding-agent/docs/project-context.md).
+- Width-invariant property tests in `packages/tui` for `visibleWidth`, `truncateToWidth` and `wrapTextWithAnsi`, with `fast-check` 4.9.0 pinned as a devDependency there. Two known defects are recorded as `todo` tests: `truncateToWidth` can return text wider than `maxWidth` when an SGR code splits an emoji + VS16 grapheme, and `visibleWidth` counts a leading zero-width joiner as width.
+- Built-in themes `omk-paper-dark` and `omk-paper-light` (aliases `paper`, `paper-dark`, `paper-light`, `omk-paper`) in the README hero's palette: ink text, secondary and tertiary ink, one vermillion accent, and subdued info, teal, green and ochre for links, code and syntax. Every text role measures 4.5:1 or more and every boundary 3:1 or more against the paper surfaces and common terminal backgrounds, `#1e1e1e` included; three dark values are one step lighter than the web palette to get there. Both carry HTML-export paper surfaces.
+
+- Upstream Pi extension compatibility: the package index now exports `CONFIG_DIR_NAME`, and `ExtensionContext` has `isProjectTrusted()`, which always returns `true` because OMK loads project-local `.omk/` config without a trust gate. Before this, SuPi resolved its config under `~/undefined/agent/supi` and ignored it, and plannotator warned at every session start that the host has no project trust. See [`ctx.isProjectTrusted()`](packages/coding-agent/docs/extensions.md#ctxisprojecttrusted).
+- `omk doctor adaptorch` now reaches AdaptOrch without `ADAPTORCH_API_URL`. The default API origin was `https://api.adaptorch.com`, a host that does not resolve, so the check always failed with `fetch failed`. The default is now `https://adaptorch.com`, where the `/v1` API is served. An explicit `ADAPTORCH_API_URL` still takes precedence.
+- The startup panel no longer shows fixed status values as live state. The control rail, the hero strip and the narrow status line printed `ready`, `active`, `tracking`, `linked`, `pinned` and `DAG:omk-parallel-orchestrator` with no runtime source, most of them in the success color. Status rows now come from one `ControlPlaneViewModel` built from the live session by one adapter, `readControlPlaneSignals`; the pinned status sidebar builds the same view model through the same adapter.
+- Status rows in the control rail and the pinned sidebar, and the startup header's MODEL and THEME values, print session, run-journal, model, theme and file-system text (model id, theme name, cwd, git branch, session name, endpoint host, MCP server names, TODO labels, failure text) as one printable line: escape sequences, control characters and bidi marks are removed and line breaks become spaces. In 1.2.4 the rail's model, cwd, git and TODO rows and the pinned sidebar's cwd, git, session and model rows printed such text as-is; sidebar MCP names were already cleaned.
+- Loaded skills no longer keep every `SKILL.md` file in memory. Frontmatter values such as a skill's `description` were slices of the whole file text, so each kept description held its file alive. With 751 skills installed, the loaded skills held 12.7 MB of heap; the frontmatter block is now copied before parsing, and the same skills hold 1.9 MB. Prompt-template frontmatter is parsed the same way.
+
+Release notes live in [RELEASE_NOTES_v1.5.0.md](.github/RELEASE_NOTES_v1.5.0.md).
+
 ## Release v1.4.3
 
 ### Added
@@ -571,25 +591,6 @@ Release notes live in [RELEASE_NOTES_v1.4.3.md](.github/RELEASE_NOTES_v1.4.3.md)
 - The agent harness exposes the optional before-compaction cancellation reason through `SessionBeforeCompactResult.reason`.
 
 Release notes live in [RELEASE_NOTES_v1.4.2.md](.github/RELEASE_NOTES_v1.4.2.md).
-
-## Release v1.4.1
-
-### Added
-
-- Searchable skill picker via `/skills [query]` and configurable `Alt+S` (`app.skills.select`). Search names and descriptions, preview source/location and explicit-only status, and insert one invocation without submitting or losing text/images. Selection replaces an existing leading skill; cancellation preserves the draft. Uses discovered metadata and existing TUI components, without changing persistent activation or adding dependencies. See [skill picker](packages/coding-agent/docs/skills.md#searchable-skill-picker).
-- Prompt image file attachment via `/attach add <paths>`, `/attach paste` and complete bracketed-paste file drops. Quoted/escaped multi-file paths and local file URIs attach without replacing the question; remote URLs stay unsupported. `/attach` is discoverable in slash completion. Acquisition is bounded and serialized, loading blocks submit, and failed batches retain the existing draft. See [prompt images](packages/coding-agent/docs/usage.md#images-and-screenshots-in-the-prompt).
-
-### Fixed
-
-- RPC validates command envelopes, required fields, enum values and extension UI responses before dispatch. Malformed records no longer crash the process or mutate settings, and errors for unsupported commands preserve their request id. Parse diagnostics omit private input snippets. See [RPC input validation](packages/coding-agent/docs/rpc.md#input-validation).
-- Regression fixtures no longer depend on the checkout path length or real elapsed time when testing compact resource reads and authority-store restart behavior. Runtime rendering, authorization deadlines and the default monotonic clock are unchanged.
-- Repeated screenshots reuse one draft attachment even at count/byte limits; stored bytes are copied from acquisition buffers. Non-vision models, compaction and rejected steering/follow-up submissions preserve text and images. Clear/new-session/stop invalidate pending acquisition, and image-only follow-ups include their image payload.
-- Prompt previews now use small decoded RGBA thumbnails instead of compressed image bytes, preserve aspect ratio, request a repaint on decode completion, and suppress late repaints after disposal. Weakly keyed caches no longer retain every prior screenshot for the process lifetime.
-- Long-session first frames render the live tail plus `terminal.scrollbackSeedScreens` screens of history (default 50, also `OMK_SCROLLBACK_SCREENS`) at component boundaries. Older settled children skip rendering, but still undergo identity and settledness checks. `0` seeds only the live tail; seed changes and height-only resizes rebuild the boundary, and blank or non-finite settings fall back safely. The explicit exit log renders and emits the complete transcript, including virtual history beyond the ordinary repaint budget. Terminal scrollback capacity still limits retained history.
-- Worker trust checks no longer reuse permanent positive Git answers. Later spawns revalidate registration, common repository identity and linked-worktree back-pointers; removed/recreated directories and replaced `.git` pointers receive no inherited grant. Concurrent Git queries remain shared only while in flight. Already-aborted same-project spawns also receive no grant.
-- Skill search removes content-identical aliases and already-offered skills before capping the distinct BM25 pool at 64. Duplicates no longer hide remaining matches or get suggested again under another name; scores, highest-ranked representatives and both ranking modes are preserved. See the [reliability review](packages/coding-agent/docs/reliability-review-20261013.md) for scope, tests and remaining limits.
-
-Release notes live in [RELEASE_NOTES_v1.4.1.md](.github/RELEASE_NOTES_v1.4.1.md).
 
 <!-- releases:end -->
 
