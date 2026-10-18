@@ -107,6 +107,38 @@ describe("isRetryableAssistantError", () => {
 			expect(isRetryableAssistantError({ stopReason: "error", errorMessage } as never)).toBe(true);
 		},
 	);
+	it("retries Cloudflare 520-527 origin errors", () => {
+		// Observed on explabs/deepseek-v4.1-flash-1017 (2026-10-18):
+		// "520 status code (no body)" ended the operation without a retry.
+		expect(
+			isRetryableAssistantError({ stopReason: "error", errorMessage: "520 status code (no body)" } as never),
+		).toBe(true);
+		expect(isRetryableAssistantError({ stopReason: "error", errorMessage: "521 Web server is down" } as never)).toBe(
+			true,
+		);
+		expect(
+			isRetryableAssistantError({
+				stopReason: "error",
+				errorMessage: "500 The gateway request failed.",
+			} as never),
+		).toBe(true);
+	});
+
+	it("does not retry Explabs free-limit quota prefixes", () => {
+		expect(
+			isRetryableAssistantError({
+				stopReason: "error",
+				errorMessage: "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free.",
+			} as never),
+		).toBe(false);
+		expect(
+			isRetryableAssistantError({
+				stopReason: "error",
+				errorMessage: "free_limit_reached: daily allowance spent",
+			} as never),
+		).toBe(false);
+	});
+
 	it("does not retry quota exhaustion text, even wrapped in a retry-delay error", () => {
 		expect(
 			isRetryableAssistantError({

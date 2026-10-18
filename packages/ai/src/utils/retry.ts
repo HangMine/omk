@@ -18,8 +18,17 @@ const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([
 
 	// Generic quota/budget/billing exhaustion. `insufficient_quota` is OpenAI's
 	// quota/billing error code; the other strings cover common gateway wording.
+	// Explabs/OpenRouter document stable `insufficient_quota` message prefixes
+	// (`free_limit_reached`, `model_requires_purchase`, ...); match those too so
+	// a daily free allowance is not retried as if it were a transient 429.
 	"insufficient_quota",
-	"insufficient balance",
+	"insufficient[_ ]balance",
+	"insufficient[_ ]credits",
+	"free[_ -]?limit(?:[_ -]?reached)?",
+	"free_tier_requires_payment",
+	"model_requires_(?:payment|purchase)",
+	"promo_byok_only",
+	"no available platform credits",
 	"out of budget",
 	"quota exceeded",
 	// Codex token-plan wording: "Your token-plan 1-week quota has been exhausted".
@@ -37,7 +46,21 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
 	"502",
 	"503",
 	"504",
+	// Cloudflare origin errors. Observed Explabs/1017 shape:
+	// "520 status code (no body)". 521-527 are the same transient family.
+	"520",
+	"521",
+	"522",
+	"523",
 	"524",
+	"525",
+	"526",
+	"527",
+	"gateway request failed",
+	"gateway overloaded",
+	"gateway draining",
+	"provider stream failed",
+	"all routes failed",
 	"service.?unavailable",
 	"server.?error",
 	"internal.?error",

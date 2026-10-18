@@ -34,6 +34,20 @@ describe("isRetryableAssistantError", () => {
 		expect(isRetryableAssistantError(errorMessage("stop_reason=refusal"), 0)).toBe(true);
 	});
 
+	it("retries Explabs Cloudflare 520 and free-limit quota errors", () => {
+		// Regression: both shapes appeared on explabs/deepseek-v4.1-flash-1017
+		// (2026-10-18) and ended the turn because neither matched the transient list.
+		expect(isRetryableAssistantError(errorMessage("520 status code (no body)"), 0)).toBe(true);
+		expect(
+			isRetryableAssistantError(
+				errorMessage(
+					"429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).",
+				),
+				0,
+			),
+		).toBe(true);
+	});
+
 	it("retries empty streamed completions — relay first-token timeout shape", () => {
 		// 2026-08-22 contract change: stop=stop with zero usable output is a dead
 		// stream (silent relay first-token kill on long thinking turns), not an answer.

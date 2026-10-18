@@ -111,6 +111,18 @@ describe("classifyProviderError (typed precedence)", () => {
 		expect(classifyProviderError({ text: "Upstream stream ended before terminal chunk" }).retryable).toBe(true);
 		expect(classifyProviderError({ text: "terminated" }).retryable).toBe(true);
 		expect(classifyProviderError({ text: "rate limit exceeded" }).retryable).toBe(true);
+		expect(classifyProviderError({ text: "520 status code (no body)" }).kind).toBe("transient_transport");
+		expect(classifyProviderError({ text: "520 status code (no body)" }).retryable).toBe(true);
+	});
+
+	it("text fallback treats Explabs quota prefixes as quota_exhausted, not permanent", () => {
+		const result = classifyProviderError({ text: "free_limit_reached: daily free allowance spent" });
+		expect(result).toEqual({
+			kind: "quota_exhausted",
+			retryable: false,
+			failoverEligible: true,
+			basis: "text_fallback",
+		});
 	});
 
 	it("text-only invalid_request_error is permanent even without a status field", () => {

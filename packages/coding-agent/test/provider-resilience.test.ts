@@ -15,6 +15,7 @@ import {
 	resolveProviderResilience,
 	sameModelRouteCandidates,
 	shouldEjectStickySafetyModel,
+	shouldHonorQuotaFailover,
 	shouldHonorSafetyFailover,
 	stickySafetyBlockMessage,
 } from "../src/core/provider-resilience.ts";
@@ -55,6 +56,24 @@ describe("provider-resilience (root-level)", () => {
 		expect(isTransientProviderErrorMessage("Authentication failed")).toBe(false);
 	});
 
+	it("marks Cloudflare 520-527 origin errors and gateway 500s as transient", () => {
+		// Observed 2026-10-18: explabs/deepseek-v4.1-flash-1017 surfaced
+		// "520 status code (no body)" and the session stopped instead of retrying.
+		expect(isTransientProviderErrorMessage("520 status code (no body)")).toBe(true);
+		expect(isTransientProviderErrorMessage("521 Web server is down")).toBe(true);
+		expect(isTransientProviderErrorMessage("522 Connection timed out")).toBe(true);
+		expect(isTransientProviderErrorMessage("523 Origin is unreachable")).toBe(true);
+		expect(isTransientProviderErrorMessage("524 A timeout occurred")).toBe(true);
+		expect(isTransientProviderErrorMessage("525 SSL handshake failed")).toBe(true);
+		expect(isTransientProviderErrorMessage("526 Invalid SSL certificate")).toBe(true);
+		expect(isTransientProviderErrorMessage("527 Railgun error")).toBe(true);
+		expect(
+			isTransientProviderErrorMessage(
+				"500 The gateway request failed. Retry the request; if this persists, ask the gateway operator to inspect the server logs.",
+			),
+		).toBe(true);
+	});
+
 	it("marks relay 'terminal chunk' stream cuts as transient (2026-09-14 commandcode/deepseek-v4.1-flash)", () => {
 		// Regression: 51 identical rounds succeeded, then one upstream cut ended the
 		// turn — the relay's own wording matched no transient pattern.
@@ -67,6 +86,26 @@ describe("provider-resilience (root-level)", () => {
 			isQuotaExhaustionMessage("Insufficient credits. Add more using https://openrouter.ai/settings/credits"),
 		).toBe(true);
 		expect(isQuotaExhaustionMessage("Insufficient Balance")).toBe(true);
+	});
+
+	it("matches Explabs/OpenRouter quota message prefixes", () => {
+		// The gateway documents stable prefixes on insufficient_quota bodies, but
+		// the harness only receives error.message. Match both the code prefix and
+		// the human sentence so free-limit/credit exhaustion fails over.
+		expect(
+			isQuotaExhaustionMessage(
+				"429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).",
+			),
+		).toBe(true);
+		expect(isQuotaExhaustionMessage("free_limit_reached: daily allowance spent")).toBe(true);
+		expect(isQuotaExhaustionMessage("free_tier_requires_payment: add a card")).toBe(true);
+		expect(isQuotaExhaustionMessage("model_requires_purchase: buy credits")).toBe(true);
+		expect(isQuotaExhaustionMessage("promo_byok_only: promotion does not cover this request")).toBe(true);
+		expect(
+			isQuotaExhaustionMessage("429 insufficient_credits: Your organization has no available platform credits"),
+		).toBe(true);
+		// Recorded session shape: the turn-prefix wrapper preserves the provider body.
+		expect(isQuotaExhaustionMessage("Turn prefix summarization failed: 429 Go usage limit exceeded")).toBe(true);
 	});
 
 	it("marks an xAI at-capacity 429 as transient so the turn auto-retries", () => {
@@ -179,6 +218,14 @@ describe("provider-resilience (root-level)", () => {
 		expect(shouldHonorSafetyFailover({ autoFailoverOnSafetyStop: false, modelPinned: false })).toBe(false);
 	});
 
+	it("allows quota failover on a pinned model unless it is explicitly disabled", () => {
+		// A pinned, quota-dead route cannot answer the next request; same-model
+		// retries only burn the budget. The quota gate is intentionally separate
+		// from the safety-stop pin gate.
+		expect(shouldHonorQuotaFailover({ autoFailoverOnQuotaExhaustion: true })).toBe(true);
+		expect(shouldHonorQuotaFailover({ autoFailoverOnQuotaExhaustion: false })).toBe(false);
+	});
+
 	it("never failovers fable/opus/sonnet on a safety stop", () => {
 		expect(isNoSafetyFailoverModel("claude-fable-5", "anthropic")).toBe(true);
 		expect(isNoSafetyFailoverModel("claude-opus-5", "anthropic")).toBe(true);
@@ -212,6 +259,7 @@ describe("provider-resilience (root-level)", () => {
 		const r = resolveProviderResilience(undefined);
 		expect(r.blockStickySafetyModels).toBe(true);
 		expect(r.autoFailoverOnSafetyStop).toBe(true);
+		expect(r.autoFailoverOnQuotaExhaustion).toBe(true);
 		expect(r.failoverCandidates.slice(0, 2)).toEqual([
 			{ provider: "kimi-coding", id: "k3" },
 			{ provider: "modelstudio-maas", id: "qwen3.8-max" },
@@ -271,6 +319,8 @@ describe("isUpstreamUnavailableMessage", () => {
 		expect(isUpstreamUnavailableMessage("Stream ended without finish_reason")).toBe(true);
 		expect(isUpstreamUnavailableMessage("502 Bad Gateway")).toBe(true);
 		expect(isUpstreamUnavailableMessage("upstream connect error")).toBe(true);
+		expect(isUpstreamUnavailableMessage("520 status code (no body)")).toBe(true);
+		expect(isUpstreamUnavailableMessage("500 The gateway request failed.")).toBe(true);
 	});
 
 	it("does not match transcript-shape or auth errors", () => {

@@ -74,11 +74,14 @@ describe("AgentSession retry", () => {
 		maxRetries?: number;
 		delayAssistantMessageEndMs?: number;
 		baseDelayMs?: number;
+		errorMessage?: string;
+		modelPinned?: boolean;
 	}) {
 		const failCount = options?.failCount ?? 1;
 		const emptyStopCount = options?.emptyStopCount ?? 0;
 		const maxRetries = options?.maxRetries ?? 3;
 		const baseDelayMs = options?.baseDelayMs ?? 1;
+		const errorMessage = options?.errorMessage ?? "overloaded_error";
 		const delayAssistantMessageEndMs = options?.delayAssistantMessageEndMs ?? 0;
 		let callCount = 0;
 
@@ -98,7 +101,7 @@ describe("AgentSession retry", () => {
 					} else if (callCount <= failCount) {
 						const msg = createAssistantMessage("", {
 							stopReason: "error",
-							errorMessage: "overloaded_error",
+							errorMessage,
 						});
 						stream.push({ type: "start", partial: msg });
 						stream.push({ type: "error", reason: "error", error: msg });
@@ -117,7 +120,11 @@ describe("AgentSession retry", () => {
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = ModelRegistry.create(authStorage, tempDir);
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
-		settingsManager.applyOverrides({ retry: { enabled: true, maxRetries, baseDelayMs } });
+		authStorage.setRuntimeApiKey("deepseek", "test-key");
+		settingsManager.applyOverrides({
+			retry: { enabled: true, maxRetries, baseDelayMs },
+			providerResilience: { failoverCandidates: [{ provider: "deepseek", id: "deepseek-v4-flash" }] },
+		});
 
 		session = new AgentSession({
 			agent,
@@ -125,6 +132,7 @@ describe("AgentSession retry", () => {
 			settingsManager,
 			cwd: tempDir,
 			modelRegistry,
+			modelPinned: options?.modelPinned,
 			resourceLoader: createTestResourceLoader(),
 		});
 
@@ -155,6 +163,61 @@ describe("AgentSession retry", () => {
 		expect(created.getCallCount()).toBe(2);
 		expect(events).toEqual(["start:1", "end:success=true"]);
 		expect(created.session.isRetrying).toBe(false);
+	});
+
+	it("auto-retries an Explabs Cloudflare 520 and completes the turn", async () => {
+		// Regression: explabs/deepseek-v4.1-flash-1017 surfaced
+		// "520 status code (no body)"; the retry gate did not classify 520 as
+		// transient, so the turn ended instead of continuing automatically.
+		const created = createSession({ failCount: 1, errorMessage: "520 status code (no body)" });
+		const events: string[] = [];
+		created.session.subscribe((event) => {
+			if (event.type === "auto_retry_start") events.push(`start:${event.attempt}`);
+			if (event.type === "auto_retry_end") events.push(`end:success=${event.success}`);
+		});
+
+		await created.session.prompt("Test");
+
+		expect(created.getCallCount()).toBe(2);
+		expect(events).toEqual(["start:1", "end:success=true"]);
+		expect(created.session.isRetrying).toBe(false);
+	});
+
+	it("auto-retries an Explabs free-limit quota body and completes the turn", async () => {
+		const created = createSession({
+			failCount: 1,
+			errorMessage: "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).",
+		});
+		const events: string[] = [];
+		created.session.subscribe((event) => {
+			if (event.type === "auto_retry_start") events.push(`start:${event.attempt}`);
+			if (event.type === "auto_retry_end") events.push(`end:success=${event.success}`);
+		});
+
+		await created.session.prompt("Test");
+
+		expect(created.getCallCount()).toBe(2);
+		expect(events).toEqual(["start:1", "end:success=true"]);
+	});
+
+	it("fails over a quota-exhausted model even when the CLI pinned it", async () => {
+		const created = createSession({
+			failCount: 1,
+			errorMessage: "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).",
+			modelPinned: true,
+		});
+		const events: string[] = [];
+		created.session.subscribe((event) => {
+			if (event.type === "auto_retry_start") events.push(`start:${event.attempt}:${event.errorMessage}`);
+			if (event.type === "auto_retry_end") events.push(`end:success=${event.success}`);
+		});
+
+		await created.session.prompt("Test");
+
+		expect(created.getCallCount()).toBe(2);
+		expect(created.session.model?.id).toBe("deepseek-v4-flash");
+		expect(events[0]).toContain("→ failover deepseek/deepseek-v4-flash");
+		expect(events).toContain("end:success=true");
 	});
 
 	it("exhausts max retries and emits failure", async () => {

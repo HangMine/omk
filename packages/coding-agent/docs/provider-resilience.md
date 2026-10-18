@@ -19,6 +19,7 @@ Configure resilience in `~/.omk/agent/settings.json` or `.omk/settings.json`:
   "providerResilience": {
     "blockStickySafetyModels": true,
     "autoFailoverOnSafetyStop": true,
+    "autoFailoverOnQuotaExhaustion": true,
     "failoverCandidates": [
       { "provider": "kimi-coding", "id": "k3" },
       { "provider": "modelstudio-maas", "id": "qwen3.8-max" }
@@ -30,13 +31,13 @@ Configure resilience in `~/.omk/agent/settings.json` or `.omk/settings.json`:
 | Setting | Default | Behavior |
 |---|---:|---|
 | `blockStickySafetyModels` | `true` | Blocks interactive and automatic activation of models known to produce sticky false-positive safety stops. The catalog still lists them; set this to `false` to use an interactive or saved selection. |
-| `autoFailoverOnSafetyStop` | `true` | Enables failover for safety stops and quota/billing exhaustion. |
+| `autoFailoverOnSafetyStop` | `true` | Enables failover for content/safety stops. |
+| `autoFailoverOnQuotaExhaustion` | `true` | Enables failover for quota/billing exhaustion, including when `--model` or `--provider` pins the current model. |
 | `failoverCandidates` | built-in chain | Ordered models considered before an automatic retry. |
 
 Automatic recovery also requires `retry.enabled: true` and available retry budget.
 
-An explicit `--model` or `--provider`/`--model` pin keeps automatic resilience from replacing that model. A later manual model selection can still change it.
-Safety-stop failover and sticky-model eject do not run on a pinned model.
+An explicit `--model` or `--provider`/`--model` pin keeps safety-stop failover and sticky-model eject from replacing that model. A later manual model selection can still change it. Quota exhaustion is the exception: a pinned route cannot serve the next request until its billing window resets, so `autoFailoverOnQuotaExhaustion` (default `true`) may switch to an authenticated candidate. Set it to `false` to keep the pin absolute and end the turn with the quota cause instead.
 Claude Fable, Opus, and Sonnet also stay on-model after a content/safety stop,
 even without `--model` and even when skills are loaded. Those refusals are not
 retried on DeepSeek or Kimi.
@@ -52,7 +53,7 @@ For a safety stop or recognized quota/billing error, OMK:
 
 A content/safety stop gets at most one automatic retry, including a retry that switches model, regardless of the larger transport retry budget. Other transient failures keep the configured retry policy and backoff. Plain authentication errors remain non-retryable and do not trigger failover.
 
-Recognized quota shapes include billing-cycle usage limits, `insufficient_quota`, exhausted balances, `GoUsageLimitError`, `FreeUsageLimitError`, and out-of-budget responses. These are classified as `provider.rate_limit`, even when a provider wraps them in HTTP 403. Provider-capacity bodies that omit a status or limit token are classified the same way: xAI `currently at capacity` / `high demand` (HTTP 429) and Anthropic `overloaded_error` / `Overloaded` (HTTP 529). Left unmatched they fall through to `provider.protocol` and advertise orphan-`tool_call_id` sanitize.
+Recognized quota shapes include billing-cycle usage limits (`429 Go usage limit exceeded`), `insufficient_quota`, `free_limit_reached`, exhausted balances/credits, `GoUsageLimitError`, `FreeUsageLimitError`, and out-of-budget responses. These are classified as `provider.rate_limit`, even when a provider wraps them in HTTP 403. Provider-capacity bodies that omit a status or limit token are classified the same way: xAI `currently at capacity` / `high demand` (HTTP 429) and Anthropic `overloaded_error` / `Overloaded` (HTTP 529). Left unmatched they fall through to `provider.protocol` and advertise orphan-`tool_call_id` sanitize.
 
 Two HTTP 400s are permanent `configuration.invalid`, not retryable protocol faults: Anthropic `claude_code_version_too_old`, and Codex ChatGPT-account `The '<slug>' model is not supported when using Codex with a ChatGPT account.` Same-model retry, transcript sanitize, and `/new session` re-send the same client version or slug. Switch with `/model`, or for Codex use an API-key route that has the model.
 

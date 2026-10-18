@@ -76,6 +76,16 @@ describe("providerFailureCause", () => {
 			area: "provider",
 			code: "network",
 		});
+		expect(providerFailureCause(assistantError("520 status code (no body)"), 0)).toEqual({
+			area: "provider",
+			code: "network",
+		});
+	});
+
+	it("classifies Explabs free-limit quota bodies as rate_limit", () => {
+		expect(
+			providerFailureCause(assistantError("429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free."), 0),
+		).toEqual({ area: "provider", code: "rate_limit" });
 	});
 
 	it("classifies orphan tool_call_id as a recoverable protocol fault", () => {
