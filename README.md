@@ -455,7 +455,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.1](.github/RELEASE_NOTES_v1.5.1.md)
+- [Release notes for v1.5.2](.github/RELEASE_NOTES_v1.5.2.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -546,6 +546,14 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.2
+
+### Changed
+
+- Lockstep version alignment with OMK 1.5.2 to restore publication of all seven workspace packages after the 1.5.1 registry staging conflict. Provider recovery behavior is unchanged from 1.5.1.
+
+Release notes live in [RELEASE_NOTES_v1.5.2.md](.github/RELEASE_NOTES_v1.5.2.md).
+
 ## Release v1.5.1
 
 ### Fixed
@@ -556,6 +564,7 @@ On hold:
 ### Changed
 
 - The default `retry.maxRetries` is now `5`, giving 2s, 4s, 8s, 16s, and 32s backoff instead of stopping after 2s, 4s, and 8s.
+
 
 ## [Unreleased]
 
@@ -580,23 +589,6 @@ Release notes live in [RELEASE_NOTES_v1.5.1.md](.github/RELEASE_NOTES_v1.5.1.md)
 - Loaded skills no longer keep every `SKILL.md` file in memory. Frontmatter values such as a skill's `description` were slices of the whole file text, so each kept description held its file alive. With 751 skills installed, the loaded skills held 12.7 MB of heap; the frontmatter block is now copied before parsing, and the same skills hold 1.9 MB. Prompt-template frontmatter is parsed the same way.
 
 Release notes live in [RELEASE_NOTES_v1.5.0.md](.github/RELEASE_NOTES_v1.5.0.md).
-
-## Release v1.4.3
-
-### Added
-
-- Opt-in `OMK_TIMING=1` phase diagnostics for model-selector opening, model application and prompt admission. `OMK_TIMING_FILE` selects the local log; timing is disabled by default and records phase durations without prompt or credential values. The diagnostic spans target one interactive session, not overlapping SDK sessions. ([#144](https://github.com/dmae97/omk/pull/144))
-
-### Changed
-
-- Cache fallback admission token statistics per source message without retaining serialized JSON. In-place edits invalidate the cache, unusual JSON projections bypass it, and token estimates remain unchanged. ([#142](https://github.com/dmae97/omk/pull/142))
-- Skip model-registry rebuilding when its model-file, provider and selected OAuth inputs are unchanged. Model edits, provider registration and credential changes still trigger refresh. ([#143](https://github.com/dmae97/omk/pull/143))
-
-### Fixed
-
-- Stop context-overflow recovery after two staged compact-and-retry attempts without progress, including when one tool result exceeds the context window. Diagnostics identify the largest oversized result; print mode reports the failure on stderr and exits with status 1. Successful in-window text replies and consumed tool results reset the recovery counter. ([#141](https://github.com/dmae97/omk/pull/141))
-
-Release notes live in [RELEASE_NOTES_v1.4.3.md](.github/RELEASE_NOTES_v1.4.3.md).
 
 <!-- releases:end -->
 

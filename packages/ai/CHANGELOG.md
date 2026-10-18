@@ -1,10 +1,17 @@
 # Changelog
 
+## [1.5.2] - 2026-10-18
+
+### Changed
+
+- Lockstep version alignment with OMK 1.5.2 to restore publication of all seven workspace packages after the 1.5.1 registry staging conflict. Provider recovery behavior is unchanged from 1.5.1.
+
 ## [1.5.1] - 2026-10-18
 
 ### Fixed
 
 - Provider retry classification now treats Cloudflare `520` through `527` as transient and recognizes Explabs/OpenRouter quota prefixes (`free_limit_reached`, `insufficient_credits`, `model_requires_purchase`, `promo_byok_only`, `no available platform credits`). The observed `520 status code (no body)` and free-limit bodies no longer end a summarization or agent turn without a retry decision.
+
 
 ## [Unreleased]
 
