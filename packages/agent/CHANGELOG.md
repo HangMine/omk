@@ -1,5 +1,7 @@
 # Changelog
 
+## [Unreleased]
+
 ## [1.5.0] - 2026-10-18
 
 - Harness compaction retries a reasoning-exhausted summary once at the model's lowest supported effort with a 2,048-token text reserve. Models that accept `thinking.type.disabled` still retry without reasoning. A second empty `length` result is returned unchanged so the caller can reject it.

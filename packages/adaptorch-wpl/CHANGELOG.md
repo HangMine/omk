@@ -1,5 +1,7 @@
 # Changelog
 
+## [Unreleased]
+
 ## [1.5.0] - 2026-10-18
 
 - `ADAPTORCH_DEFAULT_API_URL`, used by `createAdaptOrchApiClientFromEnv()` when `ADAPTORCH_API_URL` is unset, is now `https://adaptorch.com`. The previous `https://api.adaptorch.com` does not resolve, so every default-configured request failed before reaching the API.
