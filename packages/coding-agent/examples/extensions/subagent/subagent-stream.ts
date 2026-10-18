@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Message } from "omk-ai";
+import type { SubagentLoopGuard } from "open-multi-agent-kit";
 import type { SingleResult } from "./subagent-runtime-types.ts";
 
 export const SUBAGENT_OUTPUT_LIMITS = {
@@ -18,8 +19,17 @@ function nonnegative(value: unknown): value is number {
 	return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
-/** Bounds are per process attempt, including ignored events and incomplete lines. */
-export function createSubagentStream(result: SingleResult, onMessage?: () => void, signal?: AbortSignal) {
+/**
+ * Bounds are per process attempt, including ignored events and incomplete lines.
+ * `loopGuard` (spec 071, always on in the extension) sees every receipt; a stop fails the stream so the
+ * managed process tears the worker down and the attempt reports an error with its partial result.
+ */
+export function createSubagentStream(
+	result: SingleResult,
+	onMessage?: () => void,
+	signal?: AbortSignal,
+	loopGuard?: Pick<SubagentLoopGuard, "observe">,
+) {
 	let pending = "";
 	let pendingBytes = 0;
 	let finished = false;
@@ -128,6 +138,11 @@ export function createSubagentStream(result: SingleResult, onMessage?: () => voi
 			result.model ??= msg.model;
 			if (msg.stopReason) result.stopReason = msg.stopReason;
 			if (msg.errorMessage) result.errorMessage = msg.errorMessage;
+		}
+		const stop = loopGuard?.observe(msg);
+		if (stop) {
+			result.loopGuard = stop;
+			fail(`subagent.loop_guard.${stop.rule}: ${stop.message}`);
 		}
 		preview = "";
 		delete result.progress;

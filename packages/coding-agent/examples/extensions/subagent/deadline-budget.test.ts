@@ -164,4 +164,19 @@ describe("provider/model deadline learning", () => {
 			}),
 		).toBe(demand.predictedMs);
 	});
+
+	it("spec 071: a loop-guard stop (recorded as failed) does not move the next cutoff recommendation", () => {
+		const sample = { provider: "p", model: "m", estimatedTokens: 100, workUnits: 1 };
+		let db = updateDeadlineProfiles(undefined, { ...sample, outcome: "completed", elapsedMs: 200_000 });
+		db = updateDeadlineProfiles(db, { ...sample, outcome: "cutoff", elapsedMs: 400_000 });
+		const options = { fallbackMs: 600_000, minimumMs: 30_000, maximumMs: 840_000, predictedMs: 120_000 };
+		const before = recommendAttemptCutoff(getDeadlineProfile(db, "p", "m"), options);
+		// Loop-guard stops are short and frequent: 20 of them at 50 ms each.
+		for (let i = 0; i < 20; i++) db = updateDeadlineProfiles(db, { ...sample, outcome: "failed", elapsedMs: 50 });
+		const after = getDeadlineProfile(db, "p", "m");
+		expect(after?.failures).toBe(20);
+		expect(after?.completedDurationsMs).toEqual([200_000]);
+		expect(after?.cutoffDurationsMs).toEqual([400_000]);
+		expect(recommendAttemptCutoff(after, options)).toBe(before);
+	});
 });

@@ -1,4 +1,5 @@
 import type { Message } from "omk-ai";
+import type { LoopGuardStop } from "open-multi-agent-kit";
 import type { AgentCheckpoint } from "./checkpoint-runtime.ts";
 import type { ManagedProcessCleanup, ManagedProcessReason, ManagedProcessResult } from "./managed-process.ts";
 
@@ -77,6 +78,8 @@ export interface SingleResult {
 	errorMessage?: string;
 	step?: number;
 	deadline?: AgentDeadlineMetadata;
+	/** Spec 071: set when the always-on loop guard stopped this worker. */
+	loopGuard?: LoopGuardStop;
 }
 
 /**
