@@ -205,7 +205,9 @@ describe("Neo distribution and safe setup", () => {
 	it("includes resources in npm and both binary packaging paths", () => {
 		const pkg = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
 		expect(pkg.files).toContain("resources");
-		expect(pkg.scripts["copy-binary-assets"]).toContain("shx cp -r resources dist/");
+		expect(pkg.scripts["copy-binary-assets"]).toContain("copy-assets.mjs --binary");
+		const copyAssets = readFileSync(resolve(packageDir, "scripts/copy-assets.mjs"), "utf8");
+		expect(copyAssets).toContain('copyTree(join(packageDir, "resources"), join(dist, "resources"))');
 		const script = readFileSync(resolve(packageDir, "../../scripts/build-binaries.sh"), "utf8");
 		expect(script).toContain('cp -r resources "$OUTPUT_DIR/$platform/"');
 	});

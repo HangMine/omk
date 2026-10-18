@@ -97,7 +97,13 @@ function appendDuplicateResultCorruption(harness: Harness): void {
 	harness.session.agent.state.messages = harness.sessionManager.buildSessionContext().messages;
 }
 
-function injectSummaryStream(harness: Harness, onStart?: () => void, summary = "transactional summary"): () => number {
+function injectSummaryStream(
+	harness: Harness,
+	onStart?: () => void,
+	summary = "transactional summary",
+	retrySummary?: string,
+): () => number {
+	const summaryForCall = (call: number) => (call === 1 ? summary : (retrySummary ?? summary));
 	let calls = 0;
 	let started = false;
 	harness.session.agent.streamFn = (model) => {
@@ -109,7 +115,7 @@ function injectSummaryStream(harness: Harness, onStart?: () => void, summary = "
 		const stream = createAssistantMessageEventStream();
 		queueMicrotask(() => {
 			const message: AssistantMessage = {
-				...fauxAssistantMessage(summary),
+				...fauxAssistantMessage(summaryForCall(calls)),
 				api: model.api,
 				provider: model.provider,
 				model: model.id,
@@ -136,37 +142,71 @@ describe("compaction runtime transaction integration", () => {
 		});
 		harnesses.push(harness);
 		seedClosedTranscript(harness);
-		injectSummaryStream(harness, () => {
-			harness.sessionManager.appendMessage({ role: "user", content: "late steering", timestamp: Date.now() });
-		});
+		injectSummaryStream(
+			harness,
+			() => {
+				harness.sessionManager.appendMessage({ role: "user", content: "late steering", timestamp: Date.now() });
+			},
+			"stale steering summary",
+			"retry steering summary",
+		);
 
-		await expect(harness.session.compact()).rejects.toThrow(/stale|changed since|changed during compaction/i);
-		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+		const result = await harness.session.compact();
+
+		expect(result.summary).toContain("retry steering summary");
+		expect(result.summary).not.toContain("stale steering summary");
+		const entries = harness.sessionManager.getEntries();
+		expect(entries.filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		expect(
+			entries.some(
+				(entry) =>
+					entry.type === "message" &&
+					entry.message.role === "user" &&
+					getMessageText(entry.message) === "late steering",
+			),
+		).toBe(true);
 	});
 
 	it("discards a generated summary when a closed tool turn arrives mid-flight", async () => {
 		const harness = await createHarness({ settings: { compaction: { keepRecentTokens: 1 } } });
 		harnesses.push(harness);
 		seedClosedTranscript(harness);
-		injectSummaryStream(harness, () => {
-			harness.sessionManager.appendMessage({ role: "user", content: "late tool turn", timestamp: Date.now() });
-			harness.sessionManager.appendMessage(
-				fauxAssistantMessage([fauxToolCall("read", { path: "late.ts" }, { id: "late-tool" })], {
-					stopReason: "toolUse",
-				}),
-			);
-			harness.sessionManager.appendMessage({
-				role: "toolResult",
-				toolCallId: "late-tool",
-				toolName: "read",
-				content: [{ type: "text", text: "late result" }],
-				isError: false,
-				timestamp: Date.now(),
-			});
-		});
+		injectSummaryStream(
+			harness,
+			() => {
+				harness.sessionManager.appendMessage({ role: "user", content: "late tool turn", timestamp: Date.now() });
+				harness.sessionManager.appendMessage(
+					fauxAssistantMessage([fauxToolCall("read", { path: "late.ts" }, { id: "late-tool" })], {
+						stopReason: "toolUse",
+					}),
+				);
+				harness.sessionManager.appendMessage({
+					role: "toolResult",
+					toolCallId: "late-tool",
+					toolName: "read",
+					content: [{ type: "text", text: "late result" }],
+					isError: false,
+					timestamp: Date.now(),
+				});
+			},
+			"stale tool summary",
+			"retry tool summary",
+		);
 
-		await expect(harness.session.compact()).rejects.toThrow(/stale|changed since|changed during compaction/i);
-		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+		const result = await harness.session.compact();
+
+		expect(result.summary).toContain("retry tool summary");
+		expect(result.summary).not.toContain("stale tool summary");
+		const entries = harness.sessionManager.getEntries();
+		expect(entries.filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		expect(
+			entries.some(
+				(entry) =>
+					entry.type === "message" &&
+					entry.message.role === "toolResult" &&
+					entry.message.toolCallId === "late-tool",
+			),
+		).toBe(true);
 	});
 
 	it("discards a generated summary after a second SessionManager advances the durable head", async () => {

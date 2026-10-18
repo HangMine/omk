@@ -157,8 +157,11 @@ export function compactionFailureOutcome(input: {
 	readonly quotaExhausted?: (message: string) => boolean;
 }): CompactionFailureOutcome {
 	const failure = input.failure ?? (input.error instanceof Error ? input.error.message : String(input.error));
-	const aborted =
-		failure === "Compaction cancelled" || (input.error instanceof Error && input.error.name === "AbortError");
+	const errorName =
+		typeof input.error === "object" && input.error !== null && "name" in input.error
+			? String((input.error as { name: unknown }).name)
+			: "";
+	const aborted = failure === "Compaction cancelled" || errorName === "AbortError" || input.controllerAborted;
 	// The race survived a regeneration, so the user has to act: another process holds
 	// this file and our in-memory head cannot be advanced without reopening it.
 	const guidance = input.retrying && isConcurrentWriterFailure(input.error) ? CONCURRENT_WRITER_GUIDANCE : undefined;
@@ -166,7 +169,7 @@ export function compactionFailureOutcome(input: {
 	return {
 		retry: shouldRegenerateAfterConcurrentWrite(input.error, input.retrying, input.controllerAborted),
 		aborted,
-		code: compactionFailureCode(message, input.quotaExhausted),
+		code: aborted ? "aborted" : compactionFailureCode(message, input.quotaExhausted),
 		message,
 		cancelStatus:
 			aborted && input.declineReason !== undefined ? `Compaction cancelled: ${input.declineReason}` : undefined,

@@ -30,6 +30,7 @@ function harness() {
 describe("goal controller seam checkpoints", () => {
 	const roots: string[] = [];
 	afterEach(async () => {
+		vi.restoreAllMocks();
 		await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 	});
 
