@@ -30,7 +30,7 @@ const tornDrops = sum("tornDrops"), distinct = new Set(results.flatMap((x) => x.
 const failures = (counts.integrity ?? 0) + (counts.non_prefix ?? 0) + (counts.concurrent_change ?? 0) + (counts.journal_truncated ?? 0) + Object.keys(counts).filter((k) => !["ok", "integrity", "non_prefix", "concurrent_change", "journal_truncated"].includes(k)).reduce((a, k) => a + counts[k], 0);
 const validA = w.writerStartMs <= firstRead && w.writerStopMs >= lastRead && !w.err, validB = tornDrops >= 300;
 const rec = {
-	head: execSync("git -C ${import.meta.dirname} rev-parse HEAD").toString().trim(), wallMs: Date.now() - t0, load1Start, load1End: loadavg()[0], fsType, readGapUs: GAP_US,
+	head: execSync(`git -C ${import.meta.dirname} rev-parse HEAD`).toString().trim(), wallMs: Date.now() - t0, load1Start, load1End: loadavg()[0], fsType, readGapUs: GAP_US,
 	writer: w, firstReadMs: firstRead, lastReadMs: lastRead,
 	attemptsPerReader: results.map((x) => x.out.length), totalAttempts: results.reduce((a, x) => a + x.out.length, 0), finalRecordsTotal: finals.reduce((a, f) => a + f.records.length, 0),
 	counts, falseJournalTruncatedUnderLiveLease: counts.journal_truncated ?? 0, failures, examples,
