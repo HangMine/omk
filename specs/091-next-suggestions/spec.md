@@ -136,7 +136,13 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
      Measured **catalog v2**: 223 deduplicated skills, of which **217 are
      model-selectable** (the catalog used); name-list sha256
      `25f25cda08c1b668ec4da0ed8a5214a4e4cc5eef8b5a46182ae48ed3af18abe6`
-     (fixed in the PREREG). The spec-050 1,191 set
+     = name list of **all 223** catalog skills; the **217 model-selectable**
+     name list sha256 is
+     `79ee30417aff3591e445b8d2b3d0a440b28da3411370dbcaefd1f90d095913da`
+     (both: sorted names joined by `\n` plus a trailing `\n`). File
+     `catalog-v2.json` sha256
+     `ce30f5f6a617bcd24be4116eb3f1a06623d0c0a82570ab80c5bfc005228c448c`
+     (all fixed in the PREREG). The spec-050 1,191 set
      (`/workspace/omk-skill-baseline/env/s1191`) is synthetic (copies +
      fixtures) and is **not** used. If 인호 provides a real ~800-skill catalog
      name list, recall is re-measured on it once before the paid Jev stage.
@@ -148,9 +154,20 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
      `bd6338801ad7582328e2012765ec30ba5dd24d6ce9a5ae2861c3f6366c81c59e`,
      posted to the room **before** any sentence is written.
      For each sampled skill, Agent Researcher writes one next-task sentence
-     from the SKILL.md **body only**. The sentence must not use words from the
-     skill's name or description, nor commands/paths unique to that SKILL.md
-     body; a script checks this. The author **never sees bm25 output**.
+     from the SKILL.md **body only**. The author **never sees bm25 output**.
+   - **Gate labels (EN set):** the gate is graded on a **new English set**
+     written fresh from the SKILL.md bodies (not translated from KO). Banned
+     words, checked by script: (1) words of the skill name; (2) body-unique
+     words (commands/paths); (3) the top-5 IDF description words, computed by
+     script over the 217-skill catalog. Checker script sha256
+     **TBD-before-writing** and banned-word-list sha256 **TBD-before-writing**
+     are fixed in the PREREG before any EN sentence is written.
+   - **KO set v1 (report only, not a gate):** `labels-v1.jsonl` sha256
+     `b13f512542e469aa2e9e5e235aa31bafbbf2f3d2b2ff6d44f477676fdd6cee93`
+     (100 answerable + 10 no-answer).
+   - **Overlapping pairs** (e.g. code-review / review-and-ship, flight-booking /
+     airline playbooks): misses are flagged separately but still counted.
+     Thin skills stay in the sample.
    - **Label author:** agent (Agent Researcher), separate from the bm25
      implementer; has never seen bm25 output. If 인호 writes labels himself,
      those take priority.
@@ -191,6 +208,10 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
      stage. On the same 100 sentences, if the all-skills arm gets **≥ 5 more**
      gold skills correct than the bm25 k = 25 arm, the default switches to
      all-skills; otherwise the bm25 path is kept.
+   - **Paired reporting:** report discordant counts b (bm25 right, all-217
+     wrong) and c (all-217 right, bm25 wrong) with an exact two-sided McNemar
+     p-value (binomial on b + c, p = 0.5). The switch rule above is unchanged
+     and decides; p is reporting only.
    - Order: (a) measure **without** boost; (b) only if the k = 25 gate fails, remeasure
      **once** with the recency-frequency boost whose formula was fixed in the
      PREREG beforehand; (c) if it still fails, **the Jev stage is not built**.
@@ -237,6 +258,12 @@ the PREREG before any run.
 - With a 217-skill catalog, k = 255 includes all skills, so recall at k = 255
   proves little (hence the k = 25 gate). An option is to skip bm25 and send all skills to
   Jev (within the 32k token limit).
+- Reasoning-on suggestion requests use `maxTokens = thinking budget + 128`
+  (off: 128). A real-provider check is a paid run, pending 인호's 1:1
+  approval.
+- Korean suggestion text may break bm25 lexical match against the English
+  catalog (KO set v1 shows this). Mitigation (English search keywords) is out
+  of Stage 1 scope.
 
 ## Success criterion
 
@@ -261,6 +288,38 @@ PREREG gate above; no non-installed skill is ever suggested.
   → suggestion without prefix and no bm25 substitute; key never in logs.
 - UI: Tab inserts only into empty input, never sends; other keys dismiss and
   cancel; autocomplete Tab behavior unchanged.
+
+## Stage 1 implementation notes
+
+- Modules: `packages/coding-agent/src/core/next-suggestion.ts` (flag, request
+  recorder, skip planner, context builder) and
+  `packages/coding-agent/src/modes/interactive/next-suggestion-controller.ts`
+  (UI); `agent-session.ts` is unchanged. `interactive-mode.ts` has one install
+  call; `CustomEditor` gains an `onBeforeInput` hook.
+- Flag on wraps the agent stream function with a pass-through recorder; the
+  suggestion request reuses the recorded `(model, context, options)` (same
+  system prompt, tools, message objects, reasoning and cache options), then
+  appends the final assistant message and the instruction.
+- "Provider lacks caching" = `cacheRetention: "none"` or the model has no cache
+  read price (`cost.cacheRead` 0). "Cache cold" = time since the last main
+  request ≥ `SHORT_CACHE_TTL_MS` 5 min (`short`, default) or ≥
+  `LONG_CACHE_TTL_MS` 60 min (`long`); tests cover 1 ms before, at, and 1 ms
+  after each boundary.
+- The suggestion request differs from the main request only in `maxTokens`
+  and its own abort signal. Reasoning is not disabled: with reasoning off,
+  `maxTokens = 128` (`SUGGESTION_MAX_TOKENS`); with reasoning on,
+  `maxTokens = thinking budget + 128`. The reply is still cut to 200
+  characters.
+- Usage ≥ 90% reads the active provider's subscription usage windows
+  (`loadSubscriptionUsage`), only with the flag on, at most once per settled
+  turn, in the background after `prompt_settled` (main-turn timing and request
+  bytes unchanged). Fail closed: an error, a timeout (`USAGE_CHECK_TIMEOUT_MS`
+  2 s), or a quota source that returns no windows skips the suggestion. A
+  provider with no quota source at all (pay-per-token) counts as no quota
+  window and proceeds.
+- Stage 2 will reuse the spec-058 bm25 in `core/skill-search.ts` /
+  `core/skill-select-rankers.ts` (no new implementation, no new dependency).
+  No Jev call is made in stage 1.
 
 ## Rollback
 
