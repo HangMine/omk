@@ -32,7 +32,6 @@
 
 - The default `retry.maxRetries` is now `5`, giving 2s, 4s, 8s, 16s, and 32s backoff instead of stopping after 2s, 4s, and 8s.
 
-
 ## [1.5.0] - 2026-10-18
 
 - Auto-compaction and branch summarization retry once when a reasoning model spends the whole output budget on thinking and returns no text. The retry uses the model's lowest supported effort and adds a 2,048-token text reserve; models that accept an explicit disable still retry without reasoning. If the retry also has no text, compaction still fails instead of committing an empty summary. The previous retry always deleted reasoning, which Claude Opus 5.5 rejects with HTTP 400.

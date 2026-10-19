@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Lockstep version alignment with OMK 1.5.3. No runtime behavior changed in this package.
+
 ## [1.5.2] - 2026-10-18
 
 ### Changed
@@ -7,9 +13,6 @@
 - Lockstep version alignment with OMK 1.5.2 to restore publication of all seven workspace packages after the 1.5.1 registry staging conflict. Provider recovery behavior is unchanged from 1.5.1.
 
 ## [1.5.1] - 2026-10-18
-
-
-## [Unreleased]
 
 ## [1.5.0] - 2026-10-18
 

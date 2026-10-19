@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- WorkBuddy's DeepSeek V4.1 Flash lane is labeled 1017, uses the current `@tencent-ai/codebuddy-code@2.169.0` product cap of 128k output tokens, and keeps `low`, `high`, and `max` effort selection. A live probe on 2026-10-19 accepted `low`, `high`, `max`, and `xhigh`; the dated `*-1017` and `deepseek-v4-flash` ids answered `400 11102`, so the undated product id remains the declared lane.
+
 ## [1.5.2] - 2026-10-18
 
 ### Changed
@@ -11,13 +17,6 @@
 ### Fixed
 
 - Provider retry classification now treats Cloudflare `520` through `527` as transient and recognizes Explabs/OpenRouter quota prefixes (`free_limit_reached`, `insufficient_credits`, `model_requires_purchase`, `promo_byok_only`, `no available platform credits`). The observed `520 status code (no body)` and free-limit bodies no longer end a summarization or agent turn without a retry decision.
-
-
-## [Unreleased]
-
-### Changed
-
-- WorkBuddy's DeepSeek V4.1 Flash lane is labeled 1017, uses the current `@tencent-ai/codebuddy-code@2.169.0` product cap of 128k output tokens, and keeps `low`, `high`, and `max` effort selection. A live probe on 2026-10-19 accepted `low`, `high`, `max`, and `xhigh`; the dated `*-1017` and `deepseek-v4-flash` ids answered `400 11102`, so the undated product id remains the declared lane.
 
 ## [1.5.0] - 2026-10-18
 
