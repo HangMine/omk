@@ -220,6 +220,40 @@ describe("AgentSession retry", () => {
 		expect(events).toContain("end:success=true");
 	});
 
+	it("shows one pinned-quota failover notice per turn on a pinned model (spec 089)", async () => {
+		const created = createSession({
+			failCount: 1,
+			errorMessage: "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).",
+			modelPinned: true,
+		});
+		const notices: string[] = [];
+		created.session.subscribe((event) => {
+			if (event.type === "pinned_quota_failover") notices.push(`${event.to}|${event.message}`);
+		});
+
+		await created.session.prompt("Test");
+
+		expect(notices).toHaveLength(1);
+		expect(notices[0]).toContain("deepseek/deepseek-v4-flash|");
+		expect(notices[0]).toContain("autoFailoverOnQuotaExhaustion: false");
+	});
+
+	it("shows no pinned-quota notice when the model was not pinned (spec 089)", async () => {
+		const created = createSession({
+			failCount: 1,
+			errorMessage: "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).",
+		});
+		let notices = 0;
+		created.session.subscribe((event) => {
+			if (event.type === "pinned_quota_failover") notices += 1;
+		});
+
+		await created.session.prompt("Test");
+
+		expect(created.getCallCount()).toBe(2);
+		expect(notices).toBe(0);
+	});
+
 	it("exhausts max retries and emits failure", async () => {
 		const created = createSession({ failCount: 99, maxRetries: 2 });
 		const events: string[] = [];
