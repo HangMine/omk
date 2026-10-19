@@ -227,7 +227,7 @@ import {
 	nextRetryAttempt,
 	retryBudgetForAssistantError,
 } from "./provider-retry.ts";
-import { planRetryWait, quotaAllowsRetry } from "./quota-retry-policy.ts";
+import { planRetryWait, quotaAllowsRetry, recordQuotaOutcome } from "./quota-retry-policy.ts";
 import { getBiasStepsForCell, parseRouterBiasSnapshot, type RouterBiasSnapshot } from "./reasoning-router-bias.ts";
 import {
 	classifyTaskV4,
@@ -2421,6 +2421,7 @@ export class AgentSession {
 		if (this._isRetryableError(msg) && (await this._prepareRetry(msg))) {
 			return true;
 		}
+		recordQuotaOutcome(this, msg); // spec 090: quota ends with QuotaExhaustedNoRetryError
 
 		// The retry budget is exhausted without a real answer. This covers the
 		// empty-streamed-completion path whose success-shaped stopReason

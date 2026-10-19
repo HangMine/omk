@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
+import { QuotaExhaustedNoRetryError, quotaNoRetryErrorOf } from "../src/core/quota-retry-policy.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { createTestResourceLoader } from "./utilities.ts";
@@ -277,6 +278,39 @@ describe("AgentSession retry", () => {
 		expect(created.getCallCount()).toBe(1);
 		expect(starts).toEqual([]);
 		expect(created.session.isRetrying).toBe(false);
+	});
+
+	it("spec 090: failover off ends the session with QuotaExhaustedNoRetryError carrying the provider message", async () => {
+		const created = createSession({
+			failCount: 99,
+			errorMessage: QUOTA_BODY,
+			providerResilience: { autoFailoverOnQuotaExhaustion: false },
+		});
+		await created.session.prompt("Test");
+		const error = quotaNoRetryErrorOf(created.session);
+		expect(error).toBeInstanceOf(QuotaExhaustedNoRetryError);
+		expect(error?.cause).toBe(QUOTA_BODY);
+		expect(error?.message).toContain("quota exhausted, no retry");
+		expect(created.getCallCount()).toBe(1);
+	});
+
+	it("spec 090: failover on with no usable candidate ends with the same typed error", async () => {
+		const created = createSession({
+			failCount: 99,
+			errorMessage: QUOTA_BODY,
+			providerResilience: { failoverCandidates: [{ provider: "nope-provider", id: "nope-model" }] },
+		});
+		await created.session.prompt("Test");
+		const error = quotaNoRetryErrorOf(created.session);
+		expect(error).toBeInstanceOf(QuotaExhaustedNoRetryError);
+		expect(error?.cause).toBe(QUOTA_BODY);
+		expect(created.getCallCount()).toBe(1);
+	});
+
+	it("spec 090: a successful quota failover leaves no typed no-retry error", async () => {
+		const created = createSession({ failCount: 1, errorMessage: QUOTA_BODY });
+		await created.session.prompt("Test");
+		expect(quotaNoRetryErrorOf(created.session)).toBeUndefined();
 	});
 
 	it("spec 090: honors a Retry-After hint on a transient 429", async () => {

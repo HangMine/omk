@@ -26,7 +26,7 @@ export class QuotaExhaustedNoRetryError extends Error {
 	readonly providerMessage: string;
 
 	constructor(providerMessage: string) {
-		super(`quota exhausted, no retry: ${providerMessage}`);
+		super(`quota exhausted, no retry: ${providerMessage}`, { cause: providerMessage });
 		this.name = "QuotaExhaustedNoRetryError";
 		this.providerMessage = providerMessage;
 	}
@@ -94,4 +94,24 @@ export function planRetryWait(
 	const switched = failoverTo !== undefined || rotatedTo !== undefined;
 	const backoffMs = computeRetryDelayMs(settings.baseDelayMs, attempt, switched);
 	return retryWaitMs({ quotaFailover: quota, backoffMs, errorMessage: message.errorMessage, remainingMs });
+}
+
+const quotaNoRetryErrors = new WeakMap<object, QuotaExhaustedNoRetryError>();
+
+/**
+ * Settle a turn that is ending without a retry. A quota-exhausted provider
+ * error ends the session with {@link QuotaExhaustedNoRetryError} (provider
+ * message kept as `cause`); any other outcome clears the previous one.
+ */
+export function recordQuotaOutcome(session: object, message: AssistantMessage): void {
+	if (message.errorMessage !== undefined && isQuotaExhaustedError(message.errorMessage)) {
+		quotaNoRetryErrors.set(session, new QuotaExhaustedNoRetryError(message.errorMessage));
+	} else {
+		quotaNoRetryErrors.delete(session);
+	}
+}
+
+/** The typed error the session's last turn ended with, if it ended on quota exhaustion. */
+export function quotaNoRetryErrorOf(session: object): QuotaExhaustedNoRetryError | undefined {
+	return quotaNoRetryErrors.get(session);
 }

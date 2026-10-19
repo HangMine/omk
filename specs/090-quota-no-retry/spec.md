@@ -35,8 +35,13 @@ New module `packages/coding-agent/src/core/quota-retry-policy.ts`
   immediately, pinned or not, with a 0 ms wait. If no candidate can be switched
   to, the turn ends at once (no same-model retry).
 - **off**: the error is not retryable; the turn ends at once with no retry
-  events. `QuotaExhaustedNoRetryError` (`code: "quota_exhausted"`,
-  `retryable: false`, message `quota exhausted, no retry: …`) is the typed form.
+  events.
+- Either way, a turn that ends on quota exhaustion settles with
+  `QuotaExhaustedNoRetryError` (`code: "quota_exhausted"`, `retryable: false`,
+  message `quota exhausted, no retry: …`, provider message as `cause`), read
+  with `quotaNoRetryErrorOf(session)`. `agent-session.ts` has one call line
+  (`recordQuotaOutcome`); `prompt()` still resolves and the provider termination
+  record is unchanged.
 - Other retryable errors: a Retry-After hint in the error text
   (`Retry-After: N`, `retry-after-ms: N`, `retry after N s`, `try again in Ns`)
   replaces the backoff; every wait is capped at 60 s and at the run budget.
@@ -55,7 +60,10 @@ unchanged.
 - `packages/coding-agent/test/agent-session-retry.test.ts` — six `spec 090:`
   cases (fail on base `af8d32559e`): ends at once when quota failover is
   disabled; zero-wait failover pinned / unpinned; ends at once with no usable
-  candidate; honors Retry-After; caps Retry-After at 60 s.
+  candidate; honors Retry-After; caps Retry-After at 60 s. Three more fail on
+  `93ac5e4ada`: failover off ends with `QuotaExhaustedNoRetryError` (cause =
+  provider message); failover on with no usable candidate ends with the same
+  error; a successful quota failover leaves no typed error.
 - `packages/coding-agent/test/quota-retry-policy.test.ts` — unit tests for the
   classifier split, typed error, hint parsing, wait cap, retry gate (new module;
   fails on base).
