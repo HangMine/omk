@@ -159,9 +159,17 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
      written fresh from the SKILL.md bodies (not translated from KO). Banned
      words, checked by script: (1) words of the skill name; (2) body-unique
      words (commands/paths); (3) the top-5 IDF description words, computed by
-     script over the 217-skill catalog. Checker script sha256
-     **TBD-before-writing** and banned-word-list sha256 **TBD-before-writing**
-     are fixed in the PREREG before any EN sentence is written.
+     script over the 217-skill catalog. Fixed in the PREREG before any EN
+     sentence is written: `check_labels_en.py` sha256
+     `17b358c806e8baed96501e5cb35ef2a822d29600642dc85436201889029d5672`;
+     `banned-en-v1.json` sha256
+     `d14463c84dcd9ceb07481ca21e807d3c3adb03d52d99812137c5781068d3636e`;
+     `fm.py` (frontmatter parser) sha256
+     `418f6416a7402a65573da029dd15232f999c8e4b5241f69cb3c508e2dd4ae6ca`.
+     Body-unique words are counted over the 217 selectable skills (same set as
+     the bm25 catalog and IDF N). The banned list covers the 100 sampled skills
+     and is byte-reproducible; the 223-based `38274cd1…` list is obsolete and
+     unused.
    - **KO set v1 (report only, not a gate):** `labels-v1.jsonl` sha256
      `b13f512542e469aa2e9e5e235aa31bafbbf2f3d2b2ff6d44f477676fdd6cee93`
      (100 answerable + 10 no-answer).
