@@ -1,5 +1,10 @@
 import { type DurableFileGeneration, type DurableFileIdentity, resolveDurableFileIdentity } from "./durable-file-io.ts";
 import {
+	type DurableFileLockPeek,
+	durableFileLockPathUnchecked,
+	peekDurableFileLockPathSync,
+} from "./durable-file-lock-peek.ts";
+import {
 	acquireDurableFileLockPathSync,
 	assertDurableFileLockPathsOwnedSync,
 	DurableFileLockBusyError,
@@ -14,7 +19,7 @@ import {
 } from "./durable-file-lock-storage.ts";
 
 export { DurableFileLockBusyError, DurableFileLockOwnershipError, getDurableFileLockRoot, resolveDurableFileIdentity };
-export type { DurableFileGeneration, DurableFileIdentity };
+export type { DurableFileGeneration, DurableFileIdentity, DurableFileLockPeek };
 
 export interface DurableFileLockOptions {
 	readonly timeoutMs?: number;
@@ -41,6 +46,15 @@ export function inspectDurableFileLockSync(path: string, scope: string): Durable
 		observations.find((value) => value.status === "live") ??
 		observations.find((value) => value.status === "unknown") ?? { status: "absent" }
 	);
+}
+
+/** Side-effect-free counterpart of {@link inspectDurableFileLockSync}: live wins, then dead, unknown, absent. */
+export function peekDurableFileLockSync(path: string, scope: string): DurableFileLockPeek {
+	const peeks = resolveDurableFileIdentity(path).lockKeys.map((key) =>
+		peekDurableFileLockPathSync(durableFileLockPathUnchecked(scope, key)),
+	);
+	for (const status of ["live", "dead", "unknown"] as const) if (peeks.includes(status)) return status;
+	return "absent";
 }
 
 function lockTimeout(options: DurableFileLockOptions): number {
