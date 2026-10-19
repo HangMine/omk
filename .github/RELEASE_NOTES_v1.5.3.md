@@ -18,7 +18,9 @@ suite green on a loaded host and restore CI.
   lacks a trailing newline after the bounded retries reports `journal_truncated`. A size/ctime
   race that exhausts the inner `readJournalBytes` retries surfaces as `integrity` instead,
   because `VerifiedRunConcurrentChangeError` carries that code. Middle-file corruption is
-  unchanged. The retry budget and that code mapping are tracked as a follow-up.
+  unchanged. That `integrity` is what spec 056 specifies (Design 2, AC1); a writer that
+  changes the file faster than the 2 to 6 ms retry window can still trigger it, which the
+  spec lists as a known risk.
 
 ## Tests and CI
 

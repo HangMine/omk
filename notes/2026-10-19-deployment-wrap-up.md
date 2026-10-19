@@ -283,7 +283,7 @@ size/ctime 경쟁이 4회 연속 발생하면 `journal_truncated`가 아니라 `
 
 단독 실행은 3회 연속 6/6 통과했고, 13,000회 이상 읽기와 인위적 load 16에서도 재현되지
 않았다. 전체 suite에서만 1회 발생했으므로 부하 의존 flake로 판정한다. 테스트 단언은
-약화하지 않았다.
+약화하지 않았다. 이 동작과 spec 056의 대조는 아래 "최종 마무리 점검"에 있다.
 
 ### RELEASE_NOTES 대조
 
@@ -304,13 +304,47 @@ size/ctime 경쟁이 4회 연속 발생하면 `journal_truncated`가 아니라 `
 | 실제 HOME, `~/.omk/mcp.json` 사용 | 8.80 s | 250 MB | 7,472 ms |
 | 깨끗한 HOME, MCP 설정 없음 | 2.01 s | 148 MB | 585 ms |
 
-전체 구간 중 `createAgentSessionRuntime`이 7,599ms 중 7,472ms를 차지한다. MCP manager는
-이미 `Promise.all`로 병렬 연결하므로, 남은 비용은 가장 느린 MCP 서버의 초기화와
-`listTools`다. 20여 개 서버를 시작 시 모두 spawn하는 구조가 지연과 RSS의 주원인이다.
+이 표의 두 조건은 MCP 설정뿐 아니라 `~/.agents` 같은 HOME 기반 리소스와 project 신뢰
+상태도 함께 달라서, 차이를 MCP 하나로 귀속할 수 없다. 처음 기록한 "20여 개 서버를
+모두 spawn하는 구조가 지연과 RSS의 주원인"은 격리 없이 내린 결론이었고, 실제로 로드되는
+서버도 `~/.omk/mcp.json`의 12개다. 아래 격리 측정으로 정정한다.
 
-**이번 배포에서 런타임을 바꾸지 않았다.** 지연 서버 하나가 전체 기동을 지배하는 구조라
-안전한 최소 수정이 아니며, lazy attach나 서버별 기동 예산은 도구 노출 시점과 첫 턴 동작을
-바꾸므로 별도 스펙과 회귀 검증이 필요하다. 측정값만 기록하고 후속 작업으로 넘긴다.
+### 격리 측정 (19:20~19:35 KST, 다른 세션 부하 load 35~48)
+
+시간은 부하 때문에 회차마다 크게 흔들린다(같은 조건 A가 7.5초와 15.1초). 메모리는 안정적이다.
+개발 빌드 RPC 기동, 임시 agent dir, `mcp.json`만 뺀 overlay HOME으로 토글했다.
+
+| 조건 | `createAgentSessionRuntime` | wall | max RSS |
+| A MCP 켬, 확장 켬 | 15,149 ms | 17.47 s | 249 MB |
+| B MCP 끔, 확장 켬 | 3,028 ms | 4.65 s | 242 MB |
+| C MCP 켬, 확장 끔 | 4,912 ms | 6.44 s | 173 MB |
+| D MCP 끔, 확장 끔 | 1,617 ms | 3.07 s | 167 MB |
+
+- OMK 프로세스의 RSS 증가 약 75MB는 MCP가 아니라 확장 로드에서 온다.
+- MCP 서버 12개를 런타임과 같은 `McpClient`로 병렬 연결한 wall은 6,642ms이고, 임계
+  경로는 `serena` 하나다(connect 6,424ms). 다음은 `fetch`(`uvx`) 3,180ms, `firecrawl`
+  2,624ms다. 12개 모두 연결과 `listTools`에 성공했다.
+- `serena`의 `--project-from-cwd`를 overlay 설정에서 빼도 단독 connect가 3.9~5.2초에서
+  4.6~5.0초로 그대로였다. project activation 가설은 기각한다.
+
+### 실사용 환경 (설치 엔진 1.4.3, 실제 agent dir, cwd `/tmp`, `--no-session`)
+
+| 조건 | `createAgentSessionRuntime` | 종료까지 wall | max RSS |
+| 기본 | 34,485 ms | 84.85 s | 1,214 MB |
+| `--no-extensions` | 11,286 ms | 13.79 s | 172 MB |
+
+프로세스별 RSS를 250ms 간격으로 샘플링한 1회(기동 22.6초, 종료 59.4초)에서 `omk` 프로세스
+자체의 peak는 1,146MB였고, MCP 서버는 기동 약 17.6초 뒤에야 spawn되기 시작했다. MCP
+자식 12개는 합계 약 1.1GB, 순간 트리 합계는 2.3GB였다.
+
+결론:
+
+1. 체감 지연과 메모리의 1차 원인은 전역 확장과 package 세트(`settings.packages` 58개,
+   `~/.omk/agent/extensions` 약 40개)다. 확장 로드가 끝나야 MCP가 시작되므로 두 시간이 더해진다.
+2. MCP는 2차 원인이고 임계 경로는 `serena`다. 서버 프로세스들은 별도로 약 1.1GB를 쓴다.
+3. 릴리스 코드의 회귀가 아니다. 이번 마무리에서 제품 런타임은 바꾸지 않았다. 안전한
+   최소 수정이 확인되지 않았고, 개선 후보는 사용자의 package 선택이나 제품 설계 변경
+   (MCP 연결을 확장 로드와 병렬로 시작, 확장 지연 로드)이라 별도 결정이 필요하다.
 
 ## AdaptOrch MCP 상태 (2026-10-19)
 
@@ -319,39 +353,97 @@ size/ctime 경쟁이 4회 연속 발생하면 `journal_truncated`가 아니라 `
 | `adaptorch_usage` | 성공. tenant `tenant_9bffe861...`, plan `team`, 2026-10, 14/2500 사용 |
 | `adaptorch_capabilities` | 성공. synthesis 4종, topology 6종, connector 40여 종. `verification_commands_enabled: false` |
 | `adaptorch-prod` 경로 | `/home/dmae97/projects/adaptorch`는 존재하지 않음. `/home/dmae97/Project/adaptorch`로 수정하고 JSON 유효성 확인. 파일은 `_disabledMcpServers`에 있어 계속 비활성 |
-| `_note`의 swe-2 pin | 로컬 `Project/adaptorch`에서 `adaptorch_mcp_swe2_pin` 심볼을 찾지 못함. 서버 측 제약인지 미검증 |
+| `_note`의 swe-2 pin | 런처, venv(editable `adaptorch 0.1.2`), `adaptorch.mcp_server` 어디에도 pin 구현이 없음(`swe2_pin`, allow-list, `pinned` 검색 0건). `_note`를 사실대로 고침(백업 `~/.omk/mcp.json.bak-note-20261019`). control plane 측 제약은 미검증 |
 
 `~/.omk/agent/mcp.json`은 OMK의 MCP 탐색 경로(`~/.kimi/mcp.json`, `~/.omk/mcp.json`,
 `<cwd>/.omk/mcp.json`)에 포함되지 않는다. 따라서 이 파일의 `adaptorch-prod` 항목은
 현재 런타임에 로드되지 않는 휴면 설정이다. 삭제하지 않고 경로만 고쳤다.
 
-swe-2 pin은 실제 `adaptorch_run` 호출로만 확인할 수 있다. 유료 provider 호출과 quota
-1 unit을 쓰므로 승인 없이 실행하지 않았다.
+control plane이 model을 제한하는지는 실행 가능한 `adaptorch_run` 호출로만 확인할 수 있다.
+로컬 pin이 없으므로 이 호출은 실제 run과 provider 비용을 만들 수 있어 승인 없이 실행하지 않았다.
+
+## 최종 마무리 점검 (2026-10-19 19:30 KST)
+
+### journal flake와 spec 056
+
+spec 056 Design 2와 AC1은 concurrent change가 4번 이어지면 마지막 `integrity` 오류를 그대로
+던지라고 규정한다. Known risks #1은 2~6ms보다 빠른 writer가 여전히 `integrity`를 낼 수
+있다고 수용한다. 따라서 위 코드 경로는 spec대로의 동작이다. 앞서 TODO로 적은
+"`journal_truncated`로 정규화"는 AC1 위반이므로 철회한다.
+
+남은 문제는 AC3 테스트의 mutator가 1ms마다 상태를 바꿔 spec이 수용한 위험 범위보다
+빠르다는 점이다. 부하가 높은 호스트에서는 이 테스트가 확률적으로 실패한다. 해결은 spec
+결정 사항이다. (a) 재시도 창을 늘리는 제품 변경, (b) AC3 mutator 주기를 수용 범위에
+맞추는 spec 개정, (c) 현행 유지와 무부하 게이트 중 하나를 택해야 한다. 테스트 단언은 바꾸지
+않았다.
+
+### `test.sh`가 provider 키 하나를 실호출로 흘렸다
+
+suite-2에서 `omk-ai` `test/stream.test.ts`의 WorkBuddy E2E 4건이 `429`로 실패했다. 이 블록은
+`describe.skipIf(!process.env.WORKBUDDY_API_KEY)`로 열리는데, 이 셸에는 키가 있고
+`test.sh`는 그 키를 unset하지 않았다. 따라서 suite-1/2/3 모두 사용자 키로 WorkBuddy를
+실제로 호출했다. `scripts/release.mjs`와 `scripts/local-release.mjs`가 `./test.sh`를 실행하므로
+릴리스 게이트도 같은 실호출을 하고, rate limit에 걸리면 릴리스가 막힌다.
+
+- 대조: `getEnvApiKey`가 읽는 provider 키 중 8개가 unset 목록에 없었다(`WORKBUDDY`,
+  `CURSOR`, `DEVIN`, `META`, `META_MODEL`, `MODEL`, `EXPLABS`, `EXPERIENTIAL`). 현재 설정된
+  것은 `WORKBUDDY_API_KEY` 하나다.
+- RED: 새 가드 `scripts/test/test-sh-provider-keys.test.mjs`가 위 8개를 보고하며 실패했다.
+- 수정: `test.sh`에 unset 8개를 추가했다.
+- GREEN: 가드 2/2 통과. 부모 env에 키가 있는 상태에서 `test.sh` prelude를 source하면 키가
+  사라지고, `stream.test.ts -t WorkBuddy`는 229/229 skipped다.
+- 가드는 `check:constitution`(`npm run check`, CI)에 포함되어 provider를 추가할 때의 drift를 막는다.
+- 실호출을 발견한 시점에 체인으로 돌던 suite-3은 내 프로세스 트리(44개)만 종료했다.
+
+### 전체 suite 재실행
+
+| 실행 | load | 결과 |
+| suite-1 (18:40) | 3.7 → 18 | exit 1, 9153 중 9092 통과, journal AC3 1건 실패 |
+| suite-2 (19:36) | 13.9 → 46.9 | exit 1, WorkBuddy E2E 4건(429)과 coding-agent 4파일 실패 |
+| suite-3 (19:40) | 46.9에서 시작 | 실호출 확인 후 내가 중단 |
+
+suite-2의 coding-agent 실패는 `verified-run-agent`(동시 run 참조 어댑터 순서),
+`verified-run-journal-read-retry`(AC3), `verified-run-writer-restart`(generation),
+`suite/agent-session-compaction`(admission overflow 복구)이며 모두 suite-1에서는 통과했다.
+이 호스트는 다른 프로젝트 세션이 load 35~57을 상시 만들고, 그 프로세스는 이 작업 소유가
+아니라 정리하지 않았다. 무부하 게이트는 확보하지 못했다.
+
+### 플랫폼 smoke
+
+| 대상 | 결과 |
+| Windows x64 | `omk-windows-x64.zip`을 Release `SHA256SUMS`로 검증(OK)한 뒤 WSL interop로 `omk.exe --version` → `1.5.3`, exit 0 |
+| Linux x64 | 앞선 기록대로 `1.5.3` |
+| Linux/Windows arm64, macOS | 이 호스트에서 실행 불가(qemu 없음, macOS 없음). CI 빌드와 attest만 확인 |
+
+### 로컬 실행 엔진
+
+`~/omk`는 아직 `omk-1.4.3-20261017`을 가리킨다. 이 엔진에는 로컬 수정 144개가 있어,
+1.4.3 교체 때처럼 새 clone에 재생하고 검증해야 한다. 실행 중인 모든 세션의 도구를
+바꾸는 작업이라 승인 없이 하지 않았다. `OMK_PACKAGE_DIR`는 dotfile이 아니라 실행 중인
+1.4.3 하네스가 도구 프로세스에 주입한 값이며, 엔진을 교체하면 함께 바뀐다.
 
 ## 남은 검증과 잔여 위험 (후속 TODO)
 
-1. **journal retry 코드 매핑:** inner retry 소진을 `journal_truncated`로 정규화하거나
-   재시도 예산을 outer와 합친다. 부하 의존 1건을 결정론적으로 만든다. 테스트 단언은 유지한다.
-2. **전체 suite 초록 확보:** 부하 없는 상태에서 `./test.sh` 2회 연속 exit 0을 확인한다.
-   현재 근거는 1회 exit 1이다.
-3. **MCP 시작 지연:** lazy attach 또는 서버별 기동 예산을 별도 스펙으로 설계한다.
-   측정 기준은 RPC 기동 wall 8.8초, RSS 250MB다.
-4. **swe-2 pin 검증:** 저비용 `adaptorch_run` 1회로 model 거부 여부를 확인한다.
-   유료 호출 승인이 필요하다.
-5. **GitHub Release 본문 동기화:** 수정한 릴리스 노트 문구를 Release 본문에 반영한다.
-   배포 작업이므로 별도 승인 후 실행한다.
-6. **플랫폼 smoke:** macOS, Windows, ARM 실제 실행은 미검증이다. CI 빌드와 attest만 확인됐다.
-7. **stale `OMK_PACKAGE_DIR`:** 이 셸의 값이 1.4.3 설치본을 가리킨다. 실행 전 unset 또는
-   새 경로로 갱신해야 한다.
-8. **Harness2 파일럿:** `notes/2026-10-19-harness2-assessment.md`의 최소 파일럿은 설계만
-   완료됐다. 제품 코드 변경 없이 `research/`에서 OmkSubstrate materialize 스파이크부터
-   시작한다.
+1. **spec 056 AC3 결정:** (a) 재시도 창 확대, (b) mutator 주기 개정, (c) 현행 유지 중 선택.
+   코드 매핑 변경은 AC1 위반이라 대상이 아니다. 결정 전까지 부하가 높은 호스트의
+   `./test.sh`는 확률적으로 exit 1일 수 있다.
+2. **무부하 게이트:** 다른 세션의 load가 내려간 시점에 `./test.sh` 2회 연속 exit 0을
+   확인한다. 현재 근거는 exit 1 두 번(load 18, 47)이다.
+3. **시작 지연과 메모리:** 1차 원인인 전역 확장/package 세트의 기여를 package 단위로
+   나눠 측정하고(overlay agent dir에서 절반씩 끄는 이분 탐색), 끌 package를 사용자가 정한다.
+   제품 측 후보(MCP 연결을 확장 로드와 병렬로 시작, 확장 지연 로드)는 별도 스펙이다.
+4. **GitHub Release v1.5.3 본문 동기화:** 정정한 릴리스 노트를 본문에 반영한다. 승인이 필요하다.
+5. **로컬 엔진 교체:** 로컬 수정 144개를 1.5.3 clone에 재생하고 검증한 뒤 `~/omk`를
+   전환한다. 승인이 필요하다.
+6. **control plane model 제한:** 실행 가능한 `adaptorch_run` 1회가 필요하다. 유료 호출 승인이 필요하다.
+7. **플랫폼:** arm64와 macOS 실제 실행 smoke. 해당 하드웨어나 CI runner가 필요하다.
+8. **Harness2 파일럿:** 별도 스펙이다. 제품 코드 변경 없이 `research/`에서 OmkSubstrate
+   materialize 스파이크부터 시작한다.
 
 ## 배포 판정
 
-- v1.5.3은 tag, GitHub Release, npm 7개 패키지 모두 게시된 상태다. 이번 작업은 게시된
-  산출물을 바꾸지 않는다.
-- 이번 커밋은 릴리스 노트와 배포 기록의 사실 정정만 포함한다. tag, npm publish,
-  GitHub Release 본문 수정은 하지 않는다.
-- 배포 준비 상태는 `PARTIAL`이다. 전체 suite 초록 2회와 journal flake 안정화가 끝나야
-  다음 패치의 배포 근거가 완성된다.
+- v1.5.3은 tag, GitHub Release, npm 7개 패키지가 게시된 상태이고, 이번 작업은 게시 산출물을
+  바꾸지 않는다. Windows x64 실행을 추가로 확인했다.
+- `test.sh` 수정은 npm 패키지에 들어가지 않는 저장소 도구라 새 릴리스가 필요 없다. 다음
+  `scripts/release.mjs` 실행부터 바로 적용된다.
+- 다음 릴리스 게이트는 `BLOCKED`다. spec 056 AC3 결정과 무부하 suite 2회가 남아 있다.
