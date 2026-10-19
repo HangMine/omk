@@ -76,6 +76,7 @@ describe("AgentSession retry", () => {
 		baseDelayMs?: number;
 		errorMessage?: string;
 		modelPinned?: boolean;
+		providerResilience?: Record<string, unknown>;
 	}) {
 		const failCount = options?.failCount ?? 1;
 		const emptyStopCount = options?.emptyStopCount ?? 0;
@@ -123,7 +124,10 @@ describe("AgentSession retry", () => {
 		authStorage.setRuntimeApiKey("deepseek", "test-key");
 		settingsManager.applyOverrides({
 			retry: { enabled: true, maxRetries, baseDelayMs },
-			providerResilience: { failoverCandidates: [{ provider: "deepseek", id: "deepseek-v4-flash" }] },
+			providerResilience: {
+				failoverCandidates: [{ provider: "deepseek", id: "deepseek-v4-flash" }],
+				...options?.providerResilience,
+			},
 		});
 
 		session = new AgentSession({
@@ -218,6 +222,78 @@ describe("AgentSession retry", () => {
 		expect(created.session.model?.id).toBe("deepseek-v4-flash");
 		expect(events[0]).toContain("→ failover deepseek/deepseek-v4-flash");
 		expect(events).toContain("end:success=true");
+	});
+
+	const QUOTA_BODY = "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).";
+
+	function recordRetries(target: AgentSession, abortOnStart = false) {
+		const starts: Array<{ attempt: number; delayMs: number; errorMessage: string }> = [];
+		target.subscribe((event) => {
+			if (event.type !== "auto_retry_start") return;
+			starts.push({ attempt: event.attempt, delayMs: event.delayMs, errorMessage: event.errorMessage });
+			if (abortOnStart) queueMicrotask(() => target.abortRetry());
+		});
+		return starts;
+	}
+
+	it("spec 090: ends a quota-exhausted turn at once when quota failover is disabled", async () => {
+		const created = createSession({
+			failCount: 99,
+			errorMessage: QUOTA_BODY,
+			providerResilience: { autoFailoverOnQuotaExhaustion: false },
+		});
+		const starts = recordRetries(created.session);
+		await created.session.prompt("Test");
+		expect(created.getCallCount()).toBe(1);
+		expect(starts).toEqual([]);
+		expect(created.session.isRetrying).toBe(false);
+	});
+
+	it("spec 090: fails over quota exhaustion with zero retry wait (pinned)", async () => {
+		const created = createSession({ failCount: 1, errorMessage: QUOTA_BODY, modelPinned: true });
+		const starts = recordRetries(created.session);
+		await created.session.prompt("Test");
+		expect(created.getCallCount()).toBe(2);
+		expect(created.session.model?.id).toBe("deepseek-v4-flash");
+		expect(starts.map((s) => s.delayMs)).toEqual([0]);
+	});
+
+	it("spec 090: fails over quota exhaustion with zero retry wait (unpinned)", async () => {
+		const created = createSession({ failCount: 1, errorMessage: QUOTA_BODY });
+		const starts = recordRetries(created.session);
+		await created.session.prompt("Test");
+		expect(created.session.model?.id).toBe("deepseek-v4-flash");
+		expect(starts.map((s) => s.delayMs)).toEqual([0]);
+	});
+
+	it("spec 090: ends at once when quota failover has no usable candidate", async () => {
+		const created = createSession({
+			failCount: 99,
+			errorMessage: QUOTA_BODY,
+			providerResilience: { failoverCandidates: [{ provider: "nope-provider", id: "nope-model" }] },
+		});
+		const starts = recordRetries(created.session);
+		await created.session.prompt("Test");
+		expect(created.getCallCount()).toBe(1);
+		expect(starts).toEqual([]);
+		expect(created.session.isRetrying).toBe(false);
+	});
+
+	it("spec 090: honors a Retry-After hint on a transient 429", async () => {
+		const created = createSession({ failCount: 99, errorMessage: "429 Too Many Requests. Retry-After: 2" });
+		const starts = recordRetries(created.session, true);
+		await created.session.prompt("Test");
+		expect(starts[0]?.delayMs).toBe(2000);
+	});
+
+	it("spec 090: caps a Retry-After wait at 60s", async () => {
+		const created = createSession({
+			failCount: 99,
+			errorMessage: "429 rate limited, please retry after 600 seconds",
+		});
+		const starts = recordRetries(created.session, true);
+		await created.session.prompt("Test");
+		expect(starts[0]?.delayMs).toBe(60_000);
 	});
 
 	it("exhausts max retries and emits failure", async () => {

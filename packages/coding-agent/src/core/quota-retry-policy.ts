@@ -1,0 +1,97 @@
+/**
+ * Spec 090: quota exhaustion gets zero retry waits.
+ *
+ * Quota/billing exhaustion is classified by {@link classifyProviderError}
+ * (`kind: "quota_exhausted"`), which keeps it apart from a transient 429
+ * (`rate_limit` / `transient_transport`). Same-model retry cannot heal an
+ * exhausted quota, so the turn either fails over at once (when
+ * `providerResilience.autoFailoverOnQuotaExhaustion` is on, pinned or not) or
+ * ends at once with {@link QuotaExhaustedNoRetryError}. Other retryable errors
+ * keep the exponential backoff, honor a Retry-After hint, and every wait is
+ * capped at {@link MAX_RETRY_WAIT_MS}.
+ */
+import type { AssistantMessage } from "omk-ai";
+import { classifyProviderError } from "./provider-error-classification.ts";
+import { type ProviderResilienceSettings, resolveProviderResilience } from "./provider-resilience.ts";
+import { computeRetryDelayMs } from "./provider-retry.ts";
+
+export const MAX_RETRY_WAIT_MS = 60_000;
+
+export type QuotaRetryAction = "not_quota" | "failover" | "end";
+
+/** Typed terminal error: quota exhausted, no retry. */
+export class QuotaExhaustedNoRetryError extends Error {
+	readonly code = "quota_exhausted";
+	readonly retryable = false;
+	readonly providerMessage: string;
+
+	constructor(providerMessage: string) {
+		super(`quota exhausted, no retry: ${providerMessage}`);
+		this.name = "QuotaExhaustedNoRetryError";
+		this.providerMessage = providerMessage;
+	}
+}
+
+export function isQuotaExhaustedError(errorMessage: string | undefined): boolean {
+	return errorMessage !== undefined && classifyProviderError({ text: errorMessage }).kind === "quota_exhausted";
+}
+
+export function quotaRetryAction(errorMessage: string | undefined, autoFailoverOnQuota: boolean): QuotaRetryAction {
+	if (!isQuotaExhaustedError(errorMessage)) return "not_quota";
+	return autoFailoverOnQuota ? "failover" : "end";
+}
+
+const UNIT_MS: Record<string, number> = { ms: 1, s: 1000, sec: 1000, secs: 1000, second: 1000, seconds: 1000 };
+
+/** Retry-After hint carried in provider error text, in milliseconds. */
+export function retryAfterHintMs(errorMessage: string | undefined): number | undefined {
+	if (!errorMessage) return undefined;
+	const ms = /retry[-_ ]after[-_ ]ms["']?\s*[:=]\s*(\d+(?:\.\d+)?)/i.exec(errorMessage);
+	if (ms) return Math.round(Number(ms[1]));
+	const match =
+		/retry[-_ ]after["']?\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(ms|secs?|seconds?|s)?\b/i.exec(errorMessage) ??
+		/(?:try again|retry) in\s+(\d+(?:\.\d+)?)\s*(ms|secs?|seconds?|s)\b/i.exec(errorMessage);
+	if (!match) return undefined;
+	const value = Number(match[1]) * UNIT_MS[(match[2] ?? "s").toLowerCase()];
+	return Number.isFinite(value) && value >= 0 ? Math.round(value) : undefined;
+}
+
+/** One retry wait: 0 after a quota failover, else Retry-After or backoff, capped at 60s and the run budget. */
+export function retryWaitMs(input: {
+	readonly quotaFailover: boolean;
+	readonly backoffMs: number;
+	readonly errorMessage: string | undefined;
+	readonly remainingMs?: number;
+}): number {
+	if (input.quotaFailover) return 0;
+	const requested = retryAfterHintMs(input.errorMessage) ?? input.backoffMs;
+	return Math.min(requested, MAX_RETRY_WAIT_MS, input.remainingMs ?? Number.POSITIVE_INFINITY);
+}
+
+/** Retry gate: quota exhaustion is retryable only through failover. */
+export function quotaAllowsRetry(
+	errorMessage: string | undefined,
+	settings: ProviderResilienceSettings | undefined,
+): boolean {
+	const { autoFailoverOnQuotaExhaustion } = resolveProviderResilience(settings);
+	return quotaRetryAction(errorMessage, autoFailoverOnQuotaExhaustion) !== "end";
+}
+
+/**
+ * Wait before the next agent-turn retry, or undefined when the turn must end now:
+ * quota exhaustion with no failover target never retries the same route.
+ */
+export function planRetryWait(
+	message: AssistantMessage,
+	settings: { readonly baseDelayMs: number },
+	attempt: number,
+	failoverTo: string | undefined,
+	rotatedTo: string | undefined,
+	remainingMs: number | undefined,
+): number | undefined {
+	const quota = isQuotaExhaustedError(message.errorMessage);
+	if (quota && failoverTo === undefined) return undefined;
+	const switched = failoverTo !== undefined || rotatedTo !== undefined;
+	const backoffMs = computeRetryDelayMs(settings.baseDelayMs, attempt, switched);
+	return retryWaitMs({ quotaFailover: quota, backoffMs, errorMessage: message.errorMessage, remainingMs });
+}
