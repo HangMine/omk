@@ -152,7 +152,10 @@ describe("live journal readers under a concurrent writer (spec 056)", () => {
 			process.stdout.write("ready\\n");
 			const pause = new Int32Array(new SharedArrayBuffer(4));
 			for (;;) {
-				fs.writeSync(fd, tail, 0, tail.length, baseLength);
+				// pwrite may return short; a partial line is not a state this test claims can occur,
+				// and the reader would reject it as integrity rather than a concurrent change.
+				let written = 0;
+				while (written < tail.length) written += fs.writeSync(fd, tail, written, tail.length - written, baseLength + written);
 				Atomics.wait(pause, 0, 0, 1);
 				fs.ftruncateSync(fd, baseLength);
 				Atomics.wait(pause, 0, 0, 1);

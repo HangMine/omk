@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Skill search now passes the active TODO kind to metacon ranking. The `phase` input existed in the ranker and run log but `SkillSearchGate` never supplied it, so ranking and `phaseSource` always reported the `task` default.
+- Concurrent attachment previews now share one in-flight Photon decode. A second repaint of the same active attachment no longer allocates another full-resolution image and resized RGBA buffer; a dropped draft still releases its entry through the existing `WeakMap`.
+
+### Tests
+
+- Two compaction tests pin a 1 ms retry backoff instead of inheriting the default 5-attempt, 2 s-base policy. The retry path and assertions are unchanged; without the pin they waited about 62 s for a 503 and exceeded the 30 s Vitest timeout, which failed CI on every run since the default changed in 1.5.1.
+- `verified-run.test.ts` gives its fixture 30 s of work and verify budget and derives the "past the work deadline" clock from that budget. The old 3 s budget also bounded process spawn, so a loaded host spent it before the writer ran and the suite reported `deadline`; the timeout behavior keeps its own test with `workMs: 100`.
+- `verified-run-authority-restart.test.ts` uses a 60 s grant TTL. Its fixtures assert restart quarantine, not expiry, and a 1 s TTL let a loaded host expire the grant before `dispatchIntent()` committed. Expiry stays pinned deterministically in `verified-run-authority-store.test.ts`.
+- `memory-factorial` waits up to 30 s for the host clock instead of 5 s. A WSL2 time resync can hold `Date.now()` for seconds while `performance.now()` advances; the store's real-clock guard and the test's future-dated-memory assertions are unchanged.
+- The `journal-read-retry` mutator retries a short `pwrite`. A partial line is not one of the two valid states the test claims a live writer produces, and the reader correctly rejected it as `integrity`.
+
 ## [1.5.2] - 2026-10-18
 
 ### Changed
@@ -17,8 +32,6 @@
 
 - The default `retry.maxRetries` is now `5`, giving 2s, 4s, 8s, 16s, and 32s backoff instead of stopping after 2s, 4s, and 8s.
 
-
-## [Unreleased]
 
 ## [1.5.0] - 2026-10-18
 

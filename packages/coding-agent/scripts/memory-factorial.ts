@@ -29,12 +29,19 @@ const modelId = "offline-rule-solver-v1";
 const tokens = (text: string) => counter.countText(text, modelId).tokens;
 
 // Fixture-only recovery: preserve the store's real-clock guard and bound time spent waiting.
+//
+// The bound is a stuck-clock detector, not a latency budget: a loaded host or a WSL2 time
+// resync can hold Date.now() for several seconds (measured 0.7s under load, and the wrapper in
+// test/setup-env.ts keeps the last value when wall time rolls back). A 5s bound turned that
+// into `fixture clock did not recover`; 30s still fails instead of hanging forever.
+const CLOCK_RECOVERY_LIMIT_MS = 30_000;
 function waitForClock(target: number): number {
 	const started = performance.now();
 	const pause = new Int32Array(new SharedArrayBuffer(4));
 	let waited = false;
 	while (Date.now() < target) {
-		if (performance.now() - started >= 5000) throw new Error("fixture clock did not recover");
+		if (performance.now() - started >= CLOCK_RECOVERY_LIMIT_MS)
+			throw new Error("fixture clock did not recover");
 		Atomics.wait(pause, 0, 0, 50);
 		waited = true;
 	}

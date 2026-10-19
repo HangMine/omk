@@ -31,51 +31,69 @@ interface DecodedImage {
 	rgba: Uint8Array;
 }
 
-let decodeCache = new WeakMap<PromptImageAttachment, DecodedImage | null>();
+interface DecodeEntry {
+	result?: DecodedImage | null;
+	pending?: Promise<DecodedImage | null>;
+}
 
-async function decodeToRgba(
+/** Keyed by the stable attachment metadata object: a dropped draft releases its entry. */
+let decodeCache = new WeakMap<PromptImageAttachment, DecodeEntry>();
+
+/**
+ * One decode per active attachment. Concurrent previews share the in-flight promise, so a second repaint
+ * cannot allocate another full-resolution Photon image for the same bytes.
+ */
+function decodeToRgba(
 	attachment: PromptImageAttachment,
-	bytes: Uint8Array | undefined,
+	getBytes: () => Uint8Array | undefined,
 ): Promise<DecodedImage | null> {
 	const cached = decodeCache.get(attachment);
-	if (cached !== undefined) return cached;
-	let decoded: DecodedImage | null = null;
-	if (bytes && bytes.length > 0) {
-		try {
-			const photon = await loadPhoton();
-			if (photon) {
-				const image = photon.PhotonImage.new_from_byteslice(bytes);
-				try {
-					const width = image.get_width();
-					const height = image.get_height();
-					if (width > 0 && height > 0 && width * height <= PROMPT_ATTACHMENT_LIMITS.maxPixels) {
-						const scale = Math.min(1, 80 / width, (PREVIEW_ROWS * 2) / height);
-						const small = photon.resize(
-							image,
-							Math.max(1, Math.round(width * scale)),
-							Math.max(1, Math.round(height * scale)),
-							1,
-						);
-						try {
-							decoded = {
-								width: small.get_width(),
-								height: small.get_height(),
-								rgba: small.get_raw_pixels().slice(),
-							};
-						} finally {
-							small.free();
+	if (cached?.pending) return cached.pending;
+	if (cached?.result !== undefined) return Promise.resolve(cached.result);
+	const entry: DecodeEntry = {};
+	decodeCache.set(attachment, entry);
+	entry.pending = (async () => {
+		let decoded: DecodedImage | null = null;
+		const bytes = getBytes();
+		if (bytes && bytes.length > 0) {
+			try {
+				const photon = await loadPhoton();
+				if (photon) {
+					const image = photon.PhotonImage.new_from_byteslice(bytes);
+					try {
+						const width = image.get_width();
+						const height = image.get_height();
+						if (width > 0 && height > 0 && width * height <= PROMPT_ATTACHMENT_LIMITS.maxPixels) {
+							const scale = Math.min(1, 80 / width, (PREVIEW_ROWS * 2) / height);
+							const small = photon.resize(
+								image,
+								Math.max(1, Math.round(width * scale)),
+								Math.max(1, Math.round(height * scale)),
+								1,
+							);
+							try {
+								decoded = {
+									width: small.get_width(),
+									height: small.get_height(),
+									rgba: small.get_raw_pixels().slice(),
+								};
+							} finally {
+								small.free();
+							}
 						}
+					} finally {
+						image.free();
 					}
-				} finally {
-					image.free();
 				}
+			} catch {
+				decoded = null;
 			}
-		} catch {
-			decoded = null;
 		}
-	}
-	decodeCache.set(attachment, decoded);
-	return decoded;
+		entry.result = decoded;
+		entry.pending = undefined;
+		return decoded;
+	})();
+	return entry.pending;
 }
 
 /** Render one attachment as truecolor half-block lines inside a thin box. */
@@ -98,7 +116,7 @@ function renderTile(index: number, attachment: PromptImageAttachment, tileWidth:
 		return lines;
 	}
 
-	const decoded = decodeCache.get(attachment);
+	const decoded = decodeCache.get(attachment)?.result;
 	if (!decoded) {
 		// Metadata-only fallback (decode unavailable or still pending).
 		for (let row = 0; row < PREVIEW_ROWS; row += 1) {
@@ -161,7 +179,7 @@ export function createAttachmentStrip(
 	void (async () => {
 		for (const attachment of attachments.slice(0, MAX_TILES)) {
 			if (disposed) return;
-			await decodeToRgba(attachment, getBytes(attachment.id));
+			await decodeToRgba(attachment, () => getBytes(attachment.id));
 		}
 		if (disposed) return;
 		cachedWidth = undefined;

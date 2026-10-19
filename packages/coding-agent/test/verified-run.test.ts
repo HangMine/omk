@@ -36,7 +36,18 @@ function rawContract() {
 		// Generous settle budget: ubuntu-22.04 CI runners can take >1s between the
 		// killed child's `close` and the namespace teardown probe going `gone`.
 		// Normal paths settle as soon as the drain completes.
-		budget: { workMs: 3000, verifyMs: 3000, cleanupMs: 15000, maxOutputBytes: 4096, maxFiles: 100, maxBytes: 65536 },
+		//
+		// workMs/verifyMs also bound the writer and check spawn, not only the work
+		// itself. Under a loaded host the same fixture measured 6.1s and failed with
+		// `deadline`; the timeout behavior has its own test that pins workMs: 100.
+		budget: {
+			workMs: 30000,
+			verifyMs: 30000,
+			cleanupMs: 15000,
+			maxOutputBytes: 4096,
+			maxFiles: 100,
+			maxBytes: 65536,
+		},
 		apply: "artifact-only",
 	};
 }
@@ -328,7 +339,14 @@ describe("verified-run command profile", () => {
 
 	it("rechecks the work deadline after committing dispatch intent", async () => {
 		const { contract, plan, command } = prepared();
-		const clock = vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(10000);
+		// Derived from the fixture budget, not a literal: the work deadline moved from 3s to 30s so
+		// spawn cost under load cannot consume it, and a hardcoded 10s would no longer cross it.
+		const pastDeadline = contract.budget.workMs * 2;
+		const clock = vi
+			.spyOn(performance, "now")
+			.mockReturnValueOnce(0)
+			.mockReturnValueOnce(0)
+			.mockReturnValue(pastDeadline);
 		try {
 			const state = await new RunCoordinator(stateRoot).start(contract, command, {
 				approvedContractDigest: plan.contractDigest,

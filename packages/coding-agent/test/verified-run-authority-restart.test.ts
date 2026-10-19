@@ -46,7 +46,11 @@ function input(commandId: string, now: number, overrides: Record<string, unknown
 		intentDigest: DIGEST,
 		claims: [claim("src/x")],
 		now,
-		ttl: 1000,
+		// These fixtures assert restart/quarantine semantics, not expiry. The store clock is real wall
+		// time, so a 1s TTL let a loaded host expire the grant before dispatchIntent() committed and
+		// returned false. Expiry itself is pinned deterministically in verified-run-authority-store.test.ts
+		// (`ttl: 50` with an explicit `now`).
+		ttl: 60_000,
 		...overrides,
 	};
 }

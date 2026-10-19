@@ -54,6 +54,34 @@ describe("prompt attachment thumbnail", () => {
 		}
 		strip.dispose();
 	});
+	it("shares one in-flight decode across concurrent previews", async () => {
+		const store = new AttachmentStore();
+		store.put(await redImage(), "file");
+		let reads = 0;
+		const getBytes = (id: string) => {
+			reads += 1;
+			return store.getBytes(id);
+		};
+		let settled = 0;
+		let done = () => {};
+		const ready = new Promise<void>((resolve) => {
+			done = resolve;
+		});
+		const onReady = () => {
+			settled += 1;
+			if (settled === 2) done();
+		};
+		const first = createAttachmentStrip(store.list(), getBytes, onReady);
+		const second = createAttachmentStrip(store.list(), getBytes, onReady);
+		first.render(80);
+		second.render(80);
+		await ready;
+		expect(reads).toBe(1);
+		expect(first.render(80).join("\n")).toContain("38;2;255;0;0m");
+		expect(second.render(80).join("\n")).toContain("38;2;255;0;0m");
+		first.dispose();
+		second.dispose();
+	});
 	it("does not request a late repaint after disposal", async () => {
 		const store = new AttachmentStore();
 		store.put(await redImage(), "file");

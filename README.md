@@ -565,9 +565,6 @@ Release notes live in [RELEASE_NOTES_v1.5.2.md](.github/RELEASE_NOTES_v1.5.2.md)
 
 - The default `retry.maxRetries` is now `5`, giving 2s, 4s, 8s, 16s, and 32s backoff instead of stopping after 2s, 4s, and 8s.
 
-
-## [Unreleased]
-
 Release notes live in [RELEASE_NOTES_v1.5.1.md](.github/RELEASE_NOTES_v1.5.1.md).
 
 ## Release v1.5.0

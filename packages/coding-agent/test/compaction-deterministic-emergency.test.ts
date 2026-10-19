@@ -335,7 +335,10 @@ describe("auto-compaction under exhausted quota", () => {
 	});
 
 	it("does not degrade a transient failure that should retry the model", async () => {
-		const harness = await createHarness();
+		// The default retry policy (5 attempts, 2s base) waits ~62s for this failure, longer than the
+		// 30s test timeout. Keep the retry path real but shrink its backoff so the assertion measures
+		// "transient failure is not degraded", not the wall clock.
+		const harness = await createHarness({ settings: { retry: { enabled: true, maxRetries: 5, baseDelayMs: 1 } } });
 		harnesses.push(harness);
 		seedCompactableSession(harness);
 		useFailingSummaryStreamFn(harness, "provider returned error 503 service unavailable");

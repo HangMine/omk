@@ -190,8 +190,11 @@ describe("AgentSession compaction characterization", () => {
 	});
 
 	it("names the declined handler when the built-in summary also fails", async () => {
+		// This path retries the 503 summary under the default 5-attempt, 2s-base policy (~62s), past the
+		// 30s test timeout. Shrink the backoff only; the retry count and the propagated error stay real.
 		const harness = await createHarness({
 			withConfiguredAuth: false,
+			settings: { retry: { enabled: true, maxRetries: 5, baseDelayMs: 1 } },
 			extensionFactories: [
 				(pi) => {
 					pi.on("session_before_compact", async () => ({

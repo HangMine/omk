@@ -61,8 +61,8 @@ export interface SkillSearchSessionOptions {
 	/** 058 R1: the ranker chosen at session start (default `bm25`). */
 	readonly mode?: SkillSelectRankMode;
 	/**
-	 * 058 R4 `phase`: 049's `activeTodoKind()` once it exists. Unset (049 not on main) means `"task"`.
-	 * TODO(049): pass `() => activeTodoKind()` from the session when `todo-runtime-state.ts` exports it.
+	 * 058 R4 `phase`: the active TODO kind (`todo-runtime-state.activeTodoKind`), wired by `SkillSearchGate`.
+	 * Unset means `"task"`; every value still has to be one of `METACON_PHASES` to affect ranking.
 	 */
 	readonly phase?: () => string | undefined;
 }

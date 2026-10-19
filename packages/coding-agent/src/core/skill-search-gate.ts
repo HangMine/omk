@@ -18,6 +18,7 @@ import {
 	skillSelectMode,
 } from "./skill-search-mode.ts";
 import type { Skill } from "./skills.ts";
+import { activeTodoKind } from "./todo-runtime-state.ts";
 import { createSkillSearchToolDefinition } from "./tools/skill-search-tool.ts";
 
 export interface SkillSearchSetup {
@@ -136,6 +137,7 @@ export class SkillSearchGate {
 					agentDir: options.agentDir ?? getAgentDir(),
 					env: options.env ?? process.env,
 					mode: this.activation.mode === "metacon" ? "metacon" : "bm25",
+					phase: activeTodoKind,
 				}),
 		);
 		return this.session;
