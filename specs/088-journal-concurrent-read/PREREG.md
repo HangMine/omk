@@ -33,3 +33,11 @@ Added after the first run because that run had no validity conditions.
   The torn-tail bounds are much weaker than the 30,000-based bound.
 - This re-measure is the single allowed re-measure. If validity is unmet again, do not rerun; report it for a setup discussion.
 - Counters come only from the reader-mode test seams (`read`, `sleep` and `ownerLive` wrappers that call the default implementations). Product behavior is unchanged.
+
+## Amendment 2 (2026-10-20, before calibration)
+
+- A calibration smoke is approved. It does not count as the re-measure.
+- Candidates for `GATE_READ_GAP_US`: 0, 200 and 1000.
+- Each candidate smoke is 800 reads (8 readers × 100). Outputs are labeled "calibration, not gate".
+- Selection rule: projected torn-tail drops at 30,000 reads (smoke drops × 37.5) must be at least 600 (twice the validity threshold). The smallest qualifying value is chosen. If none qualifies, stop and report; no gate.
+- Failure counts must not influence the selection. Any smoke failure is reported and treated as a bug: stop, no gate.
