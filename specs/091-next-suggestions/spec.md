@@ -132,6 +132,16 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
      writes the next-task sentence for that used skill, **without seeing any
      bm25 output**. The label file's sha is pinned in the PREREG before any
      measurement.
+   - **Label data rule:** labels are derived from real skill-usage logs. Raw
+     session logs never leave the box and never become fixtures. The label
+     file is **not committed** to the repo; it stays on the box only, at
+     `/workspace/omk-eval-091/labels-<sha256-prefix>.jsonl` (placeholder).
+     Human-written sentences that closely copy log text are likewise not
+     committed. The spec and PR record only the label file's sha256, the pair
+     count N, and aggregate results.
+   - **Allowed misses:** once N is fixed, the PREREG writes the allowed miss
+     count as an integer, `floor(0.01 × N)` (N = 100 → at most 1 miss).
+     Recall passes only if misses ≤ that integer.
    - Recall = correct skill inside the stage-2 candidates at k = 255 (or the
      reduced k that fits 32k). Target **≥ 99%**. Also report candidate token
      count vs 32k.
@@ -157,9 +167,14 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 | Jev request timeout | 1500 ms |
 | Jev probability threshold for `!skill:` | 0.6 |
 | Stage-2 recall target | ≥ 99% (at most one boosted remeasure) |
+| Allowed recall misses | `floor(0.01 × N)` as an integer, fixed once N is known (N = 100 → ≤ 1) |
 | Extra billed tokens | median ≤ 300, p95 ≤ 1000 |
 | Suggestion latency | p95 ≤ 3 s |
 | Late sentence / Jev response | discarded if user typed or sent |
+
+**Statistical caveat:** pass at ≤ 1 miss in 100 is an observed criterion; its
+95% CI lower bound is ~95%, so passing does not prove recall ≥ 99%. Proving 99%
+(95% one-sided) needs ~300 labels with 0 misses.
 
 The suggestion cache-read ratio floor and the boost formula are written into
 the PREREG before any run.
