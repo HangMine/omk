@@ -15,8 +15,10 @@ import {
 	isNextSuggestionsEnabled,
 	MainRequestRecorder,
 	planSuggestion,
+	type QuotaUsage,
 	requestNextSuggestion,
 	type SuggestionPlan,
+	USAGE_CHECK_TIMEOUT_MS,
 } from "../../core/next-suggestion.ts";
 import { loadSubscriptionUsage } from "../../core/provider-usage.ts";
 
@@ -38,8 +40,9 @@ export interface NextSuggestionOptions {
 	readonly env?: NodeJS.ProcessEnv;
 	readonly now?: () => number;
 	readonly isTab?: (data: string) => boolean;
-	/** Highest used percent of the active quota windows; undefined when unknown. */
-	readonly usedPercent?: () => Promise<number | undefined>;
+	/** Quota usage for the 90% rule; called at most once per settled turn, only with the flag on. */
+	readonly quotaUsage?: () => Promise<QuotaUsage>;
+	readonly usageTimeoutMs?: number;
 	readonly requestRender?: () => void;
 	readonly onPlan?: (plan: SuggestionPlan) => void;
 }
@@ -125,11 +128,26 @@ export class NextSuggestionController {
 		return false;
 	}
 
+	/** Fail closed: an error, a timeout or a missing reader all count as unavailable. */
+	private async checkUsage(): Promise<QuotaUsage> {
+		const read = this.options.quotaUsage;
+		if (!read) return "unavailable";
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timeout = new Promise<QuotaUsage>((resolve) => {
+			timer = setTimeout(() => resolve("unavailable"), this.options.usageTimeoutMs ?? USAGE_CHECK_TIMEOUT_MS);
+		});
+		try {
+			return await Promise.race([read().catch((): QuotaUsage => "unavailable"), timeout]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+
 	async onSettled(outcome: string | undefined): Promise<void> {
 		this.cancel();
 		const generation = this.generation;
 		const now = this.options.now ?? Date.now;
-		const usedPercent = await this.options.usedPercent?.().catch(() => undefined);
+		const usage = await this.checkUsage();
 		if (generation !== this.generation) return;
 		const plan = planSuggestion({
 			record: this.recorder.lastRequest,
@@ -137,7 +155,7 @@ export class NextSuggestionController {
 			finalAssistant: lastAssistant(this.session.agent.state.messages),
 			currentModel: this.session.model,
 			nowMs: now(),
-			usedPercent,
+			usage,
 		});
 		this.options.onPlan?.(plan);
 		if (plan.kind !== "request") return;
@@ -175,13 +193,18 @@ export function installNextSuggestions(
 	return active;
 }
 
-/** Highest used percent across the active provider's quota windows, if the provider reports usage. */
-export async function activeQuotaUsedPercent(session: AgentSession): Promise<number | undefined> {
+/**
+ * Highest used percent across the active provider's quota windows. A provider
+ * with no quota source reports `"no_quota"`; a source that returns no windows
+ * (offline, credential missing, API error) reports `"unavailable"`.
+ */
+export async function activeQuotaUsage(session: AgentSession): Promise<QuotaUsage> {
 	const snapshot = await loadSubscriptionUsage(session);
-	const used = (snapshot?.windows ?? [])
+	if (snapshot === undefined) return "no_quota";
+	const used = snapshot.windows
 		.map((window) => window.usedPercent)
-		.filter((value): value is number => typeof value === "number");
-	return used.length > 0 ? Math.max(...used) : undefined;
+		.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+	return used.length > 0 ? Math.max(...used) : "unavailable";
 }
 
 /** Interactive wiring: one call site in interactive-mode. */
@@ -193,6 +216,6 @@ export function installInteractiveNextSuggestions(
 ): void {
 	installNextSuggestions(session as unknown as SuggestionSessionPort, editor, basePlaceholder, {
 		requestRender,
-		usedPercent: () => activeQuotaUsedPercent(session),
+		quotaUsage: () => activeQuotaUsage(session),
 	});
 }

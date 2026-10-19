@@ -20,9 +20,22 @@ import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions, UserMe
 export const NEXT_SUGGESTIONS_ENV = "OMK_NEXT_SUGGESTIONS";
 /** PREREG: skip when ≥ 90% of the active quota window is used. */
 export const NEAR_USAGE_LIMIT_PERCENT = 90;
+/** Cache considered cold this long after the last main request (default/`short` retention). */
 export const SHORT_CACHE_TTL_MS = 5 * 60_000;
+/** Cache considered cold this long after the last main request with `long` retention. */
 export const LONG_CACHE_TTL_MS = 60 * 60_000;
 export const MAX_SUGGESTION_CHARS = 200;
+/** The suggestion request differs from the main request only in this output cap. */
+export const SUGGESTION_MAX_TOKENS = 128;
+/** The quota check is abandoned (and the suggestion skipped) after this long. */
+export const USAGE_CHECK_TIMEOUT_MS = 2_000;
+
+/**
+ * Quota usage for the 90% rule: a used percent, `"no_quota"` when the provider
+ * has no quota window at all, or `"unavailable"` when the check failed or timed
+ * out (fail closed: the suggestion is skipped).
+ */
+export type QuotaUsage = number | "no_quota" | "unavailable";
 
 export const SUGGESTION_INSTRUCTION =
 	"[next-task suggestion] Based on the conversation so far, write the single next request the user is most " +
@@ -70,7 +83,8 @@ export type SuggestionSkipReason =
 	| "model_changed"
 	| "no_cache_support"
 	| "cache_cold"
-	| "near_usage_limit";
+	| "near_usage_limit"
+	| "usage_unavailable";
 
 export interface SuggestionPlanInput {
 	readonly record: RecordedMainRequest | undefined;
@@ -78,8 +92,7 @@ export interface SuggestionPlanInput {
 	readonly finalAssistant: AssistantMessage | undefined;
 	readonly currentModel: { readonly provider: string; readonly id: string } | undefined;
 	readonly nowMs: number;
-	/** Highest used percent across the active provider's quota windows, if known. */
-	readonly usedPercent: number | undefined;
+	readonly usage: QuotaUsage;
 }
 
 export type SuggestionPlan =
@@ -110,7 +123,8 @@ export function planSuggestion(input: SuggestionPlanInput): SuggestionPlan {
 	}
 	if (!supportsPromptCache(record.model, record.options)) return skip("no_cache_support");
 	if (input.nowMs - record.atMs >= cacheTtlMs(record.options)) return skip("cache_cold");
-	if (input.usedPercent !== undefined && input.usedPercent >= NEAR_USAGE_LIMIT_PERCENT) {
+	if (input.usage === "unavailable") return skip("usage_unavailable");
+	if (typeof input.usage === "number" && !(input.usage < NEAR_USAGE_LIMIT_PERCENT)) {
 		return skip("near_usage_limit");
 	}
 	return { kind: "request", record, finalAssistant: final };
@@ -150,6 +164,7 @@ export async function requestNextSuggestion(
 	try {
 		const stream = await streamFn(record.model, buildSuggestionContext(record, finalAssistant), {
 			...record.options,
+			maxTokens: SUGGESTION_MAX_TOKENS,
 			signal,
 		});
 		const result = await stream.result();

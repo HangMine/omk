@@ -9,8 +9,10 @@ import {
 	MainRequestRecorder,
 	planSuggestion,
 	type RecordedMainRequest,
+	requestNextSuggestion,
 	SHORT_CACHE_TTL_MS,
 	SUGGESTION_INSTRUCTION,
+	SUGGESTION_MAX_TOKENS,
 } from "../src/core/next-suggestion.ts";
 
 const model = getModel("anthropic", "claude-sonnet-4-5")!;
@@ -48,7 +50,7 @@ const base = {
 	finalAssistant: assistant("Done."),
 	currentModel: { provider: model.provider, id: model.id },
 	nowMs: 2000,
-	usedPercent: undefined,
+	usage: "no_quota" as const,
 };
 
 describe("spec 091 stage 1: next-suggestion core", () => {
@@ -110,18 +112,78 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 			{ record: { ...record, model: { ...model, cost: { ...model.cost, cacheRead: 0 } } } },
 			"no_cache_support",
 		],
-		["cold cache (short TTL passed)", { nowMs: 990 + SHORT_CACHE_TTL_MS }, "cache_cold"],
-		["near usage limit (90%)", { usedPercent: 90 }, "near_usage_limit"],
-		["near usage limit (99%)", { usedPercent: 99 }, "near_usage_limit"],
+		["near usage limit (90%)", { usage: 90 }, "near_usage_limit"],
+		["usage check unavailable (fail closed)", { usage: "unavailable" as const }, "usage_unavailable"],
+		["near usage limit (99%)", { usage: 99 }, "near_usage_limit"],
 	])("skips on %s", (_name, override, reason) => {
 		expect(planSuggestion({ ...base, ...override })).toEqual({ kind: "skip", reason });
 	});
 
-	it("keeps a long-retention cache warm past the short TTL and allows 89% usage", () => {
+	it("cache-cold boundary constants are 5 min and 60 min", () => {
+		expect(SHORT_CACHE_TTL_MS).toBe(5 * 60 * 1000);
+		expect(LONG_CACHE_TTL_MS).toBe(60 * 60 * 1000);
+	});
+
+	it.each([
+		["default retention", undefined, SHORT_CACHE_TTL_MS],
+		["short retention", { cacheRetention: "short" as const }, SHORT_CACHE_TTL_MS],
+		["long retention", { cacheRetention: "long" as const }, LONG_CACHE_TTL_MS],
+	])("cache-cold boundary with %s: warm 1 ms before, cold at and 1 ms after", (_name, options, ttl) => {
+		const r = { ...record, options };
+		expect(planSuggestion({ ...base, record: r, nowMs: r.atMs + ttl - 1 }).kind).toBe("request");
+		expect(planSuggestion({ ...base, record: r, nowMs: r.atMs + ttl })).toEqual({
+			kind: "skip",
+			reason: "cache_cold",
+		});
+		expect(planSuggestion({ ...base, record: r, nowMs: r.atMs + ttl + 1 })).toEqual({
+			kind: "skip",
+			reason: "cache_cold",
+		});
+	});
+
+	it("long retention stays warm past the short TTL; 89.9% usage and no quota window proceed", () => {
 		const long = { ...record, options: { cacheRetention: "long" as const } };
-		expect(planSuggestion({ ...base, record: long, nowMs: 990 + SHORT_CACHE_TTL_MS }).kind).toBe("request");
-		expect(planSuggestion({ ...base, record: long, nowMs: 990 + LONG_CACHE_TTL_MS }).kind).toBe("skip");
-		expect(planSuggestion({ ...base, usedPercent: 89 }).kind).toBe("request");
+		expect(planSuggestion({ ...base, record: long, nowMs: 990 + SHORT_CACHE_TTL_MS + 1 }).kind).toBe("request");
+		expect(planSuggestion({ ...base, usage: 89.9 }).kind).toBe("request");
+		expect(planSuggestion({ ...base, usage: "no_quota" }).kind).toBe("request");
+	});
+
+	it("the suggestion request differs from the main request only in maxTokens=128 (and its own abort signal)", async () => {
+		const mainOptions = {
+			apiKey: "k",
+			reasoning: "high" as const,
+			cacheRetention: "long" as const,
+			sessionId: "s1",
+			maxTokens: 32000,
+			signal: new AbortController().signal,
+			headers: { a: "b" },
+		};
+		let seen: Record<string, unknown> | undefined;
+		let seenModel: unknown;
+		let seenContext: Context | undefined;
+		const streamFn = ((m: unknown, c: Context, o: Record<string, unknown>) => {
+			seenModel = m;
+			seenContext = c;
+			seen = o;
+			return { result: async () => assistant("Next.") };
+		}) as never;
+		const controller = new AbortController();
+		const text = await requestNextSuggestion(
+			streamFn,
+			{ ...record, options: mainOptions },
+			assistant("Done."),
+			controller.signal,
+		);
+		expect(text).toBe("Next.");
+		expect(seenModel).toBe(model);
+		expect(seenContext?.systemPrompt).toBe(context.systemPrompt);
+		expect(SUGGESTION_MAX_TOKENS).toBe(128);
+		const { maxTokens, signal, ...rest } = seen ?? {};
+		const { maxTokens: _mainMax, signal: _mainSignal, ...mainRest } = mainOptions;
+		expect(maxTokens).toBe(128);
+		expect(signal).toBe(controller.signal);
+		expect(rest).toEqual(mainRest);
+		expect(Object.keys(seen ?? {}).sort()).toEqual(Object.keys(mainOptions).sort());
 	});
 
 	it("extracts one trimmed sentence and rejects error replies", () => {

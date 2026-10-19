@@ -137,11 +137,11 @@ function fakeEditor(autocomplete = false) {
 	return editor;
 }
 
-function install(session: AgentSession, editor: SuggestionEditorPort, usedPercent?: number) {
+function install(session: AgentSession, editor: SuggestionEditorPort) {
 	const controller = installNextSuggestions(session as unknown as SuggestionSessionPort, editor, "base", {
 		env: ON,
 		isTab: (data) => data === "\t",
-		usedPercent: async () => usedPercent,
+		quotaUsage: async () => "no_quota" as const,
 	});
 	if (!controller) throw new Error("expected a controller");
 	controllers.push(controller);
@@ -210,7 +210,7 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		const plans: string[] = [];
 		const controller = installNextSuggestions(h.session as unknown as SuggestionSessionPort, fakeEditor(), "base", {
 			env: ON,
-			usedPercent: async () => 90,
+			quotaUsage: async () => 90,
 			onPlan: (plan) => plans.push(plan.kind === "skip" ? plan.reason : plan.kind),
 		});
 		controllers.push(controller!);
@@ -219,12 +219,88 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		expect(h.calls()).toBe(1);
 	});
 
+	function planRecorder(h: ReturnType<typeof harness>, quotaUsage: (() => Promise<never>) | undefined, extra = {}) {
+		const plans: string[] = [];
+		const controller = installNextSuggestions(h.session as unknown as SuggestionSessionPort, fakeEditor(), "base", {
+			env: ON,
+			quotaUsage,
+			onPlan: (plan) => plans.push(plan.kind === "skip" ? plan.reason : plan.kind),
+			...extra,
+		});
+		controllers.push(controller!);
+		return plans;
+	}
+
+	it("fails closed when the quota check throws: suggestion skipped, zero extra calls", async () => {
+		const h = harness(tempCwd());
+		const plans = planRecorder(h, async () => {
+			throw new Error("usage endpoint down");
+		});
+		await h.session.prompt("first");
+		await vi.waitFor(() => expect(plans).toEqual(["usage_unavailable"]));
+		expect(h.calls()).toBe(1);
+	});
+
+	it("fails closed when the quota check times out, without delaying the main turn", async () => {
+		const h = harness(tempCwd());
+		const plans = planRecorder(h, () => new Promise<never>(() => {}), { usageTimeoutMs: 30 });
+		const started = Date.now();
+		await h.session.prompt("first");
+		expect(Date.now() - started).toBeLessThan(1000);
+		await vi.waitFor(() => expect(plans).toEqual(["usage_unavailable"]));
+		expect(h.calls()).toBe(1);
+	});
+
+	it("fails closed when no quota reader is wired", async () => {
+		const h = harness(tempCwd());
+		const plans = planRecorder(h, undefined);
+		await h.session.prompt("first");
+		await vi.waitFor(() => expect(plans).toEqual(["usage_unavailable"]));
+		expect(h.calls()).toBe(1);
+	});
+
+	it("reads quota at most once per turn with the flag on, and never with the flag off", async () => {
+		const on = harness(tempCwd());
+		let reads = 0;
+		const plans: string[] = [];
+		controllers.push(
+			installNextSuggestions(on.session as unknown as SuggestionSessionPort, fakeEditor(), "base", {
+				env: ON,
+				quotaUsage: async () => {
+					reads++;
+					return 10;
+				},
+				onPlan: (plan) => plans.push(plan.kind),
+			})!,
+		);
+		await on.session.prompt("first");
+		await vi.waitFor(() => expect(plans).toHaveLength(1));
+		await on.session.prompt("second");
+		await vi.waitFor(() => expect(plans).toHaveLength(2));
+		expect(reads).toBe(2);
+
+		const off = harness(tempCwd());
+		let offReads = 0;
+		const none = installNextSuggestions(off.session as unknown as SuggestionSessionPort, fakeEditor(), "base", {
+			env: {},
+			quotaUsage: async () => {
+				offReads++;
+				return 10;
+			},
+		});
+		expect(none).toBeUndefined();
+		await off.session.prompt("first");
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(offReads).toBe(0);
+		expect(off.calls()).toBe(1);
+	});
+
 	it("skips after a provider error with zero extra calls", async () => {
 		const h = harness(tempCwd(), { mainStopReason: "error" });
 		const plans: string[] = [];
 		const controller = installNextSuggestions(h.session as unknown as SuggestionSessionPort, fakeEditor(), "base", {
 			env: ON,
-			usedPercent: async () => undefined,
+			quotaUsage: async () => "no_quota" as const,
 			onPlan: (plan) => plans.push(plan.kind === "skip" ? plan.reason : plan.kind),
 		});
 		controllers.push(controller!);
@@ -246,7 +322,7 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		} as unknown as SuggestionSessionPort;
 		const controller = installNextSuggestions(port, fakeEditor(), "base", {
 			env: ON,
-			usedPercent: async () => undefined,
+			quotaUsage: async () => "no_quota" as const,
 			onPlan: (plan) => plans.push(plan.kind === "skip" ? plan.reason : plan.kind),
 		});
 		controllers.push(controller!);

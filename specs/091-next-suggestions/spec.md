@@ -18,7 +18,7 @@ description: "1.5.5 next-task suggestions with Jev skill selection: default-off 
 ## Problem
 
 After a turn the user has to type the next request from scratch and pick a
-skill by hand among ~800 installed skills. A short suggestion of the next task,
+skill by hand among the installed skills. A short suggestion of the next task,
 optionally prefixed with the best-fitting skill, saves that step — but only if
 it costs almost nothing, never slows the main turn, and never picks a skill that
 is not installed.
@@ -46,15 +46,15 @@ is not installed.
 
 ### Stage 2 — probability (local bm25 candidates)
 
-- Score all installed skills (~800) locally with bm25, using the stage-1
+- Score all skills in the catalog (see Measurement 1) locally with bm25, using the stage-1
   sentence as the query, over skill name + description.
 - Keep top-k with **k ≤ 255** and **total candidate tokens ≤ 32k** (Jev limits).
   If the token total is over 32k, reduce k until it fits; **never truncate
   descriptions** (descriptions are up to 1,024 chars,
   `packages/coding-agent/src/core/skills.ts:17` `MAX_DESCRIPTION_LENGTH`).
-- Recall is measured first **without** any boost. Only if it is below 99%,
+- Recall is measured first **without** any boost. Only if the k = 25 gate fails (see Measurement 1),
   recall is remeasured **once** with a recency-frequency boost whose formula is
-  fixed in the PREREG before any measurement. If it is still below 99%, the Jev
+  fixed in the PREREG before any measurement. If it still fails, the Jev
   stage is not built. (See Measurement 1; the two texts must stay identical in
   meaning.)
 - Local only, cost 0.
@@ -127,27 +127,73 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 ## Measurement (PREREG before any run; numbers fixed in advance)
 
 1. **Stage-2 recall gate (local, cost 0):**
-   - **Labels:** ~100 pairs (next-task sentence → correct skill), authored by a
-     human from real skill-usage logs: for each logged skill use, the human
-     writes the next-task sentence for that used skill, **without seeing any
-     bm25 output**. The label file's sha is pinned in the PREREG before any
-     measurement.
-   - **Label data rule:** labels are derived from real skill-usage logs. Raw
-     session logs never leave the box and never become fixtures. The label
-     file is **not committed** to the repo; it stays on the box only, at
-     `/workspace/omk-eval-091/labels-<sha256-prefix>.jsonl` (placeholder).
-     Human-written sentences that closely copy log text are likewise not
-     committed. The spec and PR record only the label file's sha256, the pair
-     count N, and aggregate results.
-   - **Allowed misses:** once N is fixed, the PREREG writes the allowed miss
-     count as an integer, `floor(0.01 × N)` (N = 100 → at most 1 miss).
-     Recall passes only if misses ≤ that integer.
-   - Recall = correct skill inside the stage-2 candidates at k = 255 (or the
-     reduced k that fits 32k). Target **≥ 99%**. Also report candidate token
-     count vs 32k.
-   - Order: (a) measure **without** boost; (b) only if < 99%, remeasure
+   - **bm25 implementation:** reuse the spec 058 implementation already on
+     base (`core/skill-search.ts`, `skill-select-rankers.ts`). No new bm25 code
+     and no new dependencies; implementation and recall measurement run the
+     same code.
+   - **Catalog:** this box's real selectable skill set, deduplicated by name,
+     excluding skill folders inside PR worktrees (e.g. `omk-prfix-18`).
+     Measured **catalog v2**: 223 deduplicated skills, of which **217 are
+     model-selectable** (the catalog used); name-list sha256
+     `25f25cda08c1b668ec4da0ed8a5214a4e4cc5eef8b5a46182ae48ed3af18abe6`
+     (fixed in the PREREG). The spec-050 1,191 set
+     (`/workspace/omk-skill-baseline/env/s1191`) is synthetic (copies +
+     fixtures) and is **not** used. If 인호 provides a real ~800-skill catalog
+     name list, recall is re-measured on it once before the paid Jev stage.
+   - **Gate set (set B, synthetic):** a uniform random sample of **100
+     skills** from the 217-skill catalog (equal probability, no per-folder
+     grouping), seed **20261020** (fixed in the PREREG), drawn with
+     `random.Random(20261020).sample` over the 217 names. **Sample v2**:
+     `sample-v2.json` sha256
+     `bd6338801ad7582328e2012765ec30ba5dd24d6ce9a5ae2861c3f6366c81c59e`,
+     posted to the room **before** any sentence is written.
+     For each sampled skill, Agent Researcher writes one next-task sentence
+     from the SKILL.md **body only**. The sentence must not use words from the
+     skill's name or description, nor commands/paths unique to that SKILL.md
+     body; a script checks this. The author **never sees bm25 output**.
+   - **Label author:** agent (Agent Researcher), separate from the bm25
+     implementer; has never seen bm25 output. If 인호 writes labels himself,
+     those take priority.
+   - **No-answer items:** 10 extra situations with gold = none. They are
+     **excluded from recall** and used only to check that Jev does not attach
+     a skill (probability < 0.6 → no prefix). Reported separately.
+   - **Set A (reference only, not a gate):** the 86 bench-derived entries
+     (`label-sources.jsonl`, sha256
+     `53ec93610d8f9fa7241da781e7b4d76d01d998cc6fc828e9e405a55b6f390e0e`;
+     5 skills, 77 code-review), deduplicated with code-review kept at 1 per
+     task. Reported separately as an auxiliary metric only.
+   - **Label data rule:** raw session logs never leave the box and never
+     become fixtures. Label files are **not committed**; they stay on the box
+     only, under `/workspace/omk-eval-091/`. The spec, room, and PR record only
+     sha256, counts, and aggregate results. The gate-set label sha256 is fixed
+     in the PREREG and confirmed by Tech Lead **before** any measurement.
+   - **Allowed misses:** `floor(0.01 × N)` over the answerable items
+     (N = 100 → at most 1 miss). Recall passes only if misses ≤ that integer.
+   - Recall = correct skill inside the stage-2 candidates at a given k (or
+     the reduced k that fits 32k); the gate k is 25 (below). Also report candidate token
+     count vs 32k. Recall and candidate token count are also reported at
+     k = 10, 25, 50, 255; the gate criterion is unchanged.
+   - Because 217 < 255, recall at k = 255 is trivially 100% (every skill is a
+     candidate).
+   - **Gate k (decided by Tech Lead before any measurement):** the gate is
+     judged at **k = 25**. Pass iff misses ≤ `floor(0.01 × N)` (N = 100 → ≤ 1)
+     **and** candidate tokens ≤ 32k. k = 10, 50, 255 are reported for
+     reference only. Report observed recall with its exact Clopper-Pearson 95%
+     CI; never write a "≥ 99%" claim.
+   - **Baseline arm (PREREG):** no bm25; all 217 skills sent to Jev. Measured
+     size (name + description per skill, omk's `estimateTokens` chars/4
+     heuristic, `compaction.ts`): **11,852 tokens** total (47,406 chars), ≤ 32k;
+     per skill max 251, median 57. Reported alongside the bm25 arm.
+   - **Default path:** bm25 k = 25 candidates, then Jev. The missed-skill risk
+     is bounded by the k = 25 gate (≤ `floor(0.01 × N)` misses).
+   - **Baseline arm timing and switch rule (fixed before any measurement):**
+     the "all 217 skills to Jev" baseline is measured only in the paid Jev
+     stage. On the same 100 sentences, if the all-skills arm gets **≥ 5 more**
+     gold skills correct than the bm25 k = 25 arm, the default switches to
+     all-skills; otherwise the bm25 path is kept.
+   - Order: (a) measure **without** boost; (b) only if the k = 25 gate fails, remeasure
      **once** with the recency-frequency boost whose formula was fixed in the
-     PREREG beforehand; (c) if still < 99%, **the Jev stage is not built**.
+     PREREG beforehand; (c) if it still fails, **the Jev stage is not built**.
 2. Suggestion-request cache-read ratio ≥ the PREREG value.
 3. Main-turn cache hit rate does not drop vs base.
 4. Extra billed tokens per suggestion: median ≤ 300, p95 ≤ 1000.
@@ -158,6 +204,9 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 7. Key-input latency p99 not worse than base.
 8. Run-log (spec 042, `OMK_RUN_LOG_DIR`): tokens (cached vs billed), latency,
    Jev probability, Tab acceptance, accepted-unedited rate. No text, no key.
+9. **Usefulness:** 0 real skill uses were found in the 993 local sessions, so
+   the feature's usefulness metric is the **Tab acceptance rate**. The
+   implementation PR body must state this.
 
 ### PREREG constants fixed by this spec
 
@@ -166,7 +215,7 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 | Near usage limit (stage-1 skip) | ≥ 90% of quota window used |
 | Jev request timeout | 1500 ms |
 | Jev probability threshold for `!skill:` | 0.6 |
-| Stage-2 recall target | ≥ 99% (at most one boosted remeasure) |
+| Stage-2 recall gate | k = 25: misses ≤ `floor(0.01 × N)` and candidate tokens ≤ 32k (at most one boosted remeasure) |
 | Allowed recall misses | `floor(0.01 × N)` as an integer, fixed once N is known (N = 100 → ≤ 1) |
 | Extra billed tokens | median ≤ 300, p95 ≤ 1000 |
 | Suggestion latency | p95 ≤ 3 s |
@@ -179,6 +228,15 @@ Report Stage-2 recall gate results as observed recall with its exact 95% CI (Clo
 
 The suggestion cache-read ratio floor and the boost formula are written into
 the PREREG before any run.
+
+## Known risks
+
+- Gate labels are synthetic and agent-written (Agent Researcher), not
+  human-written; recall on set B may not reflect real usage.
+- 0 real skill uses in 993 sessions: no real usage distribution exists.
+- With a 217-skill catalog, k = 255 includes all skills, so recall at k = 255
+  proves little (hence the k = 25 gate). An option is to skip bm25 and send all skills to
+  Jev (within the 32k token limit).
 
 ## Success criterion
 
@@ -217,9 +275,19 @@ PREREG gate above; no non-installed skill is ever suggested.
   appends the final assistant message and the instruction.
 - "Provider lacks caching" = `cacheRetention: "none"` or the model has no cache
   read price (`cost.cacheRead` 0). "Cache cold" = time since the last main
-  request ≥ 5 min (`short`, default) or ≥ 60 min (`long`).
+  request ≥ `SHORT_CACHE_TTL_MS` 5 min (`short`, default) or ≥
+  `LONG_CACHE_TTL_MS` 60 min (`long`); tests cover 1 ms before, at, and 1 ms
+  after each boundary.
+- The suggestion request differs from the main request only in
+  `maxTokens: 128` (`SUGGESTION_MAX_TOKENS`) and its own abort signal; the
+  reply is still cut to 200 characters.
 - Usage ≥ 90% reads the active provider's subscription usage windows
-  (`loadSubscriptionUsage`); unknown usage does not block.
+  (`loadSubscriptionUsage`), only with the flag on, at most once per settled
+  turn, in the background after `prompt_settled` (main-turn timing and request
+  bytes unchanged). Fail closed: an error, a timeout (`USAGE_CHECK_TIMEOUT_MS`
+  2 s), or a quota source that returns no windows skips the suggestion. A
+  provider with no quota source at all (pay-per-token) counts as no quota
+  window and proceeds.
 - Stage 2 will reuse the spec-058 bm25 in `core/skill-search.ts` /
   `core/skill-select-rankers.ts` (no new implementation, no new dependency).
   No Jev call is made in stage 1.
