@@ -48,10 +48,56 @@ export function readJournalBytes(
 	}
 }
 
+/** Spec 088: total time a reader-mode read may spend retrying concurrent changes. */
+export const JOURNAL_READER_BUDGET_MS = 250;
+
+export interface ReadRunJournalOptions {
+	/**
+	 * `strict` (default) is for the writer and recovery: a torn tail is `journal_truncated`.
+	 * `reader` is for read-only inspection while the single writer appends (spec 088): a torn
+	 * tail is dropped, a concurrent change is retried within {@link JOURNAL_READER_BUDGET_MS},
+	 * and an exhausted budget is `concurrent_change`.
+	 */
+	readonly mode?: "strict" | "reader";
+	/** Test seams for reader mode. */
+	readonly read?: (path: string, maxBytes: number) => Buffer;
+	readonly now?: () => number;
+	readonly sleep?: (ms: number) => void;
+}
+
+const sleepSync = (ms: number): void => {
+	Atomics.wait(pause, 0, 0, ms);
+};
+
+function readJournalPrefix(path: string, options: ReadRunJournalOptions): Buffer {
+	const read = options.read ?? readRegularFile;
+	const now = options.now ?? (() => performance.now());
+	const sleep = options.sleep ?? sleepSync;
+	const start = now();
+	let delay = 2;
+	for (;;) {
+		try {
+			const bytes = read(path, JOURNAL_MAX_BYTES);
+			// Bytes after the last newline are an append in progress: drop, never parse or repair.
+			return bytes.subarray(0, bytes.lastIndexOf(10) + 1);
+		} catch (error) {
+			if (!(error instanceof VerifiedRunConcurrentChangeError)) throw error;
+		}
+		const elapsed = now() - start;
+		if (elapsed >= JOURNAL_READER_BUDGET_MS) throw new VerifiedRunError("concurrent_change");
+		sleep(Math.min(delay, JOURNAL_READER_BUDGET_MS - elapsed));
+		delay *= 2;
+	}
+}
+
 /** Read-only: no implicit recovery, tail truncation, mode changes, or model calls. */
-export function readRunJournal(runPath: string): JournalSnapshot | null {
+export function readRunJournal(runPath: string, options: ReadRunJournalOptions = {}): JournalSnapshot | null {
 	const path = journalPath(runPath);
 	if (!existsSync(path)) return null;
+	if (options.mode === "reader") {
+		const prefix = readJournalPrefix(path, options);
+		return prefix.length === 0 ? null : parseJournalBytes(prefix);
+	}
 	// A live writer's append is not atomic with respect to a reader: the size/ctime guard in
 	// readRegularFile cannot see a reader that opened before the write and read after it, so a
 	// torn tail can still arrive here. It is a concurrent change, not corruption, and must use
@@ -65,6 +111,11 @@ export function readRunJournal(runPath: string): JournalSnapshot | null {
 		if (attempt > JOURNAL_READ_RETRIES) throw new VerifiedRunError("journal_truncated");
 		Atomics.wait(pause, 0, 0, attempt * 2);
 	}
+	return parseJournalBytes(bytes);
+}
+
+/** Parses bytes that end with a newline into a hash-chained snapshot; any bad record is `integrity`. */
+function parseJournalBytes(bytes: Buffer): JournalSnapshot {
 	const lines = new TextDecoder("utf-8", { fatal: true }).decode(bytes).slice(0, -1).split("\n");
 	const records: RunJournalRecord[] = [];
 	let previous = "0".repeat(64);

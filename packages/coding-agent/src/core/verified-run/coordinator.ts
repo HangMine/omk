@@ -75,7 +75,7 @@ export class RunCoordinator {
 	}
 
 	inspect(runId: string): RunProjection {
-		const journal = readRunJournal(stateRunPath(this.stateRoot, runId));
+		const journal = readRunJournal(stateRunPath(this.stateRoot, runId), { mode: "reader" });
 		if (!journal || journal.state.runId !== runId) throw new VerifiedRunError("missing_run");
 		if (journal.state.receiptDigest) this.evidence(runId);
 		return journal.state;
@@ -98,7 +98,7 @@ export class RunCoordinator {
 
 	/** The run's hashed journal records — the event stream the projection replays. */
 	events(runId: string): readonly RunJournalRecord[] {
-		const journal = readRunJournal(stateRunPath(this.stateRoot, runId));
+		const journal = readRunJournal(stateRunPath(this.stateRoot, runId), { mode: "reader" });
 		if (!journal || journal.state.runId !== runId) throw new VerifiedRunError("missing_run");
 		if (journal.state.receiptDigest) this.evidence(runId);
 		return journal.records;
