@@ -255,3 +255,103 @@ import하지도 않는다. HEAD만 체크아웃한 별도 worktree(`/tmp/omk-bas
   않았다. in-flight 공유는 디코드 횟수로만 검증했다.
 - **플랫폼:** 로컬은 Linux만 실행했다. macOS/Windows/ARM은 CI 빌드와 attest까지만 확인했고
   실제 실행 smoke는 하지 않았다.
+
+## 독립 재검증 (2026-10-19 18:40 KST)
+
+릴리스 후 별도 세션에서 `./test.sh`를 1회 실행했다. 실행 전 load average는 3.70이었고,
+24코어 호스트에서 이 실행 자체의 Vitest 워커 때문에 실행 중 18까지 올라갔다. 같은 시각
+다른 프로젝트(`/tmp/alma-codex`)의 `node --test`가 돌고 있었지만 OMK Vitest 프로세스는
+없었다.
+
+| 항목 | 값 |
+| 명령 | `./test.sh` |
+| exit code | 1 |
+| 테스트 | 9153 중 9092 통과, 1 실패, 60 skipped |
+| 테스트 파일 | 781 중 770 통과, 1 실패, 10 skipped |
+| 실패 파일 | `test/verified-run-journal-read-retry.test.ts` |
+| 실패 테스트 | "explain's journal read survives a writer appending mid-read" |
+| 단언 | `expected [ 'integrity' ] to deeply equal []` |
+| tui `node:test` | 2건은 `# known defect` todo. 이번 변경과 무관 |
+
+### 실패 원인 (코드 경로)
+
+`readRunJournal`은 마지막 바이트가 개행이 아니면 최대 `JOURNAL_READ_RETRIES`(3)번 다시
+읽고 그 뒤 `journal_truncated`를 던진다. 그런데 그 안에서 호출하는 `readJournalBytes`가
+`VerifiedRunConcurrentChangeError`를 별도로 3번 재시도하고, 소진되면 그 예외를 그대로
+던진다. 이 클래스는 `super("integrity")`이므로 최종 code가 `integrity`가 된다. 즉
+size/ctime 경쟁이 4회 연속 발생하면 `journal_truncated`가 아니라 `integrity`가 표면화된다.
+
+단독 실행은 3회 연속 6/6 통과했고, 13,000회 이상 읽기와 인위적 load 16에서도 재현되지
+않았다. 전체 suite에서만 1회 발생했으므로 부하 의존 flake로 판정한다. 테스트 단언은
+약화하지 않았다.
+
+### RELEASE_NOTES 대조
+
+- 기존 문구 "passed twice in a row ... load average about 26"는 이번 독립 실행으로
+  재현되지 않았다. 과장으로 판정하고 `.github/RELEASE_NOTES_v1.5.3.md`를 실측에 맞게
+  수정했다.
+- 기존 문구 "still reports `journal_truncated` when the retries are exhausted"는 실제
+  코드 경로와 부분 불일치한다. inner retry 소진은 `integrity`로 나온다. 문구를 정정했다.
+- GitHub Release 본문은 게시 시점 문구를 유지한다. 본문 동기화는 별도 승인 후 실행한다.
+
+## 시작 지연 측정 (2026-10-19)
+
+`--version`은 0.05~0.06초, RSS 약 51MB로 빠르다. 실제 세션 기동은 RPC 모드 기준으로
+측정했다. `OMK_TIMING=1` 구간 계측과 `/usr/bin/time`을 함께 사용했다. interactive
+`OMK_STARTUP_BENCHMARK=1`은 TTY 없이 300초 타임아웃되어 RPC 계측으로 대체했다.
+
+| 조건 | wall | max RSS | `createAgentSessionRuntime` |
+| 실제 HOME, `~/.omk/mcp.json` 사용 | 8.80 s | 250 MB | 7,472 ms |
+| 깨끗한 HOME, MCP 설정 없음 | 2.01 s | 148 MB | 585 ms |
+
+전체 구간 중 `createAgentSessionRuntime`이 7,599ms 중 7,472ms를 차지한다. MCP manager는
+이미 `Promise.all`로 병렬 연결하므로, 남은 비용은 가장 느린 MCP 서버의 초기화와
+`listTools`다. 20여 개 서버를 시작 시 모두 spawn하는 구조가 지연과 RSS의 주원인이다.
+
+**이번 배포에서 런타임을 바꾸지 않았다.** 지연 서버 하나가 전체 기동을 지배하는 구조라
+안전한 최소 수정이 아니며, lazy attach나 서버별 기동 예산은 도구 노출 시점과 첫 턴 동작을
+바꾸므로 별도 스펙과 회귀 검증이 필요하다. 측정값만 기록하고 후속 작업으로 넘긴다.
+
+## AdaptOrch MCP 상태 (2026-10-19)
+
+| 항목 | 결과 |
+| 도구 노출 | 이 세션에서 `adaptorch__*` 도구가 실제로 노출됨 |
+| `adaptorch_usage` | 성공. tenant `tenant_9bffe861...`, plan `team`, 2026-10, 14/2500 사용 |
+| `adaptorch_capabilities` | 성공. synthesis 4종, topology 6종, connector 40여 종. `verification_commands_enabled: false` |
+| `adaptorch-prod` 경로 | `/home/dmae97/projects/adaptorch`는 존재하지 않음. `/home/dmae97/Project/adaptorch`로 수정하고 JSON 유효성 확인. 파일은 `_disabledMcpServers`에 있어 계속 비활성 |
+| `_note`의 swe-2 pin | 로컬 `Project/adaptorch`에서 `adaptorch_mcp_swe2_pin` 심볼을 찾지 못함. 서버 측 제약인지 미검증 |
+
+`~/.omk/agent/mcp.json`은 OMK의 MCP 탐색 경로(`~/.kimi/mcp.json`, `~/.omk/mcp.json`,
+`<cwd>/.omk/mcp.json`)에 포함되지 않는다. 따라서 이 파일의 `adaptorch-prod` 항목은
+현재 런타임에 로드되지 않는 휴면 설정이다. 삭제하지 않고 경로만 고쳤다.
+
+swe-2 pin은 실제 `adaptorch_run` 호출로만 확인할 수 있다. 유료 provider 호출과 quota
+1 unit을 쓰므로 승인 없이 실행하지 않았다.
+
+## 남은 검증과 잔여 위험 (후속 TODO)
+
+1. **journal retry 코드 매핑:** inner retry 소진을 `journal_truncated`로 정규화하거나
+   재시도 예산을 outer와 합친다. 부하 의존 1건을 결정론적으로 만든다. 테스트 단언은 유지한다.
+2. **전체 suite 초록 확보:** 부하 없는 상태에서 `./test.sh` 2회 연속 exit 0을 확인한다.
+   현재 근거는 1회 exit 1이다.
+3. **MCP 시작 지연:** lazy attach 또는 서버별 기동 예산을 별도 스펙으로 설계한다.
+   측정 기준은 RPC 기동 wall 8.8초, RSS 250MB다.
+4. **swe-2 pin 검증:** 저비용 `adaptorch_run` 1회로 model 거부 여부를 확인한다.
+   유료 호출 승인이 필요하다.
+5. **GitHub Release 본문 동기화:** 수정한 릴리스 노트 문구를 Release 본문에 반영한다.
+   배포 작업이므로 별도 승인 후 실행한다.
+6. **플랫폼 smoke:** macOS, Windows, ARM 실제 실행은 미검증이다. CI 빌드와 attest만 확인됐다.
+7. **stale `OMK_PACKAGE_DIR`:** 이 셸의 값이 1.4.3 설치본을 가리킨다. 실행 전 unset 또는
+   새 경로로 갱신해야 한다.
+8. **Harness2 파일럿:** `notes/2026-10-19-harness2-assessment.md`의 최소 파일럿은 설계만
+   완료됐다. 제품 코드 변경 없이 `research/`에서 OmkSubstrate materialize 스파이크부터
+   시작한다.
+
+## 배포 판정
+
+- v1.5.3은 tag, GitHub Release, npm 7개 패키지 모두 게시된 상태다. 이번 작업은 게시된
+  산출물을 바꾸지 않는다.
+- 이번 커밋은 릴리스 노트와 배포 기록의 사실 정정만 포함한다. tag, npm publish,
+  GitHub Release 본문 수정은 하지 않는다.
+- 배포 준비 상태는 `PARTIAL`이다. 전체 suite 초록 2회와 journal flake 안정화가 끝나야
+  다음 패치의 배포 근거가 완성된다.
