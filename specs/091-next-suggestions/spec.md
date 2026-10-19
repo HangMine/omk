@@ -41,7 +41,8 @@ is not installed.
   to the model.
 - Skip (no request) when: the cache is cold (TTL elapsed or the model changed
   since the last turn), the provider has no prompt caching, the turn ended in
-  an error, the user aborted, or the account is near a usage limit.
+  an error, the user aborted, or the account is near a usage limit
+  (**≥ 90% of the current quota window used**, PREREG).
 
 ### Stage 2 — probability (local bm25 candidates)
 
@@ -51,9 +52,11 @@ is not installed.
   If the token total is over 32k, reduce k until it fits; **never truncate
   descriptions** (descriptions are up to 1,024 chars,
   `packages/coding-agent/src/core/skills.ts:17` `MAX_DESCRIPTION_LENGTH`).
-- A recency/frequency boost is **not** in the first build. It is a candidate
-  scoring change only if stage-2 recall is below 99% (measured without it,
-  since it makes recall depend on session history).
+- Recall is measured first **without** any boost. Only if it is below 99%,
+  recall is remeasured **once** with a recency-frequency boost whose formula is
+  fixed in the PREREG before any measurement. If it is still below 99%, the Jev
+  stage is not built. (See Measurement 1; the two texts must stay identical in
+  meaning.)
 - Local only, cost 0.
 
 ### Stage 3 — Jev (final skill choice)
@@ -61,22 +64,32 @@ is not installed.
 - TypeSafe `POST https://api.typesafe.ai/v1/systemone`, model pinned
   `jev-1.14.0`, a `choice` question over the stage-2 candidates.
 - Response fields used: `choice`, `probabilities`, `confidence`.
-- Attach the skill prefix only if the chosen skill's probability is
-  **≥ the PREREG threshold**; otherwise show the sentence alone.
+- Attach the `!skill:<name>` prefix only if the chosen skill's probability is
+  **≥ 0.6** (PREREG threshold); otherwise show the sentence alone.
 - The chosen ID must be an installed skill: typed as the candidate ID union
   and re-checked at runtime against the loaded skill list; anything else is
   dropped.
-- Plain `fetch`, no SDK, bounded timeout, abortable.
+- Plain `fetch`, no SDK, abortable, timeout **1500 ms** (PREREG).
 - **Jev unavailable** (no key, timeout, HTTP/parse error): show the suggestion
   **without** a skill prefix. There is **no bm25 top-1 substitute**.
 
-### Skill prefix format (open question)
+### Skill prefix format
 
-The room wrote `!skills:`. On `af8d32559e` the existing picker inserts
-`!skill:<name> ` (singular;
-`packages/coding-agent/src/modes/interactive/skill-picker-draft.ts:8,13`) and
-no `!skills:` parser exists. Implementation must use the existing `!skill:`
-form unless Tech Lead decides otherwise.
+The prefix is the existing `!skill:<name> ` form, the same one the skill picker
+inserts (`packages/coding-agent/src/modes/interactive/skill-picker-draft.ts:8,13`
+on `af8d32559e`). No `!skills:` form or parser is added.
+
+### History isolation
+
+The stage-1 suggestion request and its response, and the stage-3 Jev request
+and response, **never** enter session history, compaction input, or the next
+main-turn request. An accepted suggestion enters history only as the user's own
+input text, after Tab and an explicit send.
+
+### Late results (PREREG)
+
+A stage-1 sentence or a Jev response that arrives after the user started typing
+or sent the next turn is **discarded** (not shown, not logged as shown).
 
 ## Data, privacy, and keys
 
@@ -113,19 +126,43 @@ form unless Tech Lead decides otherwise.
 
 ## Measurement (PREREG before any run; numbers fixed in advance)
 
-1. **Stage-2 recall gate (local, cost 0):** ~100 labeled pairs
-   (next-task sentence → correct skill), sha-pinned. Recall = correct skill
-   inside the stage-2 candidates at k = 255 (or the reduced k).
-   Target **≥ 99%**. Also report candidate token count vs 32k.
-   **If recall < 99%, the Jev stage is not built.**
+1. **Stage-2 recall gate (local, cost 0):**
+   - **Labels:** ~100 pairs (next-task sentence → correct skill), authored by a
+     human from real skill-usage logs: for each logged skill use, the human
+     writes the next-task sentence for that used skill, **without seeing any
+     bm25 output**. The label file's sha is pinned in the PREREG before any
+     measurement.
+   - Recall = correct skill inside the stage-2 candidates at k = 255 (or the
+     reduced k that fits 32k). Target **≥ 99%**. Also report candidate token
+     count vs 32k.
+   - Order: (a) measure **without** boost; (b) only if < 99%, remeasure
+     **once** with the recency-frequency boost whose formula was fixed in the
+     PREREG beforehand; (c) if still < 99%, **the Jev stage is not built**.
 2. Suggestion-request cache-read ratio ≥ the PREREG value.
 3. Main-turn cache hit rate does not drop vs base.
 4. Extra billed tokens per suggestion: median ≤ 300, p95 ≤ 1000.
 5. Suggestion latency p95 ≤ 3 s.
-6. Main-turn latency: paired comparison with `paired_verdict.py` (flag on vs off).
+6. Main-turn latency: paired comparison (flag on vs off) with
+   `/workspace/omk-bench-analyst/paired_verdict.py` (not a git repo; file
+   sha256 `07afdce052895231d2f52f2bb8a5ecaf9cdac353bb04e22a1303972a47211d0f`).
 7. Key-input latency p99 not worse than base.
 8. Run-log (spec 042, `OMK_RUN_LOG_DIR`): tokens (cached vs billed), latency,
    Jev probability, Tab acceptance, accepted-unedited rate. No text, no key.
+
+### PREREG constants fixed by this spec
+
+| Constant | Value |
+| --- | --- |
+| Near usage limit (stage-1 skip) | ≥ 90% of quota window used |
+| Jev request timeout | 1500 ms |
+| Jev probability threshold for `!skill:` | 0.6 |
+| Stage-2 recall target | ≥ 99% (at most one boosted remeasure) |
+| Extra billed tokens | median ≤ 300, p95 ≤ 1000 |
+| Suggestion latency | p95 ≤ 3 s |
+| Late sentence / Jev response | discarded if user typed or sent |
+
+The suggestion cache-read ratio floor and the boost formula are written into
+the PREREG before any run.
 
 ## Success criterion
 
@@ -135,11 +172,18 @@ PREREG gate above; no non-installed skill is ever suggested.
 ## Tests (to be written with the implementation)
 
 - Flag off: zero extra calls; main-turn request bytes identical to base.
+- History isolation: with the flag on and a suggestion generated (and shown,
+  not accepted), the **next main-turn request bytes equal the flag-off
+  request bytes**; the suggestion is absent from session entries and
+  compaction input.
+- Late results: a sentence or Jev response arriving after typing starts or the
+  next turn is sent is discarded.
 - Stage 1: suggestion request prefix byte-identical to the main prefix,
   instruction only at the end; skip on cold cache / model change / no caching /
   error / abort / near usage limit.
-- Stage 2: k ≤ 255, tokens ≤ 32k, k reduced instead of truncating descriptions.
-- Stage 3: threshold gate; non-installed IDs rejected; no key / timeout / error
+- Stage 2: k ≤ 255, tokens ≤ 32k, k reduced instead of truncating descriptions;
+  no boost unless the PREREG remeasure path is taken.
+- Stage 3: threshold gate at 0.6; 1500 ms timeout → no prefix; non-installed IDs rejected; no key / timeout / error
   → suggestion without prefix and no bm25 substitute; key never in logs.
 - UI: Tab inserts only into empty input, never sends; other keys dismiss and
   cancel; autocomplete Tab behavior unchanged.
