@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { peekSessionOwnerLeaseSync, readRegularFile, readRunJournal } from "./common.ts";
+import { IMPL, lib } from "./impl.ts";
+const { peekSessionOwnerLeaseSync, readRegularFile, readRunJournal } = lib;
 const [root, nStr, gapStr] = process.argv.slice(2); const n = Number(nStr); const gapUs = Number(gapStr ?? 0);
 const out: unknown[] = []; const torn = new Set<string>();
 const c = { tornDrops: 0, retries: 0, zeroPrefix: 0, firstReadMs: 0, lastReadMs: 0 };
@@ -18,7 +19,8 @@ process.on("message", () => {
 		const ownerLive = () => { const live = peekSessionOwnerLeaseSync(path) === "live"; if (live && pending && pending.end > 0) { dropped = true; torn.add(`${run}:${pending.end}`); } return live; };
 		const sleep = (ms: number) => { c.retries++; Atomics.wait(pause, 0, 0, ms); };
 		try {
-			const s = readRunJournal(runPath, { mode: "reader", read, ownerLive, sleep });
+			// Base control: the base read path takes no options, so its seam counters stay 0 (not observable).
+			const s = IMPL === "base" ? readRunJournal(runPath) : readRunJournal(runPath, { mode: "reader", read, ownerLive, sleep });
 			if (dropped) c.tornDrops++;
 			if (!s) { out.push({ o: "null", run }); continue; }
 			const h = createHash("sha256"); for (const r of s.records) h.update(r.hash);
