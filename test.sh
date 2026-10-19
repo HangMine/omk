@@ -102,5 +102,9 @@ unset AWS_CONTAINER_CREDENTIALS_FULL_URI
 unset AWS_WEB_IDENTITY_TOKEN_FILE
 unset BEDROCK_EXTENSIVE_MODEL_TEST
 
+# Pattern-based strip (KEY/SECRET/TOKEN/PASSWORD in the name) after the explicit list above.
+# shellcheck source=scripts/test-env-sanitize.sh
+. "$(dirname "$0")/scripts/test-env-sanitize.sh"
+
 echo "Running tests without API keys..."
 npm test
