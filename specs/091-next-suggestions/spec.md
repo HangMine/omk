@@ -18,7 +18,7 @@ description: "1.5.5 next-task suggestions with Jev skill selection: default-off 
 ## Problem
 
 After a turn the user has to type the next request from scratch and pick a
-skill by hand among ~800 installed skills. A short suggestion of the next task,
+skill by hand among the installed skills. A short suggestion of the next task,
 optionally prefixed with the best-fitting skill, saves that step — but only if
 it costs almost nothing, never slows the main turn, and never picks a skill that
 is not installed.
@@ -46,7 +46,7 @@ is not installed.
 
 ### Stage 2 — probability (local bm25 candidates)
 
-- Score all installed skills (~800) locally with bm25, using the stage-1
+- Score all skills in the catalog (see Measurement 1) locally with bm25, using the stage-1
   sentence as the query, over skill name + description.
 - Keep top-k with **k ≤ 255** and **total candidate tokens ≤ 32k** (Jev limits).
   If the token total is over 32k, reduce k until it fits; **never truncate
@@ -131,9 +131,16 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
      base (`core/skill-search.ts`, `skill-select-rankers.ts`). No new bm25 code
      and no new dependencies; implementation and recall measurement run the
      same code.
-   - **Gate set (set B, synthetic):** a fixed-seed random sample of **100
-     skills** from the ~800 installed skills, stratified evenly by category.
-     The seed is fixed in the PREREG; the seed and the sha256 of the sampled
+   - **Catalog:** this box's real selectable skill set, deduplicated by name,
+     excluding skill folders inside PR worktrees (e.g. `omk-prfix-18`); about
+     276 before the worktree exclusion, exact count fixed in the PREREG
+     together with the sha256 of the catalog name list. The spec-050 1,191 set
+     (`/workspace/omk-skill-baseline/env/s1191`) is synthetic (copies +
+     fixtures) and is **not** used. If 인호 provides a real ~800-skill catalog
+     name list, recall is re-measured on it once before the paid Jev stage.
+   - **Gate set (set B, synthetic):** a uniform random sample of **100
+     skills** from the whole catalog (equal probability, no per-folder strata),
+     seed **20261020** (fixed in the PREREG); the seed and the sha256 of the sampled
      skill list are posted to the room **before** any sentence is written.
      For each sampled skill, Agent Researcher writes one next-task sentence
      from the SKILL.md **body only**. The sentence must not use words from the
@@ -159,7 +166,8 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
      (N = 100 → at most 1 miss). Recall passes only if misses ≤ that integer.
    - Recall = correct skill inside the stage-2 candidates at k = 255 (or the
      reduced k that fits 32k). Target **≥ 99%**. Also report candidate token
-     count vs 32k.
+     count vs 32k. Recall and candidate token count are also reported at
+     k = 10, 25, 50, 255; the gate criterion is unchanged.
    - Order: (a) measure **without** boost; (b) only if < 99%, remeasure
      **once** with the recency-frequency boost whose formula was fixed in the
      PREREG beforehand; (c) if still < 99%, **the Jev stage is not built**.
@@ -203,6 +211,9 @@ the PREREG before any run.
 - Gate labels are synthetic and agent-written (Agent Researcher), not
   human-written; recall on set B may not reflect real usage.
 - 0 real skill uses in 993 sessions: no real usage distribution exists.
+- With a catalog of ≤ 255 skills, k ≤ 255 includes nearly everything, so the
+  recall gate proves little. An option is to skip bm25 and send all skills to
+  Jev (within the 32k token limit).
 
 ## Success criterion
 
