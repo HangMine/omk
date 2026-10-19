@@ -20,9 +20,9 @@ const named = [
 	"GOOGLE_API_KEY",
 	"KOREAN_LAW_API_KEY",
 ];
-const dummies = ["FOO_API_KEY", "BAR_TOKEN", "lower_secret_value", "DB_PASSWORD"];
+const dummies = ["FOO_API_KEY", "BAR_TOKEN", "lower_secret_value", "DB_PASSWORD", "AWS_SHARED_CREDENTIALS_FILE"];
 const extra = ["AWS_ACCESS_KEY_ID", "GOOGLE_APPLICATION_CREDENTIALS", "AWS_PROFILE", "AZURE_OPENAI_ENDPOINT"];
-const pattern = /KEY|SECRET|TOKEN|PASSWORD/i;
+const pattern = /KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL/i;
 
 function allowlist() {
 	const match = readFileSync(sanitizer, "utf8").match(/^TEST_SH_ENV_ALLOWLIST=\(([^)]*)\)/m);
