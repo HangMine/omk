@@ -41,3 +41,24 @@ Added after the first run because that run had no validity conditions.
 - Each candidate smoke is 800 reads (8 readers × 100). Outputs are labeled "calibration, not gate".
 - Selection rule: projected torn-tail drops at 30,000 reads (smoke drops × 37.5) must be at least 600 (twice the validity threshold). The smallest qualifying value is chosen. If none qualifies, stop and report; no gate.
 - Failure counts must not influence the selection. Any smoke failure is reported and treated as a bug: stop, no gate.
+
+## Amendment 3 (2026-10-20, before the re-measure; decision A+B)
+
+- Calibration result: no gap value qualified. All three candidates had 0 torn-tail drops with the product writer.
+- Harness: `specs/088-journal-concurrent-read/gate/` at commit `6fcbb236d6`. It imports product code only.
+- Runs, in this order: A, then B, then base. Each runs once. If any run is INVALID, stop there. Together these are the single re-measure.
+- **B (primary claim, product writer):**
+  - setup: `GATE_PROFILE=B GATE_WRITER=product GATE_IMPL=head GATE_READ_GAP_US=1000`, 30,000 reads, 8 readers;
+  - pass: 0 failures (`integrity`, non-prefix, `concurrent_change`, `journal_truncated` under a live lease, any other error);
+  - validity: concurrent-change retries ≥ 100, and the writer is continuous over the whole reader duration.
+- **A (supporting, gate-only chunked writer):**
+  - The chunked writer is NOT the product writer. It goes through the journal's `persist` seam and writes each record in 4 pieces with 1 ms between pieces.
+  - setup: `GATE_PROFILE=A GATE_WRITER=chunked GATE_IMPL=head GATE_READ_GAP_US=1000`;
+  - pass: same as B;
+  - validity: torn-tail drops ≥ 300, and the writer is continuous. Distinct tails are report-only.
+- **Base control (report only, not a verdict):**
+  - setup: B settings on the default read path of `af8d32559e` (`GATE_PROFILE=base GATE_WRITER=product GATE_IMPL=base`, unmodified checkout at `GATE_BASE_ROOT`).
+  - Any failure is evidence that the gate reproduces the original defect. A result of 0 is reported as-is.
+  - Seam counters are not observable on base.
+- Upper bounds when there are 0 failures: 3/30,000, 3/drops, and 3/distinct tails.
+- The PR must state: "real writer: 0 torn tails observed" (from calibration and B).
