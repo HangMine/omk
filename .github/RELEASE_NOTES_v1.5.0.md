@@ -107,6 +107,8 @@ and refresh deliberately. Releases never regenerate model catalogs.
 
 ## Project Context
 
+> **Correction (2026-10-20):** not shipped. No `omk context` command or Project Context loader exists in v1.5.0 through v1.5.3; see spec 015.
+
 `omk context bootstrap|status|refresh|show|verify` maintains a bounded, source-backed Project
 Context index with incremental metadata refresh, stale detection and selective expansion.
 Bootstrapped projects supply compact provider-neutral evidence at context discovery without

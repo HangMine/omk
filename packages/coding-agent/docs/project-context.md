@@ -1,6 +1,8 @@
 # Project Context
 
 > **Status: design document, not implemented.** `omk context` and Project Context auto-loading are not in any release (v1.5.0 through v1.5.3) or on main. The v1.5.0 changelog entry was a mistake. See spec 015 (`specs/015-project-context-bootstrap/`).
+>
+> **Warning:** these commands do not exist yet. If you type `omk context …`, OMK treats it as an ordinary chat message and sends it to the model; with a provider key configured, that is one paid model call.
 
 OMK owns a small repository index, not another source of project truth. Source code, Git,
 AGENTS instructions, specs, ADRs and mission files remain authoritative. Spec Kitty's
@@ -20,8 +22,9 @@ state machine is not imported.
 The pipeline is `repository -> bootstrap -> index -> compact context -> agent -> selective expansion`.
 It makes no model or network calls and does not generate a repository-wide prose summary.
 
-## Commands
+## Commands (planned, not implemented)
 
+The commands below are the planned interface. None of them exist in any release or on main.
 Run from the repository or use `--root`:
 
 ```bash
@@ -35,12 +38,14 @@ omk context show --file AGENTS.md --budget 512
 omk context verify --json
 ```
 
-The source checkout can use its existing source runner instead of rebuilding:
+Planned: the source checkout would use its existing source runner instead of rebuilding. This does not work today because `packages/coding-agent/src/cli.ts` has no `context` command:
 
 ```bash
 node node_modules/tsx/dist/cli.mjs --tsconfig tsconfig.json \
   packages/coding-agent/src/cli.ts context bootstrap
 ```
+
+Planned behavior (not implemented):
 
 - `bootstrap` creates a missing index and refuses to replace an existing one.
 - `refresh` preserves the selected budget unless `--budget` overrides it. It updates the
