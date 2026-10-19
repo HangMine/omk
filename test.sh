@@ -75,6 +75,14 @@ unset META_MODEL_API_KEY
 unset MODEL_API_KEY
 unset EXPLABS_API_KEY
 unset EXPERIENTIAL_API_KEY
+unset ADAPTORCH_API_KEY
+unset AZURE_API_KEY
+unset CONTEXT7_API_KEY
+unset EXA_API_KEY
+unset FIRECRAWL_API_KEY
+unset FIRECRAWL_OAUTH_TOKEN
+unset GOOGLE_API_KEY
+unset KOREAN_LAW_API_KEY
 unset COPILOT_GITHUB_TOKEN
 unset GH_TOKEN
 unset GITHUB_TOKEN
@@ -93,6 +101,10 @@ unset AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
 unset AWS_CONTAINER_CREDENTIALS_FULL_URI
 unset AWS_WEB_IDENTITY_TOKEN_FILE
 unset BEDROCK_EXTENSIVE_MODEL_TEST
+
+# Pattern-based strip (KEY/SECRET/TOKEN/PASSWORD in the name) after the explicit list above.
+# shellcheck source=scripts/test-env-sanitize.sh
+. "$(dirname "$0")/scripts/test-env-sanitize.sh"
 
 echo "Running tests without API keys..."
 npm test

@@ -22,3 +22,21 @@ test("test.sh unsets every provider key that getEnvApiKey reads", () => {
 	const leaked = providerKeyNames.filter((name) => !unsetNames.has(name));
 	assert.deepEqual(leaked, [], `test.sh does not unset: ${leaked.join(", ")}`);
 });
+
+// Keys read outside env-api-keys.ts (tools, MCP servers, adapters) that a developer shell commonly
+// carries. test.sh must strip them as well, so no test reaches a live service with the operator's key.
+const extraSecretNames = [
+	"ADAPTORCH_API_KEY",
+	"AZURE_API_KEY",
+	"CONTEXT7_API_KEY",
+	"EXA_API_KEY",
+	"FIRECRAWL_API_KEY",
+	"FIRECRAWL_OAUTH_TOKEN",
+	"GOOGLE_API_KEY",
+	"KOREAN_LAW_API_KEY",
+];
+
+test("test.sh unsets non-provider service keys", () => {
+	const leaked = extraSecretNames.filter((name) => !unsetNames.has(name));
+	assert.deepEqual(leaked, [], `test.sh does not unset: ${leaked.join(", ")}`);
+});
