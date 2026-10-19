@@ -2,6 +2,23 @@ import type { Model, SimpleStreamOptions } from "../types.ts";
 
 type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
+/**
+ * Check if the model is an Anthropic Claude model on Bedrock.
+ * Checks both model ID and model name to support application inference profiles
+ * whose ARNs don't contain the model name.
+ */
+export function isAnthropicClaudeModel(model: Model<"bedrock-converse-stream">): boolean {
+	const id = model.id.toLowerCase();
+	const name = model.name?.toLowerCase() ?? "";
+	return (
+		id.includes("anthropic.claude") ||
+		id.includes("anthropic/claude") ||
+		name.includes("anthropic.claude") ||
+		name.includes("anthropic/claude") ||
+		name.includes("claude")
+	);
+}
+
 /** Application inference profiles may identify their model by display name instead of ARN. */
 export function getModelMatchCandidates(modelId: string, modelName?: string): string[] {
 	const values = modelName ? [modelId, modelName] : [modelId];

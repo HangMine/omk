@@ -1,5 +1,5 @@
-import type { AssistantMessage, Context } from "omk-ai";
-import { getModel } from "omk-ai";
+import type { AssistantMessage, Context, SimpleStreamOptions } from "omk-ai";
+import { addsThinkingBudgetToMaxTokens, adjustMaxTokensForThinking, getModel } from "omk-ai";
 import { describe, expect, it } from "vitest";
 import {
 	buildSuggestionContext,
@@ -149,7 +149,7 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		expect(planSuggestion({ ...base, usage: "no_quota" }).kind).toBe("request");
 	});
 
-	it("the suggestion request differs from the main request only in maxTokens (reasoning high → budget+128) and its own abort signal", async () => {
+	it("the suggestion request differs from the main request only in maxTokens (Anthropic: 128, provider adds the budget) and its own abort signal", async () => {
 		const mainOptions = {
 			apiKey: "k",
 			reasoning: "high" as const,
@@ -181,13 +181,16 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		expect(SUGGESTION_MAX_TOKENS).toBe(128);
 		const { maxTokens, signal, ...rest } = seen ?? {};
 		const { maxTokens: _mainMax, signal: _mainSignal, ...mainRest } = mainOptions;
-		expect(maxTokens).toBe(16384 + 128);
+		expect(maxTokens).toBe(128);
+		expect(adjustMaxTokensForThinking(128, model.maxTokens, "high").maxTokens).toBe(16384 + 128);
 		expect(signal).toBe(controller.signal);
 		expect(rest).toEqual(mainRest);
 		expect(Object.keys(seen ?? {}).sort()).toEqual(Object.keys(mainOptions).sort());
 	});
 
-	it.each([
+	const openaiModel = getModel("openai", "gpt-5")!;
+
+	it.each<[string, SimpleStreamOptions, number]>([
 		["off (no reasoning key)", {}, 128],
 		["minimal", { reasoning: "minimal" as const }, 1024 + 128],
 		["low", { reasoning: "low" as const }, 2048 + 128],
@@ -195,8 +198,19 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		["high", { reasoning: "high" as const }, 16384 + 128],
 		["xhigh clamps to high", { reasoning: "xhigh" as const }, 16384 + 128],
 		["custom budget", { reasoning: "low" as const, thinkingBudgets: { low: 500 } }, 500 + 128],
-	])("suggestion maxTokens with reasoning %s", async (_name, extra, expected) => {
-		expect(suggestionMaxTokens(extra)).toBe(expected);
+	])("final provider maxTokens with reasoning %s is budget + 128 (off: 128)", async (_name, extra, expected) => {
+		// Anthropic: the provider's own adjustMaxTokensForThinking adds the budget, so we pass 128.
+		const sent = suggestionMaxTokens(model, extra);
+		const final = extra.reasoning
+			? adjustMaxTokensForThinking(sent, model.maxTokens, extra.reasoning, extra.thinkingBudgets).maxTokens
+			: sent;
+		expect(addsThinkingBudgetToMaxTokens(model)).toBe(true);
+		expect(sent).toBe(128);
+		expect(final).toBe(expected);
+		// A provider without that adjustment gets budget + 128 directly.
+		expect(addsThinkingBudgetToMaxTokens(openaiModel)).toBe(false);
+		expect(suggestionMaxTokens(openaiModel, extra)).toBe(expected);
+
 		const mainOptions = { apiKey: "k", maxTokens: 32000, ...extra };
 		let seen: Record<string, unknown> | undefined;
 		const streamFn = ((_m: unknown, _c: Context, o: Record<string, unknown>) => {
@@ -204,7 +218,12 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 			return { result: async () => assistant("Next.") };
 		}) as never;
 		const controller = new AbortController();
-		await requestNextSuggestion(streamFn, { ...record, options: mainOptions }, assistant("Done."), controller.signal);
+		await requestNextSuggestion(
+			streamFn,
+			{ ...record, model: openaiModel, options: mainOptions } as never,
+			assistant("Done."),
+			controller.signal,
+		);
 		const { maxTokens, signal, ...rest } = seen ?? {};
 		const { maxTokens: _main, ...mainRest } = mainOptions;
 		expect(maxTokens).toBe(expected);

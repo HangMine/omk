@@ -32,6 +32,11 @@ export type { OpenAICompletionsOptions } from "./providers/openai-completions.ts
 export type { OpenAIResponsesOptions } from "./providers/openai-responses.ts";
 export { deriveContextPromptCacheKey } from "./providers/prompt-cache.ts";
 export * from "./providers/register-builtins.ts";
+export {
+	addsThinkingBudgetToMaxTokens,
+	adjustMaxTokensForThinking,
+	DEFAULT_THINKING_BUDGETS,
+} from "./providers/simple-options.ts";
 export * from "./session-resources.ts";
 export * from "./stream.ts";
 export * from "./types.ts";

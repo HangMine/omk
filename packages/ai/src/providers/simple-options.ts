@@ -1,4 +1,27 @@
 import type { Api, Model, SimpleStreamOptions, StreamOptions, ThinkingBudgets, ThinkingLevel } from "../types.ts";
+import { isAnthropicClaudeModel, supportsAdaptiveThinking } from "./bedrock-thinking.ts";
+
+/** Default token budgets per thinking level (token-based providers). */
+export const DEFAULT_THINKING_BUDGETS: Readonly<Required<ThinkingBudgets>> = {
+	minimal: 1024,
+	low: 2048,
+	medium: 8192,
+	high: 16384,
+};
+
+/**
+ * True when the provider's simple stream adds the thinking budget on top of an
+ * explicit `maxTokens` via {@link adjustMaxTokensForThinking} (so a caller cap
+ * sizes only the answer).
+ */
+export function addsThinkingBudgetToMaxTokens(model: Model<Api>): boolean {
+	if (model.api === "anthropic-messages") return true;
+	if (model.api === "bedrock-converse-stream") {
+		const bedrock = model as Model<"bedrock-converse-stream">;
+		return isAnthropicClaudeModel(bedrock) && !supportsAdaptiveThinking(bedrock.id, bedrock.name);
+	}
+	return false;
+}
 
 export function buildBaseOptions(_model: Model<Api>, options?: SimpleStreamOptions, apiKey?: string): StreamOptions {
 	return {
@@ -35,13 +58,7 @@ export function adjustMaxTokensForThinking(
 	reasoningLevel: ThinkingLevel,
 	customBudgets?: ThinkingBudgets,
 ): { maxTokens: number; thinkingBudget: number } {
-	const defaultBudgets: ThinkingBudgets = {
-		minimal: 1024,
-		low: 2048,
-		medium: 8192,
-		high: 16384,
-	};
-	const budgets = { ...defaultBudgets, ...customBudgets };
+	const budgets = { ...DEFAULT_THINKING_BUDGETS, ...customBudgets };
 
 	const minOutputTokens = 1024;
 	const level = clampReasoning(reasoningLevel)!;
