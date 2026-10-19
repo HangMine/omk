@@ -1,9 +1,9 @@
 # OMK 1.5.2 이후 배포 마무리 점검
 
 - 날짜: 2026-10-19 KST
-- 기준 HEAD: `main` / `79606b72a1` (부모 릴리스 커밋 `cf40e647e0`, `v1.5.2`)
-- 상태: 코드 변경 `WIRED` + 범위 한정 `VERIFIED_LOCAL`/`VERIFIED_ADAPTORCH`. Harness2는 1.5.3 미포함 판정.
-  커밋, 푸시, 태그, npm 배포는 수행하지 않았다.
+- 기준 HEAD: `main` / `7e60de4d4a` (`Release v1.5.3` `e6396d1ae8` + next-cycle changelog)
+- 상태: `v1.5.3` **배포 완료**. tag, GitHub Release, npm 7개 패키지, 바이너리 6종 모두 확인.
+  Harness2는 1.5.3 미포함 판정.
 
 ## 이번 변경
 
@@ -167,3 +167,91 @@ import하지도 않는다. HEAD만 체크아웃한 별도 worktree(`/tmp/omk-bas
 5. `git diff --check`, staged diff 검토, CHANGELOG `[Unreleased]` 확인
 6. `.github/RELEASE_NOTES_v1.5.3.md` 작성과 README 릴리스 포인터 갱신(현재 파일 없음)
 7. 커밋, push, 태그, npm 배포는 별도 승인 후 실행
+
+## 1.5.3 배포 결과 (2026-10-19)
+
+### 릴리스 커밋
+
+| 항목 | 값 |
+| --- | --- |
+| 릴리스 커밋 | `e6396d1ae8` (`Release v1.5.3`) |
+| 후속 커밋 | `07dffb132f`, `7e60de4d4a` (`Add [Unreleased] section for next cycle`) |
+| tag | `v1.5.3` (push 완료) |
+| 기준 버전 | 7개 workspace 모두 `1.5.3` |
+
+### CI/CD
+
+| 워크플로 | 결과 |
+| --- | --- |
+| CI `39220521113` (main, `7e60de4d`) | success |
+| Build Binaries `39220501985` (`v1.5.3`) | success: build, attest, publish-npm, release |
+| GitHub Release | <https://github.com/dmae97/omk/releases/tag/v1.5.3> (draft 아님) |
+
+### npm 레지스트리 (7/7 확인)
+
+`open-multi-agent-kit`, `omk-ai`, `omk-agent-core`, `omk-tui`, `omk-protocol`,
+`omk-adaptorch-wpl`, `omk-book-to-skill` 모두 `latest = 1.5.3`, 버전별 tarball HTTP 200.
+
+9.0 MB인 `open-multi-agent-kit`만 레지스트리 전파가 약 9분 늦었다. publish 잡은 이미
+성공했고(`+ open-multi-agent-kit@1.5.3`), tarball이 404에서 200으로 바뀐 뒤 설치 검증을
+진행했다. 이 지연은 배포 실패가 아니지만, 직후 `npm view`로 판정하면 오탐이 난다.
+
+### 설치 및 바이너리 smoke
+
+| 검증 | 결과 |
+| --- | --- |
+| 격리 디렉터리 `npm install open-multi-agent-kit@1.5.3` | 126 packages, 종료 0 |
+| 설치 패키지 `package.json` version | `1.5.3` |
+| `env -u OMK_PACKAGE_DIR ./node_modules/.bin/omk --version` | `1.5.3` |
+| 동일 실행에 stale `OMK_PACKAGE_DIR` 유지 | `1.4.3` (변수 영향 재확인) |
+| GitHub Release `SHA256SUMS`로 `omk-linux-x64.tar.gz` 검증 | `OK` |
+| 압축 해제 바이너리 `--version` | `1.5.3` |
+
+### 릴리스 중 발견해 고친 결함
+
+1. **journal torn tail 오분류 (제품 코드).** `readRunJournal`이 writer append 중 잘린
+   마지막 줄을 `integrity`로 보고했다. `readJournalBytes`의 재시도는 size/ctime 변경만
+   감지하므로, open 전에 쓰고 read 후에 검사하는 창을 놓친다. 이제 잘린 tail은 bounded
+   retry로 다시 읽고, 재시도가 소진되면 `journal_truncated`, 중간 파일 손상은 그대로
+   `integrity`다. `test/verified-run-journal.test.ts`의 torn-tail 계약은 유지된다.
+2. **릴리스 스크립트의 changelog 전제.** 5개 패키지의 `[Unreleased]`가 1.5.2 아래에 있어
+   `node scripts/release.mjs patch`가 첫 섹션을 1.5.3으로 바꾸며 순서가 깨졌다. 7개
+   changelog의 `[Unreleased]`를 최상단으로 올린 뒤 릴리스했다.
+
+### 부하 의존 테스트 (fixture만 수정, 단언 유지)
+
+| 파일 | 변경 | 검증하는 의미 |
+| --- | --- | --- |
+| `compaction-deterministic-emergency.test.ts` | retry `baseDelayMs: 1` | transient 503을 deterministic trim으로 강등하지 않음 |
+| `suite/agent-session-compaction.test.ts` | retry `baseDelayMs: 1` | declined handler 이름이 오류에 남음 |
+| `verified-run.test.ts` | `workMs/verifyMs` 30초, deadline 시계를 예산에서 파생 | base 불변, candidate 고정, deadline 재확인 |
+| `verified-run-authority-restart.test.ts` | grant `ttl: 60_000` | restart quarantine. 만료는 `authority-store.test.ts`가 `ttl: 50`으로 고정 |
+| `memory-factorial.ts` | 시계 대기 상한 30초 | store의 실시간 가드와 future-dated 기억 거부는 그대로 |
+| `verified-run-journal-read-retry.test.ts` | tail을 단일 `pwrite`로 기록 | 두 유효 상태만 생성, reader 재시도가 라이브 writer를 견딤 |
+
+타임아웃/만료 동작 자체를 검증하는 테스트는 약화하지 않았다. `workMs: 100` deadline 테스트,
+`ttl: 50` 만료 테스트, `journal_truncated` torn-tail 테스트가 그대로 통과한다.
+
+### 최종 검증
+
+| 명령 | 결과 |
+| --- | --- |
+| `./test.sh` (부하 load 26, 2회 연속) | 종료 0. coding-agent 771 파일, 9092+ 테스트 통과 |
+| `npm run check` | 종료 0 (Biome, 16개 가드, tsgo, browser smoke) |
+| `npm run build` | 종료 0, 7 workspace |
+| AdaptOrch `CommandVerifier` 5개 묶음 | 5/5 PASS, pass_rate 1.0 (17, 27, 23, 51, 43 테스트) |
+| CI (GitHub Actions) | success |
+
+### 남은 위험
+
+- **호스트 부하 민감도:** 이 호스트는 다른 프로젝트 테스트가 상시 돌아 load average가
+  14~41로 변한다. fixture 예산을 늘려 실패는 사라졌지만, 아주 극단적인 부하에서는
+  30초 Vitest 타임아웃에 다시 닿을 수 있다. CI(ubuntu-22.04)는 통과했다.
+- **레지스트리 전파 지연:** 큰 패키지는 publish 성공 후에도 수 분간 404일 수 있다.
+  배포 판정은 tarball 200과 설치 smoke로 해야 한다.
+- **stale `OMK_PACKAGE_DIR`:** 이 셸의 값이 1.4.3 설치본을 가리킨다. 새 버전을 실행할
+  때는 unset하거나 새 경로로 갱신해야 한다. 설치 검증에서 두 동작을 모두 확인했다.
+- **실공급자 미호출:** 유료 모델, 실제 계정, 장시간 이미지 디코더 RSS는 이번에도 측정하지
+  않았다. in-flight 공유는 디코드 횟수로만 검증했다.
+- **플랫폼:** 로컬은 Linux만 실행했다. macOS/Windows/ARM은 CI 빌드와 attest까지만 확인했고
+  실제 실행 smoke는 하지 않았다.
