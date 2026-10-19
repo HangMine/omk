@@ -17,7 +17,7 @@
 
 ### Changed
 
-- WorkBuddy's DeepSeek V4.1 Flash lane is labeled 1017, uses the current `@tencent-ai/codebuddy-code@2.169.0` product cap of 128k output tokens, and keeps `low`, `high`, and `max` effort selection.
+- WorkBuddy's DeepSeek V4.1 Flash lane is labeled 1017, uses the current `@tencent-ai/codebuddy-code@2.169.0` product cap of 128k output tokens, and keeps `low`, `high`, and `max` effort selection. A live probe on 2026-10-19 accepted `low`, `high`, `max`, and `xhigh`; the dated `*-1017` and `deepseek-v4-flash` ids answered `400 11102`, so the undated product id remains the declared lane.
 
 ## [1.5.0] - 2026-10-18
 

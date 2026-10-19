@@ -12,7 +12,12 @@ const LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high",
  * was rechecked on 2026-10-19 against `@tencent-ai/codebuddy-code@2.169.0`;
  * `deepseek-v4.1-flash` is the current 1017 lane, with a 1M context, a 128k
  * product output cap (the previous 384k figure was the older vendor-lane
- * figure), and the product's `high` effort default.
+ * figure), and the product's `high` effort default. A live probe on the same
+ * day returned HTTP 200 for `low`, `high`, `max`, and `xhigh`; the dated ids
+ * `deepseek-v4.1-flash-1017`, `deepseek-v4-flash`, and
+ * `deepseek-v4-flash-1017` answered `400 11102 model service info not found`.
+ * The catalog therefore keeps the undated product id and exposes `max` as the
+ * strongest selectable tier.
  *
  * Wire contract observed on this endpoint (each item reproduced with a minimal
  * request, not inferred from a third-party summary):
