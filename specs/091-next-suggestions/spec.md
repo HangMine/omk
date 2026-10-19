@@ -184,6 +184,13 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
      size (name + description per skill, omk's `estimateTokens` chars/4
      heuristic, `compaction.ts`): **11,852 tokens** total (47,406 chars), ≤ 32k;
      per skill max 251, median 57. Reported alongside the bm25 arm.
+   - **Default path:** bm25 k = 25 candidates, then Jev. The missed-skill risk
+     is bounded by the k = 25 gate (≤ `floor(0.01 × N)` misses).
+   - **Baseline arm timing and switch rule (fixed before any measurement):**
+     the "all 217 skills to Jev" baseline is measured only in the paid Jev
+     stage. On the same 100 sentences, if the all-skills arm gets **≥ 5 more**
+     gold skills correct than the bm25 k = 25 arm, the default switches to
+     all-skills; otherwise the bm25 path is kept.
    - Order: (a) measure **without** boost; (b) only if the k = 25 gate fails, remeasure
      **once** with the recency-frequency boost whose formula was fixed in the
      PREREG beforehand; (c) if it still fails, **the Jev stage is not built**.
