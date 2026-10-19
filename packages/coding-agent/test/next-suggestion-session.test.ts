@@ -10,7 +10,7 @@ import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
-import { SUGGESTION_INSTRUCTION } from "../src/core/next-suggestion.ts";
+import { type QuotaUsage, SUGGESTION_INSTRUCTION } from "../src/core/next-suggestion.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
@@ -219,7 +219,11 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		expect(h.calls()).toBe(1);
 	});
 
-	function planRecorder(h: ReturnType<typeof harness>, quotaUsage: (() => Promise<never>) | undefined, extra = {}) {
+	function planRecorder(
+		h: ReturnType<typeof harness>,
+		quotaUsage: (() => Promise<QuotaUsage>) | undefined,
+		extra = {},
+	) {
 		const plans: string[] = [];
 		const controller = installNextSuggestions(h.session as unknown as SuggestionSessionPort, fakeEditor(), "base", {
 			env: ON,
@@ -249,6 +253,27 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		expect(Date.now() - started).toBeLessThan(1000);
 		await vi.waitFor(() => expect(plans).toEqual(["usage_unavailable"]));
 		expect(h.calls()).toBe(1);
+	});
+
+	it("no quota source proceeds, while a failed or timed-out check skips", async () => {
+		const noSource = harness(tempCwd());
+		const noSourcePlans = planRecorder(noSource, async () => "no_quota" as const);
+		await noSource.session.prompt("first");
+		await vi.waitFor(() => expect(noSourcePlans).toEqual(["request"]));
+
+		const failed = harness(tempCwd());
+		const failedPlans = planRecorder(failed, async () => {
+			throw new Error("down");
+		});
+		await failed.session.prompt("first");
+		await vi.waitFor(() => expect(failedPlans).toEqual(["usage_unavailable"]));
+		expect(failed.calls()).toBe(1);
+
+		const slow = harness(tempCwd());
+		const slowPlans = planRecorder(slow, () => new Promise<never>(() => {}), { usageTimeoutMs: 30 });
+		await slow.session.prompt("first");
+		await vi.waitFor(() => expect(slowPlans).toEqual(["usage_unavailable"]));
+		expect(slow.calls()).toBe(1);
 	});
 
 	it("fails closed when no quota reader is wired", async () => {

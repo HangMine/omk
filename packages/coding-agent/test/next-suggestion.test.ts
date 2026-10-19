@@ -13,6 +13,7 @@ import {
 	SHORT_CACHE_TTL_MS,
 	SUGGESTION_INSTRUCTION,
 	SUGGESTION_MAX_TOKENS,
+	suggestionMaxTokens,
 } from "../src/core/next-suggestion.ts";
 
 const model = getModel("anthropic", "claude-sonnet-4-5")!;
@@ -148,7 +149,7 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		expect(planSuggestion({ ...base, usage: "no_quota" }).kind).toBe("request");
 	});
 
-	it("the suggestion request differs from the main request only in maxTokens=128 (and its own abort signal)", async () => {
+	it("the suggestion request differs from the main request only in maxTokens (reasoning high → budget+128) and its own abort signal", async () => {
 		const mainOptions = {
 			apiKey: "k",
 			reasoning: "high" as const,
@@ -180,10 +181,37 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		expect(SUGGESTION_MAX_TOKENS).toBe(128);
 		const { maxTokens, signal, ...rest } = seen ?? {};
 		const { maxTokens: _mainMax, signal: _mainSignal, ...mainRest } = mainOptions;
-		expect(maxTokens).toBe(128);
+		expect(maxTokens).toBe(16384 + 128);
 		expect(signal).toBe(controller.signal);
 		expect(rest).toEqual(mainRest);
 		expect(Object.keys(seen ?? {}).sort()).toEqual(Object.keys(mainOptions).sort());
+	});
+
+	it.each([
+		["off (no reasoning key)", {}, 128],
+		["minimal", { reasoning: "minimal" as const }, 1024 + 128],
+		["low", { reasoning: "low" as const }, 2048 + 128],
+		["medium", { reasoning: "medium" as const }, 8192 + 128],
+		["high", { reasoning: "high" as const }, 16384 + 128],
+		["xhigh clamps to high", { reasoning: "xhigh" as const }, 16384 + 128],
+		["custom budget", { reasoning: "low" as const, thinkingBudgets: { low: 500 } }, 500 + 128],
+	])("suggestion maxTokens with reasoning %s", async (_name, extra, expected) => {
+		expect(suggestionMaxTokens(extra)).toBe(expected);
+		const mainOptions = { apiKey: "k", maxTokens: 32000, ...extra };
+		let seen: Record<string, unknown> | undefined;
+		const streamFn = ((_m: unknown, _c: Context, o: Record<string, unknown>) => {
+			seen = o;
+			return { result: async () => assistant("Next.") };
+		}) as never;
+		const controller = new AbortController();
+		await requestNextSuggestion(streamFn, { ...record, options: mainOptions }, assistant("Done."), controller.signal);
+		const { maxTokens, signal, ...rest } = seen ?? {};
+		const { maxTokens: _main, ...mainRest } = mainOptions;
+		expect(maxTokens).toBe(expected);
+		expect(signal).toBe(controller.signal);
+		// Reasoning is kept, not disabled: every other key is unchanged.
+		expect(rest).toEqual(mainRest);
+		expect(Object.keys(seen ?? {}).sort()).toEqual([...Object.keys(mainOptions), "signal"].sort());
 	});
 
 	it("extracts one trimmed sentence and rejects error replies", () => {

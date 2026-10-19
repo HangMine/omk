@@ -15,7 +15,7 @@
  * session log, compaction input, or the next main request.
  */
 import type { StreamFn } from "omk-agent-core";
-import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions, UserMessage } from "omk-ai";
+import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions, ThinkingBudgets, UserMessage } from "omk-ai";
 
 export const NEXT_SUGGESTIONS_ENV = "OMK_NEXT_SUGGESTIONS";
 /** PREREG: skip when ≥ 90% of the active quota window is used. */
@@ -27,6 +27,29 @@ export const LONG_CACHE_TTL_MS = 60 * 60_000;
 export const MAX_SUGGESTION_CHARS = 200;
 /** The suggestion request differs from the main request only in this output cap. */
 export const SUGGESTION_MAX_TOKENS = 128;
+/**
+ * Default thinking budgets, mirroring omk-ai's `adjustMaxTokensForThinking`
+ * (xhigh/max/ultra clamp to high). Used only to size the suggestion cap.
+ */
+export const DEFAULT_THINKING_BUDGETS: Required<ThinkingBudgets> = {
+	minimal: 1024,
+	low: 2048,
+	medium: 8192,
+	high: 16384,
+};
+
+/**
+ * Output cap for the suggestion request. Reasoning is never disabled (that
+ * would change the request bytes); with reasoning on the cap is the thinking
+ * budget + 128, with reasoning off it is 128.
+ */
+export function suggestionMaxTokens(options: SimpleStreamOptions | undefined): number {
+	const level = options?.reasoning;
+	if (!level) return SUGGESTION_MAX_TOKENS;
+	const key: keyof ThinkingBudgets = level === "xhigh" || level === "max" || level === "ultra" ? "high" : level;
+	const budget = options?.thinkingBudgets?.[key] ?? DEFAULT_THINKING_BUDGETS[key];
+	return budget + SUGGESTION_MAX_TOKENS;
+}
 /** The quota check is abandoned (and the suggestion skipped) after this long. */
 export const USAGE_CHECK_TIMEOUT_MS = 2_000;
 
@@ -164,7 +187,7 @@ export async function requestNextSuggestion(
 	try {
 		const stream = await streamFn(record.model, buildSuggestionContext(record, finalAssistant), {
 			...record.options,
-			maxTokens: SUGGESTION_MAX_TOKENS,
+			maxTokens: suggestionMaxTokens(record.options),
 			signal,
 		});
 		const result = await stream.result();
