@@ -146,6 +146,12 @@ describe("workbuddy provider catalog", () => {
 		expect(model?.compat).toMatchObject({ supportsReasoningEffort: false });
 	});
 
+	it("labels the DeepSeek 1017 lane and keeps its max ceiling", () => {
+		const model = models.find((entry) => entry.id === "deepseek-v4.1-flash");
+		expect(model?.name).toBe("DeepSeek V4.1 Flash 1017 (WorkBuddy)");
+		expect(getSupportedThinkingLevels(model!)).toContain("max");
+	});
+
 	it("carries the declared context windows and output caps", () => {
 		const expected: Array<[string, number, number, boolean]> = [
 			["glm-5.3", 1_000_000, 48_000, true],
@@ -153,6 +159,7 @@ describe("workbuddy provider catalog", () => {
 			["gpt-5.6-sol", 1_000_000, 128_000, true],
 			["glm-5.1", 200_000, 48_000, false],
 			["deepseek-v3-0324", 128_000, 8_192, false],
+			["deepseek-v4.1-flash", 1_000_000, 128_000, true],
 			["auto", 168_000, 32_000, true],
 		];
 		for (const [id, contextWindow, maxTokens, image] of expected) {

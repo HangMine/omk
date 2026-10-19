@@ -39168,7 +39168,7 @@ export const MODELS = {
 		} satisfies Model<"openai-completions">,
 		"deepseek-v4.1-flash": {
 			id: "deepseek-v4.1-flash",
-			name: "DeepSeek V4.1 Flash (WorkBuddy)",
+			name: "DeepSeek V4.1 Flash 1017 (WorkBuddy)",
 			api: "openai-completions",
 			provider: "workbuddy",
 			baseUrl: "https://www.workbuddy.ai/v2",
@@ -39183,7 +39183,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 1000000,
-			maxTokens: 384000,
+			maxTokens: 128000,
 		} satisfies Model<"openai-completions">,
 		"gemini-3.1-pro": {
 			id: "gemini-3.1-pro",

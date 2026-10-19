@@ -15,6 +15,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- WorkBuddy's DeepSeek V4.1 Flash lane is labeled 1017, uses the current `@tencent-ai/codebuddy-code@2.169.0` product cap of 128k output tokens, and keeps `low`, `high`, and `max` effort selection.
+
 ## [1.5.0] - 2026-10-18
 
 - Experiential Labs (`experientiallabs`) joins the catalog as an OpenAI-compatible gateway at `https://api.experientiallabs.ai/v1`, authenticated by `EXPLABS_API_KEY` or `EXPERIENTIAL_API_KEY`. The 235 callable, routable, tool-capable text models are generated from the public `/api/models` catalog plus the authenticated `/v1/models` surface (checked 2026-10-18). Reasoning uses the `/v1/models` contract, not the upstream route advertisement: 150 models expose a `thinkingLevelMap`, `none` maps to off, and unsupported tiers are hidden. This keeps GLM-5.2 provider-default because its gateway surface rejects `reasoning_effort`, while GPT-6 Sol and Luna expose the gateway's none/low/medium/high/xhigh/max ladder. Media-only, embedding-only, non-tool and non-callable rows stay out because the text catalog cannot route them.

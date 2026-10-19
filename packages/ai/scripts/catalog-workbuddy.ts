@@ -8,7 +8,11 @@ const LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high",
  * Verified live on 2026-09-19 against `https://www.workbuddy.ai/v2/chat/completions`
  * with a `ck_…` plan key. The same key is accepted by `www.codebuddy.ai`; the
  * `.cn` hosts answered `401 {"message":"not_found"}` for it, so the endpoint is
- * pinned to the host that actually authenticated.
+ * pinned to the host that actually authenticated. The bundled product catalog
+ * was rechecked on 2026-10-19 against `@tencent-ai/codebuddy-code@2.169.0`;
+ * `deepseek-v4.1-flash` is the current 1017 lane, with a 1M context, a 128k
+ * product output cap (the previous 384k figure was the older vendor-lane
+ * figure), and the product's `high` effort default.
  *
  * Wire contract observed on this endpoint (each item reproduced with a minimal
  * request, not inferred from a third-party summary):
@@ -92,7 +96,10 @@ const ROWS: readonly WorkbuddyModelRow[] = [
 	{ id: "claude-opus-5", name: "Claude Opus 5", contextWindow: 1_000_000, maxTokens: 128_000, image: true, efforts: ["low", "medium", "high", "xhigh", "max"] },
 	{ id: "claude-opus-4.6", name: "Claude Opus 4.6", contextWindow: 1_000_000, maxTokens: 128_000, image: true, efforts: ["low", "medium", "high", "max"] },
 	{ id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6", contextWindow: 1_000_000, maxTokens: 128_000, image: true, efforts: ["low", "medium", "high", "max"] },
-	{ id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", contextWindow: 1_000_000, maxTokens: 384_000, image: true, efforts: ["low", "high", "max"] },
+	// The current dated lane is `deepseek-v4.1-flash` (serving 1017). The product
+	// catalog declares `high`; `low` and `max` were accepted by the live probe for
+	// this id, so `/thinking max` remains selectable.
+	{ id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash 1017", contextWindow: 1_000_000, maxTokens: 128_000, image: true, efforts: ["low", "high", "max"] },
 	{ id: "gemini-3.8-flash", name: "Gemini-3.8-Flash", contextWindow: 1_048_576, maxTokens: 65_536, image: true, efforts: ["low", "medium", "high"] },
 	{ id: "gpt-6-astra", name: "GPT-6 Astra", contextWindow: 1_050_000, maxTokens: 128_000, image: true, efforts: ["low", "medium", "high", "xhigh", "max"] },
 	{ id: "grok-4.6", name: "Grok 4.6", contextWindow: 500_000, maxTokens: 500_000, image: true, efforts: ["low", "medium", "high", "xhigh"] },
