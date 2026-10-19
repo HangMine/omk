@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent, type AgentEvent, type AgentTool } from "omk-agent-core";
@@ -311,6 +311,76 @@ describe("AgentSession retry", () => {
 		const created = createSession({ failCount: 1, errorMessage: QUOTA_BODY });
 		await created.session.prompt("Test");
 		expect(quotaNoRetryErrorOf(created.session)).toBeUndefined();
+	});
+
+	function readQuotaRunLog(dir: string): Array<Record<string, unknown>> {
+		const file = join(dir, "quota-no-retry.jsonl");
+		if (!existsSync(file)) return [];
+		return readFileSync(file, "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line) as Record<string, unknown>);
+	}
+
+	it("spec 090: a quota termination appends exactly one quota-no-retry run-log entry", async () => {
+		const logDir = join(tempDir, "run-log");
+		const previous = process.env.OMK_RUN_LOG_DIR;
+		process.env.OMK_RUN_LOG_DIR = logDir;
+		try {
+			const off = createSession({
+				failCount: 99,
+				errorMessage: QUOTA_BODY,
+				providerResilience: { autoFailoverOnQuotaExhaustion: false },
+			});
+			await off.session.prompt("Test");
+			let entries = readQuotaRunLog(logDir);
+			expect(entries).toHaveLength(1);
+			expect(entries[0]).toMatchObject({
+				code: "quota_exhausted",
+				provider: "anthropic",
+				model: "mock",
+				failover: false,
+				noCandidate: false,
+			});
+			expect(JSON.stringify(entries[0])).not.toContain("free limit");
+
+			const none = createSession({
+				failCount: 99,
+				errorMessage: QUOTA_BODY,
+				providerResilience: { failoverCandidates: [{ provider: "nope-provider", id: "nope-model" }] },
+			});
+			await none.session.prompt("Test");
+			entries = readQuotaRunLog(logDir);
+			expect(entries).toHaveLength(2);
+			expect(entries[1]).toMatchObject({ code: "quota_exhausted", failover: true, noCandidate: true });
+
+			const ok = createSession({ failCount: 1, errorMessage: QUOTA_BODY });
+			await ok.session.prompt("Test");
+			expect(readQuotaRunLog(logDir)).toHaveLength(2);
+		} finally {
+			if (previous === undefined) delete process.env.OMK_RUN_LOG_DIR;
+			else process.env.OMK_RUN_LOG_DIR = previous;
+		}
+	});
+
+	it("spec 090: quota with no usable failover candidate does not rotate the route", async () => {
+		const created = createSession({
+			failCount: 99,
+			errorMessage: "503 service unavailable: insufficient_quota",
+			providerResilience: { failoverCandidates: [{ provider: "nope-provider", id: "nope-model" }] },
+		});
+		const hooks = created.session as unknown as { _maybeRotateModelRoutes: () => Promise<string | undefined> };
+		let rotations = 0;
+		hooks._maybeRotateModelRoutes = async () => {
+			rotations++;
+			return "anthropic/rotated";
+		};
+		const before = `${created.session.model?.provider}/${created.session.model?.id}`;
+		await created.session.prompt("Test");
+		expect(rotations).toBe(0);
+		expect(`${created.session.model?.provider}/${created.session.model?.id}`).toBe(before);
+		expect(created.getCallCount()).toBe(1);
+		expect(quotaNoRetryErrorOf(created.session)).toBeInstanceOf(QuotaExhaustedNoRetryError);
 	});
 
 	it("spec 090: honors a Retry-After hint on a transient 429", async () => {

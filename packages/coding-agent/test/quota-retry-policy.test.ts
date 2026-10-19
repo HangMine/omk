@@ -38,13 +38,13 @@ describe("spec 090 quota retry policy", () => {
 		expect(retryAfterHintMs(undefined)).toBeUndefined();
 	});
 
-	it("waits 0 on quota failover, honors Retry-After, and caps every wait at 60s", () => {
+	it("waits 0 on quota failover, caps Retry-After at 60s, leaves backoff unchanged", () => {
 		expect(MAX_RETRY_WAIT_MS).toBe(60_000);
 		expect(retryWaitMs({ quotaFailover: true, backoffMs: 4000, errorMessage: QUOTA })).toBe(0);
 		expect(retryWaitMs({ quotaFailover: false, backoffMs: 4000, errorMessage: "529 overloaded" })).toBe(4000);
 		expect(retryWaitMs({ quotaFailover: false, backoffMs: 4000, errorMessage: "429 retry after 2" })).toBe(2000);
 		expect(retryWaitMs({ quotaFailover: false, backoffMs: 4000, errorMessage: "429 retry after 999" })).toBe(60_000);
-		expect(retryWaitMs({ quotaFailover: false, backoffMs: 500_000, errorMessage: "529" })).toBe(60_000);
+		expect(retryWaitMs({ quotaFailover: false, backoffMs: 500_000, errorMessage: "529" })).toBe(500_000);
 		expect(retryWaitMs({ quotaFailover: false, backoffMs: 4000, errorMessage: "529", remainingMs: 100 })).toBe(100);
 	});
 });
@@ -65,7 +65,7 @@ describe("spec 090 session retry gate", () => {
 		expect(planRetryWait(msg(QUOTA), settings, 1, "deepseek/x", undefined, undefined)).toBe(0);
 		expect(planRetryWait(msg("529 overloaded"), settings, 1, undefined, undefined, undefined)).toBe(2000);
 		expect(planRetryWait(msg("529 overloaded"), settings, 3, undefined, undefined, undefined)).toBe(8000);
-		expect(planRetryWait(msg("529 overloaded"), settings, 6, undefined, undefined, undefined)).toBe(60_000);
+		expect(planRetryWait(msg("529 overloaded"), settings, 6, undefined, undefined, undefined)).toBe(64_000);
 		expect(planRetryWait(msg("502 bad gateway"), settings, 3, undefined, "r/x", undefined)).toBe(400);
 	});
 });

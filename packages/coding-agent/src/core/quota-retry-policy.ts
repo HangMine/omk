@@ -7,13 +7,18 @@
  * exhausted quota, so the turn either fails over at once (when
  * `providerResilience.autoFailoverOnQuotaExhaustion` is on, pinned or not) or
  * ends at once with {@link QuotaExhaustedNoRetryError}. Other retryable errors
- * keep the exponential backoff, honor a Retry-After hint, and every wait is
- * capped at {@link MAX_RETRY_WAIT_MS}.
+ * keep the exponential backoff and honor a Retry-After hint, capped at
+ * {@link MAX_RETRY_WAIT_MS}.
  */
 import type { AssistantMessage } from "omk-ai";
 import { classifyProviderError } from "./provider-error-classification.ts";
-import { type ProviderResilienceSettings, resolveProviderResilience } from "./provider-resilience.ts";
-import { computeRetryDelayMs } from "./provider-retry.ts";
+import {
+	isUpstreamUnavailableMessage,
+	type ProviderResilienceSettings,
+	resolveProviderResilience,
+} from "./provider-resilience.ts";
+import { computeRetryDelayMs, isEmptyStreamedCompletion } from "./provider-retry.ts";
+import { appendRunLog } from "./run-log.ts";
 
 export const MAX_RETRY_WAIT_MS = 60_000;
 
@@ -56,7 +61,7 @@ export function retryAfterHintMs(errorMessage: string | undefined): number | und
 	return Number.isFinite(value) && value >= 0 ? Math.round(value) : undefined;
 }
 
-/** One retry wait: 0 after a quota failover, else Retry-After or backoff, capped at 60s and the run budget. */
+/** One retry wait: 0 after a quota failover, else Retry-After (capped at 60s) or backoff, within the run budget. */
 export function retryWaitMs(input: {
 	readonly quotaFailover: boolean;
 	readonly backoffMs: number;
@@ -64,8 +69,11 @@ export function retryWaitMs(input: {
 	readonly remainingMs?: number;
 }): number {
 	if (input.quotaFailover) return 0;
-	const requested = retryAfterHintMs(input.errorMessage) ?? input.backoffMs;
-	return Math.min(requested, MAX_RETRY_WAIT_MS, input.remainingMs ?? Number.POSITIVE_INFINITY);
+	// The 60 s cap bounds provider-directed Retry-After waits; the configured
+	// exponential backoff is left as-is (its default never reaches 60 s).
+	const hint = retryAfterHintMs(input.errorMessage);
+	const requested = hint === undefined ? input.backoffMs : Math.min(hint, MAX_RETRY_WAIT_MS);
+	return Math.min(requested, input.remainingMs ?? Number.POSITIVE_INFINITY);
 }
 
 /** Retry gate: quota exhaustion is retryable only through failover. */
@@ -103,9 +111,24 @@ const quotaNoRetryErrors = new WeakMap<object, QuotaExhaustedNoRetryError>();
  * error ends the session with {@link QuotaExhaustedNoRetryError} (provider
  * message kept as `cause`); any other outcome clears the previous one.
  */
-export function recordQuotaOutcome(session: object, message: AssistantMessage): void {
+export function recordQuotaOutcome(
+	session: object,
+	message: AssistantMessage,
+	settings: ProviderResilienceSettings | undefined,
+): void {
 	if (message.errorMessage !== undefined && isQuotaExhaustedError(message.errorMessage)) {
-		quotaNoRetryErrors.set(session, new QuotaExhaustedNoRetryError(message.errorMessage));
+		const error = new QuotaExhaustedNoRetryError(message.errorMessage);
+		quotaNoRetryErrors.set(session, error);
+		const failover = resolveProviderResilience(settings).autoFailoverOnQuotaExhaustion;
+		// Privacy (spec 042): code, route and booleans only — never the provider message text.
+		appendRunLog("quota-no-retry", {
+			code: error.code,
+			provider: message.provider,
+			model: message.model,
+			failover,
+			// Failover was on yet the turn still ended on quota: no usable candidate was left.
+			noCandidate: failover,
+		});
 	} else {
 		quotaNoRetryErrors.delete(session);
 	}
@@ -114,4 +137,14 @@ export function recordQuotaOutcome(session: object, message: AssistantMessage): 
 /** The typed error the session's last turn ended with, if it ended on quota exhaustion. */
 export function quotaNoRetryErrorOf(session: object): QuotaExhaustedNoRetryError | undefined {
 	return quotaNoRetryErrors.get(session);
+}
+
+/**
+ * Same-model route rotation runs before the wait is planned, so it must never
+ * fire for quota exhaustion: quota only fails over, and a quota turn with no
+ * failover target must end with the route unchanged.
+ */
+export function shouldRotateRoute(message: AssistantMessage): boolean {
+	if (isQuotaExhaustedError(message.errorMessage)) return false;
+	return isUpstreamUnavailableMessage(message.errorMessage) || isEmptyStreamedCompletion(message);
 }

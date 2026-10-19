@@ -1,5 +1,5 @@
 ---
-description: "Quota exhaustion gets zero retry waits: fail over at once or end with a typed no-retry error; other retryable errors honor Retry-After, each wait capped at 60s"
+description: "Quota exhaustion gets zero retry waits: fail over at once or end with a typed no-retry error; other retryable errors honor Retry-After, capped at 60s"
 ---
 
 # Feature Specification: quota exhaustion is never retried on the same route
@@ -44,15 +44,18 @@ New module `packages/coding-agent/src/core/quota-retry-policy.ts`
   record is unchanged.
 - Other retryable errors: a Retry-After hint in the error text
   (`Retry-After: N`, `retry-after-ms: N`, `retry after N s`, `try again in Ns`)
-  replaces the backoff; every wait is capped at 60 s and at the run budget.
+  replaces the backoff and is capped at 60 s; all waits stay within the run
+  budget. The configured exponential backoff is not capped (its default
+  reaches at most 32 s at `maxRetries` 5; an existing test pins a huge
+  `baseDelayMs` to the timer limit).
 - Unchanged: `maxRetries` default (`settings-manager.ts` `?? 5`), backoff
   formula, 520 and transient-429 behavior.
 
 ## Success criterion
 
 A quota-exhausted turn makes exactly one provider call when failover is off or
-impossible, and its failover retry has `delayMs === 0`. No retry wait exceeds
-60 000 ms. All pre-existing retry, resilience and classification tests pass
+impossible, and its failover retry has `delayMs === 0`. No Retry-After wait
+exceeds 60 000 ms. All pre-existing retry, resilience and classification tests pass
 unchanged.
 
 ## Tests
@@ -70,6 +73,20 @@ unchanged.
 - Regression: `provider-resilience.test.ts` (incl. line 221),
   `provider-retry.test.ts`, `provider-error-classification.test.ts`,
   `compaction-quota-failover.test.ts` stay green unchanged.
+
+- A quota termination appends one `quota-no-retry` run-log line (spec 042,
+  `OMK_RUN_LOG_DIR`) with `code`, `provider`, `model`, `failover`,
+  `noCandidate` — no message text.
+- Same-model route rotation (`shouldRotateRoute`) never fires for quota
+  exhaustion, so a quota turn with no failover target ends with the route
+  unchanged.
+
+## Known risks
+
+- Retry-After in HTTP-date form (e.g. `Retry-After: Wed, 21 Oct 2026 07:28:00 GMT`)
+  is not parsed from error text; such errors fall back to the exponential
+  backoff.
+- `noCandidate` is inferred: failover was on and the turn still ended on quota.
 
 ## Rollback
 
