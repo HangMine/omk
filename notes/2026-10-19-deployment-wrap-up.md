@@ -393,6 +393,11 @@ suite-2에서 `omk-ai` `test/stream.test.ts`의 WorkBuddy E2E 4건이 `429`로 �
 - GREEN: 가드 2/2 통과. 부모 env에 키가 있는 상태에서 `test.sh` prelude를 source하면 키가
   사라지고, `stream.test.ts -t WorkBuddy`는 229/229 skipped다.
 - 가드는 `check:constitution`(`npm run check`, CI)에 포함되어 provider를 추가할 때의 drift를 막는다.
+- 로컬: `check:constitution` 431/431, CI `39241739108`(`f57afeb5f9`) success.
+- AdaptOrch(별도): 엔진 `adaptorch.verification.CommandVerifier`(0.1.2, 엔진 `c687aa3b0`)를 이
+  호스트에서 실행했다. parity 가드, `bash -n test.sh`, dummy `WORKBUDDY_API_KEY`를 주입한 뒤
+  `test.sh` prelude가 지우는지 확인, `check-doc-links` 4개 명령이 PASS(pass_rate 1.0)다. hosted
+  MCP는 `verification_commands_enabled: false`라 검증 명령을 실행할 수 없다.
 - 실호출을 발견한 시점에 체인으로 돌던 suite-3은 내 프로세스 트리(44개)만 종료했다.
 
 ### 전체 suite 재실행
