@@ -127,21 +127,36 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 ## Measurement (PREREG before any run; numbers fixed in advance)
 
 1. **Stage-2 recall gate (local, cost 0):**
-   - **Labels:** ~100 pairs (next-task sentence → correct skill), authored by a
-     human from real skill-usage logs: for each logged skill use, the human
-     writes the next-task sentence for that used skill, **without seeing any
-     bm25 output**. The label file's sha is pinned in the PREREG before any
-     measurement.
-   - **Label data rule:** labels are derived from real skill-usage logs. Raw
-     session logs never leave the box and never become fixtures. The label
-     file is **not committed** to the repo; it stays on the box only, at
-     `/workspace/omk-eval-091/labels-<sha256-prefix>.jsonl` (placeholder).
-     Human-written sentences that closely copy log text are likewise not
-     committed. The spec and PR record only the label file's sha256, the pair
-     count N, and aggregate results.
-   - **Allowed misses:** once N is fixed, the PREREG writes the allowed miss
-     count as an integer, `floor(0.01 × N)` (N = 100 → at most 1 miss).
-     Recall passes only if misses ≤ that integer.
+   - **bm25 implementation:** reuse the spec 058 implementation already on
+     base (`core/skill-search.ts`, `skill-select-rankers.ts`). No new bm25 code
+     and no new dependencies; implementation and recall measurement run the
+     same code.
+   - **Gate set (set B, synthetic):** a fixed-seed random sample of **100
+     skills** from the ~800 installed skills, stratified evenly by category.
+     The seed is fixed in the PREREG; the seed and the sha256 of the sampled
+     skill list are posted to the room **before** any sentence is written.
+     For each sampled skill, Agent Researcher writes one next-task sentence
+     from the SKILL.md **body only**. The sentence must not use words from the
+     skill's name or description, nor commands/paths unique to that SKILL.md
+     body; a script checks this. The author **never sees bm25 output**.
+   - **Label author:** agent (Agent Researcher), separate from the bm25
+     implementer; has never seen bm25 output. If 인호 writes labels himself,
+     those take priority.
+   - **No-answer items:** 10 extra situations with gold = none. They are
+     **excluded from recall** and used only to check that Jev does not attach
+     a skill (probability < 0.6 → no prefix). Reported separately.
+   - **Set A (reference only, not a gate):** the 86 bench-derived entries
+     (`label-sources.jsonl`, sha256
+     `53ec93610d8f9fa7241da781e7b4d76d01d998cc6fc828e9e405a55b6f390e0e`;
+     5 skills, 77 code-review), deduplicated with code-review kept at 1 per
+     task. Reported separately as an auxiliary metric only.
+   - **Label data rule:** raw session logs never leave the box and never
+     become fixtures. Label files are **not committed**; they stay on the box
+     only, under `/workspace/omk-eval-091/`. The spec, room, and PR record only
+     sha256, counts, and aggregate results. The gate-set label sha256 is fixed
+     in the PREREG and confirmed by Tech Lead **before** any measurement.
+   - **Allowed misses:** `floor(0.01 × N)` over the answerable items
+     (N = 100 → at most 1 miss). Recall passes only if misses ≤ that integer.
    - Recall = correct skill inside the stage-2 candidates at k = 255 (or the
      reduced k that fits 32k). Target **≥ 99%**. Also report candidate token
      count vs 32k.
@@ -158,6 +173,9 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 7. Key-input latency p99 not worse than base.
 8. Run-log (spec 042, `OMK_RUN_LOG_DIR`): tokens (cached vs billed), latency,
    Jev probability, Tab acceptance, accepted-unedited rate. No text, no key.
+9. **Usefulness:** 0 real skill uses were found in the 993 local sessions, so
+   the feature's usefulness metric is the **Tab acceptance rate**. The
+   implementation PR body must state this.
 
 ### PREREG constants fixed by this spec
 
@@ -175,10 +193,16 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 **Statistical caveat:** pass at ≤ 1 miss in 100 is an observed criterion; its
 95% CI lower bound is ~95%, so passing does not prove recall ≥ 99%. Proving 99%
 (95% one-sided) needs ~300 labels with 0 misses.
-Report stage-1 results as observed recall with its exact 95% CI (Clopper-Pearson); never write 'recall ≥ 99%'. Labels stay ~100 (purpose is the build/no-build decision for the Jev stage).
+Report Stage-2 recall gate results as observed recall with its exact 95% CI (Clopper-Pearson); never write 'recall ≥ 99%'. Labels stay ~100 (purpose is the build/no-build decision for the Jev stage).
 
 The suggestion cache-read ratio floor and the boost formula are written into
 the PREREG before any run.
+
+## Known risks
+
+- Gate labels are synthetic and agent-written (Agent Researcher), not
+  human-written; recall on set B may not reflect real usage.
+- 0 real skill uses in 993 sessions: no real usage distribution exists.
 
 ## Success criterion
 
