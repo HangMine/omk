@@ -79,7 +79,10 @@ function readJournalPrefix(path: string, options: ReadRunJournalOptions): Buffer
 		try {
 			const bytes = read(path, JOURNAL_MAX_BYTES);
 			// Bytes after the last newline are an append in progress: drop, never parse or repair.
-			return bytes.subarray(0, bytes.lastIndexOf(10) + 1);
+			const end = bytes.lastIndexOf(10) + 1;
+			// An existing journal with no complete record is the first record mid-write, not a
+			// missing run: retry it like any other concurrent change.
+			if (end > 0) return bytes.subarray(0, end);
 		} catch (error) {
 			if (!(error instanceof VerifiedRunConcurrentChangeError)) throw error;
 		}
@@ -95,8 +98,7 @@ export function readRunJournal(runPath: string, options: ReadRunJournalOptions =
 	const path = journalPath(runPath);
 	if (!existsSync(path)) return null;
 	if (options.mode === "reader") {
-		const prefix = readJournalPrefix(path, options);
-		return prefix.length === 0 ? null : parseJournalBytes(prefix);
+		return parseJournalBytes(readJournalPrefix(path, options));
 	}
 	// A live writer's append is not atomic with respect to a reader: the size/ctime guard in
 	// readRegularFile cannot see a reader that opened before the write and read after it, so a

@@ -79,4 +79,28 @@ describe("spec 088: journal reader during a live append", () => {
 		expect(attempts).toBe(4);
 		expect(now + sleeps.reduce((sum, ms) => sum + ms, 0)).toBeLessThanOrEqual(250 + 70);
 	});
+
+	it("reader mode retries a journal whose first record is mid-write instead of reporting a missing run", () => {
+		new VerifiedRunJournal(root, owner).append(creation());
+		const complete = readFileSync(journalPath(root));
+		const partial = complete.subarray(0, complete.length - 10);
+		let now = 0;
+		let attempts = 0;
+		const stillPartial = (): Buffer => {
+			attempts += 1;
+			now += 70;
+			return partial;
+		};
+		expect(() =>
+			readRunJournal(root, { mode: "reader", read: stillPartial, now: () => now, sleep: () => {} }),
+		).toThrow(/concurrent_change/);
+		expect(attempts).toBe(4);
+
+		let calls = 0;
+		const completesOnThird = (): Buffer => (++calls < 3 ? partial : complete);
+		const read = readRunJournal(root, { mode: "reader", read: completesOnThird, sleep: () => {} });
+		expect(calls).toBe(3);
+		expect(read?.records).toHaveLength(1);
+		expect(read?.records[0]?.event.kind).toBe("created");
+	});
 });
