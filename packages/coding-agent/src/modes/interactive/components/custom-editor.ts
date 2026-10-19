@@ -14,6 +14,8 @@ export class CustomEditor extends Editor {
 	public onPasteImage?: () => void;
 	/** Handler for extension-registered shortcuts. Returns true if handled. */
 	public onExtensionShortcut?: (data: string) => boolean;
+	/** Spec 091: sees every key first (suggestion Tab/dismiss). Returns true if consumed. */
+	public onBeforeInput?: (data: string) => boolean;
 
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: EditorOptions) {
 		super(tui, theme, options);
@@ -28,6 +30,7 @@ export class CustomEditor extends Editor {
 	}
 
 	handleInput(data: string): void {
+		if (this.onBeforeInput?.(data)) return;
 		// Pasted control bytes are content, never app shortcuts.
 		if (this.isInPaste || data.includes("\x1b[200~")) {
 			super.handleInput(data);

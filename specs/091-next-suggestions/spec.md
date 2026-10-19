@@ -175,7 +175,7 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 **Statistical caveat:** pass at ≤ 1 miss in 100 is an observed criterion; its
 95% CI lower bound is ~95%, so passing does not prove recall ≥ 99%. Proving 99%
 (95% one-sided) needs ~300 labels with 0 misses.
-Report stage-1 results as observed recall with its exact 95% CI (Clopper-Pearson); never write 'recall ≥ 99%'. Labels stay ~100 (purpose is the build/no-build decision for the Jev stage).
+Report Stage-2 recall gate results as observed recall with its exact 95% CI (Clopper-Pearson); never write 'recall ≥ 99%'. Labels stay ~100 (purpose is the build/no-build decision for the Jev stage).
 
 The suggestion cache-read ratio floor and the boost formula are written into
 the PREREG before any run.
@@ -203,6 +203,26 @@ PREREG gate above; no non-installed skill is ever suggested.
   → suggestion without prefix and no bm25 substitute; key never in logs.
 - UI: Tab inserts only into empty input, never sends; other keys dismiss and
   cancel; autocomplete Tab behavior unchanged.
+
+## Stage 1 implementation notes
+
+- Modules: `packages/coding-agent/src/core/next-suggestion.ts` (flag, request
+  recorder, skip planner, context builder) and
+  `packages/coding-agent/src/modes/interactive/next-suggestion-controller.ts`
+  (UI); `agent-session.ts` is unchanged. `interactive-mode.ts` has one install
+  call; `CustomEditor` gains an `onBeforeInput` hook.
+- Flag on wraps the agent stream function with a pass-through recorder; the
+  suggestion request reuses the recorded `(model, context, options)` (same
+  system prompt, tools, message objects, reasoning and cache options), then
+  appends the final assistant message and the instruction.
+- "Provider lacks caching" = `cacheRetention: "none"` or the model has no cache
+  read price (`cost.cacheRead` 0). "Cache cold" = time since the last main
+  request ≥ 5 min (`short`, default) or ≥ 60 min (`long`).
+- Usage ≥ 90% reads the active provider's subscription usage windows
+  (`loadSubscriptionUsage`); unknown usage does not block.
+- Stage 2 will reuse the spec-058 bm25 in `core/skill-search.ts` /
+  `core/skill-select-rankers.ts` (no new implementation, no new dependency).
+  No Jev call is made in stage 1.
 
 ## Rollback
 
