@@ -52,8 +52,19 @@ export function readJournalBytes(
 export function readRunJournal(runPath: string): JournalSnapshot | null {
 	const path = journalPath(runPath);
 	if (!existsSync(path)) return null;
-	const { bytes } = readJournalBytes(path);
-	if (!bytes.length || bytes.at(-1) !== 10) throw new VerifiedRunError("journal_truncated");
+	// A live writer's append is not atomic with respect to a reader: the size/ctime guard in
+	// readRegularFile cannot see a reader that opened before the write and read after it, so a
+	// torn tail can still arrive here. It is a concurrent change, not corruption, and must use
+	// the same bounded retry. `integrity` stays reserved for bytes that cannot come from an
+	// append of one complete record.
+	let bytes: Buffer | undefined;
+	for (let attempt = 1; ; attempt++) {
+		const read = readJournalBytes(path);
+		bytes = read.bytes;
+		if (bytes.length > 0 && bytes.at(-1) === 10) break;
+		if (attempt > JOURNAL_READ_RETRIES) throw new VerifiedRunError("journal_truncated");
+		Atomics.wait(pause, 0, 0, attempt * 2);
+	}
 	const lines = new TextDecoder("utf-8", { fatal: true }).decode(bytes).slice(0, -1).split("\n");
 	const records: RunJournalRecord[] = [];
 	let previous = "0".repeat(64);

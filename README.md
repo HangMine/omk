@@ -455,7 +455,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.2](.github/RELEASE_NOTES_v1.5.2.md)
+- [Release notes for v1.5.3](.github/RELEASE_NOTES_v1.5.3.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -546,6 +546,24 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.3
+
+### Fixed
+
+- Skill search now passes the active TODO kind to metacon ranking. The `phase` input existed in the ranker and run log but `SkillSearchGate` never supplied it, so ranking and `phaseSource` always reported the `task` default.
+- Concurrent attachment previews now share one in-flight Photon decode. A second repaint of the same active attachment no longer allocates another full-resolution image and resized RGBA buffer; a dropped draft still releases its entry through the existing `WeakMap`.
+- Reading a run journal now retries a torn tail as a concurrent change instead of reporting `integrity`. A live writer appending one record can be observed between its size/ctime check and the read, so a reader could see a partial final line; `readRunJournal` retries that bounded window and still fails with `journal_truncated` once the retries are exhausted. Middle-file corruption keeps reporting `integrity`.
+
+### Tests
+
+- Two compaction tests pin a 1 ms retry backoff instead of inheriting the default 5-attempt, 2 s-base policy. The retry path and assertions are unchanged; without the pin they waited about 62 s for a 503 and exceeded the 30 s Vitest timeout, which failed CI on every run since the default changed in 1.5.1.
+- `verified-run.test.ts` gives its fixture 30 s of work and verify budget and derives the "past the work deadline" clock from that budget. The old 3 s budget also bounded process spawn, so a loaded host spent it before the writer ran and the suite reported `deadline`; the timeout behavior keeps its own test with `workMs: 100`.
+- `verified-run-authority-restart.test.ts` uses a 60 s grant TTL. Its fixtures assert restart quarantine, not expiry, and a 1 s TTL let a loaded host expire the grant before `dispatchIntent()` committed. Expiry stays pinned deterministically in `verified-run-authority-store.test.ts`.
+- `memory-factorial` waits up to 30 s for the host clock instead of 5 s. A WSL2 time resync can hold `Date.now()` for seconds while `performance.now()` advances; the store's real-clock guard and the test's future-dated-memory assertions are unchanged.
+- The `journal-read-retry` mutator writes each record with one `pwrite` call, so the fixture only produces the two valid journal states it claims to produce. The reader-side retry above is what makes the live-writer assertions hold without weakening them.
+
+Release notes live in [RELEASE_NOTES_v1.5.3.md](.github/RELEASE_NOTES_v1.5.3.md).
+
 ## Release v1.5.2
 
 ### Changed
@@ -566,26 +584,6 @@ Release notes live in [RELEASE_NOTES_v1.5.2.md](.github/RELEASE_NOTES_v1.5.2.md)
 - The default `retry.maxRetries` is now `5`, giving 2s, 4s, 8s, 16s, and 32s backoff instead of stopping after 2s, 4s, and 8s.
 
 Release notes live in [RELEASE_NOTES_v1.5.1.md](.github/RELEASE_NOTES_v1.5.1.md).
-
-## Release v1.5.0
-
-- Auto-compaction and branch summarization retry once when a reasoning model spends the whole output budget on thinking and returns no text. The retry uses the model's lowest supported effort and adds a 2,048-token text reserve; models that accept an explicit disable still retry without reasoning. If the retry also has no text, compaction still fails instead of committing an empty summary. The previous retry always deleted reasoning, which Claude Opus 5.5 rejects with HTTP 400.
-
-- A compaction whose summary response ends `aborted` now reports `compaction.aborted` instead of `compaction.failed`.
-
-- A provider `invalid_request_error` that is not an orphan `tool_call_id` is no longer auto-retried, and the session termination card classifies it as a configuration fault. The previous retry gate treated every `invalid_request_error` as transient, so a rejected parameter was resent until the retry budget ran out, and the card then pointed at tool/message sanitizing. Orphan tool ids still sanitize and retry. The recovery text says to change the rejected parameter; `/new` does not change it.
-
-- `omk context bootstrap|status|refresh|show|verify` maintains a bounded, source-backed Project Context index with incremental metadata refresh, stale detection and selective expansion. Bootstrapped projects supply compact provider-neutral evidence at context discovery, without importing a mission state machine or weakening AGENTS precedence. See [Project Context](packages/coding-agent/docs/project-context.md).
-- Width-invariant property tests in `packages/tui` for `visibleWidth`, `truncateToWidth` and `wrapTextWithAnsi`, with `fast-check` 4.9.0 pinned as a devDependency there. Two known defects are recorded as `todo` tests: `truncateToWidth` can return text wider than `maxWidth` when an SGR code splits an emoji + VS16 grapheme, and `visibleWidth` counts a leading zero-width joiner as width.
-- Built-in themes `omk-paper-dark` and `omk-paper-light` (aliases `paper`, `paper-dark`, `paper-light`, `omk-paper`) in the README hero's palette: ink text, secondary and tertiary ink, one vermillion accent, and subdued info, teal, green and ochre for links, code and syntax. Every text role measures 4.5:1 or more and every boundary 3:1 or more against the paper surfaces and common terminal backgrounds, `#1e1e1e` included; three dark values are one step lighter than the web palette to get there. Both carry HTML-export paper surfaces.
-
-- Upstream Pi extension compatibility: the package index now exports `CONFIG_DIR_NAME`, and `ExtensionContext` has `isProjectTrusted()`, which always returns `true` because OMK loads project-local `.omk/` config without a trust gate. Before this, SuPi resolved its config under `~/undefined/agent/supi` and ignored it, and plannotator warned at every session start that the host has no project trust. See [`ctx.isProjectTrusted()`](packages/coding-agent/docs/extensions.md#ctxisprojecttrusted).
-- `omk doctor adaptorch` now reaches AdaptOrch without `ADAPTORCH_API_URL`. The default API origin was `https://api.adaptorch.com`, a host that does not resolve, so the check always failed with `fetch failed`. The default is now `https://adaptorch.com`, where the `/v1` API is served. An explicit `ADAPTORCH_API_URL` still takes precedence.
-- The startup panel no longer shows fixed status values as live state. The control rail, the hero strip and the narrow status line printed `ready`, `active`, `tracking`, `linked`, `pinned` and `DAG:omk-parallel-orchestrator` with no runtime source, most of them in the success color. Status rows now come from one `ControlPlaneViewModel` built from the live session by one adapter, `readControlPlaneSignals`; the pinned status sidebar builds the same view model through the same adapter.
-- Status rows in the control rail and the pinned sidebar, and the startup header's MODEL and THEME values, print session, run-journal, model, theme and file-system text (model id, theme name, cwd, git branch, session name, endpoint host, MCP server names, TODO labels, failure text) as one printable line: escape sequences, control characters and bidi marks are removed and line breaks become spaces. In 1.2.4 the rail's model, cwd, git and TODO rows and the pinned sidebar's cwd, git, session and model rows printed such text as-is; sidebar MCP names were already cleaned.
-- Loaded skills no longer keep every `SKILL.md` file in memory. Frontmatter values such as a skill's `description` were slices of the whole file text, so each kept description held its file alive. With 751 skills installed, the loaded skills held 12.7 MB of heap; the frontmatter block is now copied before parsing, and the same skills hold 1.9 MB. Prompt-template frontmatter is parsed the same way.
-
-Release notes live in [RELEASE_NOTES_v1.5.0.md](.github/RELEASE_NOTES_v1.5.0.md).
 
 <!-- releases:end -->
 

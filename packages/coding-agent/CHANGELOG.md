@@ -1,11 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [1.5.3] - 2026-10-19
 
 ### Fixed
 
 - Skill search now passes the active TODO kind to metacon ranking. The `phase` input existed in the ranker and run log but `SkillSearchGate` never supplied it, so ranking and `phaseSource` always reported the `task` default.
 - Concurrent attachment previews now share one in-flight Photon decode. A second repaint of the same active attachment no longer allocates another full-resolution image and resized RGBA buffer; a dropped draft still releases its entry through the existing `WeakMap`.
+- Reading a run journal now retries a torn tail as a concurrent change instead of reporting `integrity`. A live writer appending one record can be observed between its size/ctime check and the read, so a reader could see a partial final line; `readRunJournal` retries that bounded window and still fails with `journal_truncated` once the retries are exhausted. Middle-file corruption keeps reporting `integrity`.
 
 ### Tests
 
@@ -13,7 +14,7 @@
 - `verified-run.test.ts` gives its fixture 30 s of work and verify budget and derives the "past the work deadline" clock from that budget. The old 3 s budget also bounded process spawn, so a loaded host spent it before the writer ran and the suite reported `deadline`; the timeout behavior keeps its own test with `workMs: 100`.
 - `verified-run-authority-restart.test.ts` uses a 60 s grant TTL. Its fixtures assert restart quarantine, not expiry, and a 1 s TTL let a loaded host expire the grant before `dispatchIntent()` committed. Expiry stays pinned deterministically in `verified-run-authority-store.test.ts`.
 - `memory-factorial` waits up to 30 s for the host clock instead of 5 s. A WSL2 time resync can hold `Date.now()` for seconds while `performance.now()` advances; the store's real-clock guard and the test's future-dated-memory assertions are unchanged.
-- The `journal-read-retry` mutator retries a short `pwrite`. A partial line is not one of the two valid states the test claims a live writer produces, and the reader correctly rejected it as `integrity`.
+- The `journal-read-retry` mutator writes each record with one `pwrite` call, so the fixture only produces the two valid journal states it claims to produce. The reader-side retry above is what makes the live-writer assertions hold without weakening them.
 
 ## [1.5.2] - 2026-10-18
 

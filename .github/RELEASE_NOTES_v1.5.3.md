@@ -1,6 +1,6 @@
 # OMK v1.5.3
 
-OMK 1.5.3 is a patch release: two runtime fixes, plus test-fixture repairs that make the
+OMK 1.5.3 is a patch release: three runtime fixes, plus test-fixture repairs that make the
 suite green on a loaded host and restore CI.
 
 ## Fixed
@@ -12,6 +12,10 @@ suite green on a loaded host and restore CI.
   one in-flight Photon decode instead of each allocating a full-resolution image and a
   resized RGBA buffer. A dropped draft still releases its entry through the existing
   `WeakMap`.
+- **Journal reads during a live append.** A reader that opens the journal before a writer
+  appends and reads after it could observe a partial final line and report `integrity`.
+  `readRunJournal` now retries that bounded window as a concurrent change, and still reports
+  `journal_truncated` when the retries are exhausted. Middle-file corruption is unchanged.
 
 ## Tests and CI
 
