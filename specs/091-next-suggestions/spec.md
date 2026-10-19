@@ -175,6 +175,7 @@ or sent the next turn is **discarded** (not shown, not logged as shown).
 **Statistical caveat:** pass at ≤ 1 miss in 100 is an observed criterion; its
 95% CI lower bound is ~95%, so passing does not prove recall ≥ 99%. Proving 99%
 (95% one-sided) needs ~300 labels with 0 misses.
+Report stage-1 results as observed recall with its exact 95% CI (Clopper-Pearson); never write 'recall ≥ 99%'. Labels stay ~100 (purpose is the build/no-build decision for the Jev stage).
 
 The suggestion cache-read ratio floor and the boost formula are written into
 the PREREG before any run.
