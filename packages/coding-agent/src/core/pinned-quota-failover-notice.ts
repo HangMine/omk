@@ -6,13 +6,6 @@ export const PINNED_QUOTA_FAILOVER_RUN_LOG = "pinned-quota-failover";
 /** Setting that turns quota failover off; named in the notice so users can opt out. */
 export const PINNED_QUOTA_FAILOVER_DISABLE_HINT = "providerResilience.autoFailoverOnQuotaExhaustion: false";
 
-/**
- * Marker stored in the session's per-turn refused-model set. That set is cleared at every
- * turn boundary, so the notice re-arms per turn without extra reset calls. Failover keys are
- * `provider/id`, so a NUL-prefixed marker cannot collide with a model key.
- */
-export const PINNED_QUOTA_NOTICE_TURN_MARKER = "\u0000pinned-quota-failover-notice";
-
 export interface PinnedQuotaFailoverEvent {
 	readonly type: "pinned_quota_failover";
 	readonly from: string;
@@ -33,6 +26,8 @@ export class PinnedQuotaFailoverNotice {
 	private readonly _emit: (event: PinnedQuotaFailoverEvent) => void;
 	private readonly _isPinned: () => boolean;
 	private readonly _log: (record: RunLogRecord) => void;
+	/** Set once the notice fired; cleared only by {@link resetTurn} at the top-level prompt start. */
+	private _shownThisTurn = false;
 
 	constructor(
 		emit: (event: PinnedQuotaFailoverEvent) => void,
@@ -44,16 +39,16 @@ export class PinnedQuotaFailoverNotice {
 		this._log = log;
 	}
 
+	/** Re-arm the notice. The session calls this once per user prompt (turn), not per retry. */
+	resetTurn(): void {
+		this._shownThisTurn = false;
+	}
+
 	/** Call after a failover switched models. Returns the new `provider/id`, notice or not. */
-	afterFailover(
-		turnState: Set<string>,
-		quotaExhausted: boolean,
-		current: ModelRef | undefined,
-		next: ModelRef,
-	): string {
+	afterFailover(quotaExhausted: boolean, current: ModelRef | undefined, next: ModelRef): string {
 		const to = `${next.provider}/${next.id}`;
-		if (!quotaExhausted || !this._isPinned() || turnState.has(PINNED_QUOTA_NOTICE_TURN_MARKER)) return to;
-		turnState.add(PINNED_QUOTA_NOTICE_TURN_MARKER);
+		if (!quotaExhausted || !this._isPinned() || this._shownThisTurn) return to;
+		this._shownThisTurn = true;
 		const from = current ? `${current.provider}/${current.id}` : "unknown";
 		const message =
 			`Quota exhausted on pinned model ${from}; this turn continues on ${to}. ` +
@@ -62,4 +57,9 @@ export class PinnedQuotaFailoverNotice {
 		this._log({ reason: "quota_exhausted", from, to, pinned: true });
 		return to;
 	}
+}
+
+/** One-line rendering shared by interactive (warning) and print (stderr) modes. */
+export function formatPinnedQuotaFailoverNotice(event: PinnedQuotaFailoverEvent): string {
+	return `Warning: ${event.message}`;
 }

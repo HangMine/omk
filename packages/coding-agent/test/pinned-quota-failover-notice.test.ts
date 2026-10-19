@@ -16,13 +16,13 @@ function setup(pinned: boolean) {
 		() => pinned,
 		(record) => logs.push(record),
 	);
-	return { events, logs, notice, turn: new Set<string>() };
+	return { events, logs, notice };
 }
 
 describe("pinned quota failover notice (spec 089)", () => {
 	it("emits exactly one notice and one run-log line on a pinned quota failover", () => {
-		const { events, logs, notice, turn } = setup(true);
-		expect(notice.afterFailover(turn, true, gptX, claudeY)).toBe("anthropic/claude-y");
+		const { events, logs, notice } = setup(true);
+		expect(notice.afterFailover(true, gptX, claudeY)).toBe("anthropic/claude-y");
 		expect(events).toHaveLength(1);
 		expect(events[0]).toMatchObject({
 			type: "pinned_quota_failover",
@@ -38,25 +38,25 @@ describe("pinned quota failover notice (spec 089)", () => {
 	});
 
 	it("emits nothing when the model is not pinned", () => {
-		const { events, logs, notice, turn } = setup(false);
-		expect(notice.afterFailover(turn, true, gptX, claudeY)).toBe("anthropic/claude-y");
+		const { events, logs, notice } = setup(false);
+		expect(notice.afterFailover(true, gptX, claudeY)).toBe("anthropic/claude-y");
 		expect(events).toHaveLength(0);
 		expect(logs).toHaveLength(0);
 	});
 
 	it("emits nothing for a pinned non-quota (safety) failover", () => {
-		const { events, notice, turn } = setup(true);
-		notice.afterFailover(turn, false, gptX, claudeY);
+		const { events, notice } = setup(true);
+		notice.afterFailover(false, gptX, claudeY);
 		expect(events).toHaveLength(0);
 	});
 
-	it("stays at one notice when the same turn fails over again, and re-arms when the turn state is cleared", () => {
-		const { events, notice, turn } = setup(true);
-		notice.afterFailover(turn, true, gptX, claudeY);
-		notice.afterFailover(turn, true, claudeY, { provider: "google", id: "z" });
+	it("stays at one notice when the same turn fails over again, and re-arms only on resetTurn", () => {
+		const { events, notice } = setup(true);
+		notice.afterFailover(true, gptX, claudeY);
+		notice.afterFailover(true, claudeY, { provider: "google", id: "z" });
 		expect(events).toHaveLength(1);
-		turn.clear();
-		notice.afterFailover(turn, true, gptX, claudeY);
+		notice.resetTurn();
+		notice.afterFailover(true, gptX, claudeY);
 		expect(events).toHaveLength(2);
 	});
 });

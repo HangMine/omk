@@ -2117,6 +2117,7 @@ export class AgentSession {
 		// continuations inside this call share it, as does the resource lease.
 		const promptRunId = `prompt-run-${randomUUID()}`;
 		this._overflowRecoveryAttempts = 0; // spec 061: fresh overflow-recovery budget per user prompt
+		this._pinNotice.resetTurn(); // spec 089: re-arm the once-per-turn pinned quota notice
 		const ownedRun = this._promptLifecycle.begin(promptRunId);
 		// Roadmap M2: the lease spans the whole run including internal retries
 		// and continuations, so they share one admission decision (§8.3).
@@ -4971,7 +4972,7 @@ export class AgentSession {
 		if (!next) return undefined;
 		try {
 			await this.setModel(next);
-			return this._pinNotice.afterFailover(this._refusedModels, quotaExhausted, current, next);
+			return this._pinNotice.afterFailover(quotaExhausted, current, next);
 		} catch {
 			// setModel failed (auth/guard) — blacklist so next retry advances further.
 			this._refusedModels.add(failoverModelKey(pick.provider, pick.id));
