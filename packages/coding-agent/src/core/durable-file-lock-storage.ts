@@ -46,36 +46,36 @@ export class DurableFileLockOwnershipError extends Error {
 const USER = userInfo();
 const USER_KEY =
 	USER.uid >= 0 ? String(USER.uid) : createHash("sha256").update(USER.username).digest("hex").slice(0, 16);
-const ROOT = join(tmpdir(), `omk-persistence-${USER_KEY}`);
+export const DURABLE_FILE_LOCK_ROOT = join(tmpdir(), `omk-persistence-${USER_KEY}`);
 const WAITER = new Int32Array(new SharedArrayBuffer(4));
 const retryableLocks: HeldDurableFileLock[] = [];
 
 export function getDurableFileLockRoot(): string {
 	let value: ReturnType<typeof lstatSync>;
 	try {
-		value = lstatSync(ROOT);
+		value = lstatSync(DURABLE_FILE_LOCK_ROOT);
 	} catch (error) {
 		if (fileErrorCode(error) !== "ENOENT") throw error;
-		ensureDurableDirectorySync(ROOT);
-		value = lstatSync(ROOT);
+		ensureDurableDirectorySync(DURABLE_FILE_LOCK_ROOT);
+		value = lstatSync(DURABLE_FILE_LOCK_ROOT);
 	}
 	if (!value.isDirectory() || value.isSymbolicLink()) throw new Error("Persistence lock root is not a real directory");
 	if (typeof process.getuid === "function" && value.uid !== process.getuid()) {
 		throw new Error("Persistence lock root is not owned by the current user");
 	}
 	if ((value.mode & 0o7777) !== 0o700) {
-		chmodSync(ROOT, 0o700);
-		value = lstatSync(ROOT);
+		chmodSync(DURABLE_FILE_LOCK_ROOT, 0o700);
+		value = lstatSync(DURABLE_FILE_LOCK_ROOT);
 		if ((value.mode & 0o7777) !== 0o700) throw new Error("Persistence lock root mode is not private");
 	}
-	return ROOT;
+	return DURABLE_FILE_LOCK_ROOT;
 }
 
 function ownerPath(path: string): string {
 	return join(path, "owner.json");
 }
 
-function processIsLive(pid: number): boolean {
+export function processIsLive(pid: number): boolean {
 	try {
 		process.kill(pid, 0);
 		return true;

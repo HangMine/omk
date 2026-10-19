@@ -1,9 +1,16 @@
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseRunContract, parseRunStartCommand } from "omk-protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { acquireSessionOwnerLeaseSync, type SessionOwnerLease } from "../src/core/session-owner-lease.ts";
+import { getDurableFileLockRoot, resolveDurableFileIdentity } from "../src/core/durable-file-identity.ts";
+import { durableFileLockPathUnchecked, peekDurableFileLockPathSync } from "../src/core/durable-file-lock-peek.ts";
+import {
+	acquireSessionOwnerLeaseSync,
+	peekSessionOwnerLeaseSync,
+	type SessionOwnerLease,
+} from "../src/core/session-owner-lease.ts";
 import type { RunEvent } from "../src/core/verified-run/events.ts";
 import { journalPath, readRunJournal, VerifiedRunJournal } from "../src/core/verified-run/journal.ts";
 import { digestObject, VerifiedRunConcurrentChangeError } from "../src/core/verified-run/storage.ts";
@@ -102,5 +109,71 @@ describe("spec 088: journal reader during a live append", () => {
 		expect(calls).toBe(3);
 		expect(read?.records).toHaveLength(1);
 		expect(read?.records[0]?.event.kind).toBe("created");
+	});
+
+	it("reader mode keeps journal_truncated for a torn tail when no owner lease is held (same as base)", () => {
+		new VerifiedRunJournal(root, owner).append(creation());
+		owner.release();
+		appendFileSync(journalPath(root), '{"version":2,"seq":2');
+		const before = readFileSync(journalPath(root));
+		expect(peekSessionOwnerLeaseSync(journalPath(root))).toBe("absent");
+		expect(() => readRunJournal(root, { mode: "reader" })).toThrow(/journal_truncated/);
+		expect(() => readRunJournal(root)).toThrow(/journal_truncated/);
+		expect(readFileSync(journalPath(root))).toEqual(before);
+		owner = acquireSessionOwnerLeaseSync(journalPath(root)); // for afterEach
+	});
+
+	it("reader mode drops a torn tail while the owner lease is live (current pid)", () => {
+		new VerifiedRunJournal(root, owner).append(creation());
+		const committed = readRunJournal(root);
+		appendFileSync(journalPath(root), '{"version":2,"seq":2');
+		expect(peekSessionOwnerLeaseSync(journalPath(root))).toBe("live");
+		expect(readRunJournal(root, { mode: "reader" })?.records.map((r) => r.hash)).toEqual(
+			committed?.records.map((r) => r.hash),
+		);
+	});
+
+	it("peek of a dead owner changes nothing: lock bytes and mtime identical, no reclaim gate", () => {
+		new VerifiedRunJournal(root, owner).append(creation());
+		const keys = resolveDurableFileIdentity(journalPath(root)).lockKeys;
+		const lockDirs = keys
+			.map((key) => durableFileLockPathUnchecked("session-owner", key))
+			.filter((path) => peekDurableFileLockPathSync(path) === "live");
+		expect(lockDirs.length).toBeGreaterThan(0);
+		const ownerFiles = lockDirs.map((dir) => join(dir, "owner.json"));
+		const originals = ownerFiles.map((file) => readFileSync(file));
+		const exited = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], {
+			encoding: "utf8",
+		});
+		const deadPid = Number(exited.stdout);
+		ownerFiles.forEach((file, index) => {
+			const record = JSON.parse(originals[index].toString("utf8")) as { pid: number };
+			writeFileSync(file, JSON.stringify({ ...record, pid: deadPid }));
+		});
+		try {
+			const bytes = ownerFiles.map((file) => readFileSync(file));
+			const mtimes = ownerFiles.map((file) => statSync(file, { bigint: true }).mtimeNs);
+			const lockRoot = getDurableFileLockRoot();
+			// The lock root is shared with tests running in parallel: compare only this lease's entries.
+			const ours = () =>
+				readdirSync(lockRoot)
+					.filter((name) => keys.some((key) => name.includes(key)))
+					.sort();
+			const entries = ours();
+
+			for (const dir of lockDirs) expect(peekDurableFileLockPathSync(dir)).toBe("dead");
+			expect(peekSessionOwnerLeaseSync(journalPath(root))).toBe("dead");
+			appendFileSync(journalPath(root), '{"version":2,"seq":2');
+			expect(() => readRunJournal(root, { mode: "reader" })).toThrow(/journal_truncated/);
+
+			ownerFiles.forEach((file, index) => {
+				expect(readFileSync(file)).toEqual(bytes[index]);
+				expect(statSync(file, { bigint: true }).mtimeNs).toBe(mtimes[index]);
+			});
+			expect(ours()).toEqual(entries);
+			expect(ours().some((name) => name.includes(".reclaim-"))).toBe(false);
+		} finally {
+			for (const [index, file] of ownerFiles.entries()) writeFileSync(file, originals[index]);
+		}
 	});
 });

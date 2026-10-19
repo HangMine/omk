@@ -5,7 +5,9 @@ import {
 	type DurableFileLock,
 	DurableFileLockBusyError,
 	type DurableFileLockObservation,
+	type DurableFileLockPeek,
 	inspectDurableFileLockSync,
+	peekDurableFileLockSync,
 	resolveDurableFileIdentity,
 } from "./durable-file-identity.ts";
 
@@ -43,6 +45,11 @@ export function sessionPathFromPersistenceArtifact(path: string): string {
 
 function identitiesOverlap(left: DurableFileIdentity, right: DurableFileIdentity): boolean {
 	return left.lockKeys.some((key) => right.lockKeys.includes(key));
+}
+
+/** Spec 088: owner liveness without locking, reclaiming or writing anything. */
+export function peekSessionOwnerLeaseSync(path: string): DurableFileLockPeek {
+	return peekDurableFileLockSync(sessionPathFromPersistenceArtifact(path), OWNER_SCOPE);
 }
 
 export function inspectSessionOwnerLeaseUnlockedSync(path: string): DurableFileLockObservation {

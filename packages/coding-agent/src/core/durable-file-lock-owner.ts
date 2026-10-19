@@ -53,7 +53,10 @@ function parseOwner(input: string): DurableFileLockOwner {
 }
 
 /** Read one owner while binding its token to both owner-file and lock-directory inodes. */
-export function readDurableFileLockOwnerSync(lockPath: string): DurableFileLockOwnerSnapshot {
+export function readDurableFileLockOwnerSync(
+	lockPath: string,
+	options: { readonly enforceMode?: boolean } = {},
+): DurableFileLockOwnerSnapshot {
 	const beforeDirectory = lstatSync(lockPath, { bigint: true });
 	if (!beforeDirectory.isDirectory() || beforeDirectory.isSymbolicLink()) {
 		throw new DurableFileLockOwnerError("Durable file lock is not a real directory");
@@ -61,7 +64,7 @@ export function readDurableFileLockOwnerSync(lockPath: string): DurableFileLockO
 	const path = `${lockPath}/owner.json`;
 	const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
 	try {
-		enforcePrivateFileDescriptorModeSync(fd, path);
+		if (options.enforceMode !== false) enforcePrivateFileDescriptorModeSync(fd, path);
 		const beforeOwner = fstatSync(fd, { bigint: true });
 		if (!beforeOwner.isFile() || beforeOwner.size <= 0 || beforeOwner.size > MAX_OWNER_BYTES) {
 			throw new DurableFileLockOwnerError("Durable file lock owner record is outside its size bound");

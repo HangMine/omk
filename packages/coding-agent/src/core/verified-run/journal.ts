@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { acquireDurableFileMutationLockSync } from "../durable-file-identity.ts";
 import { appendFileDurablySync } from "../durable-file-io.ts";
 import { canonicalJson } from "../run-journal.ts";
-import type { SessionOwnerLease } from "../session-owner-lease.ts";
+import { peekSessionOwnerLeaseSync, type SessionOwnerLease } from "../session-owner-lease.ts";
 import { parseRunEvent, projectRun, type RunEvent, type RunProjection } from "./events.ts";
 import {
 	digestBytes,
@@ -63,6 +63,8 @@ export interface ReadRunJournalOptions {
 	readonly read?: (path: string, maxBytes: number) => Buffer;
 	readonly now?: () => number;
 	readonly sleep?: (ms: number) => void;
+	/** Owner-lease probe; defaults to the side-effect-free {@link peekSessionOwnerLeaseSync}. */
+	readonly ownerLive?: () => boolean;
 }
 
 const sleepSync = (ms: number): void => {
@@ -73,6 +75,7 @@ function readJournalPrefix(path: string, options: ReadRunJournalOptions): Buffer
 	const read = options.read ?? readRegularFile;
 	const now = options.now ?? (() => performance.now());
 	const sleep = options.sleep ?? sleepSync;
+	const ownerLive = options.ownerLive ?? (() => peekSessionOwnerLeaseSync(path) === "live");
 	const start = now();
 	let delay = 2;
 	for (;;) {
@@ -80,6 +83,10 @@ function readJournalPrefix(path: string, options: ReadRunJournalOptions): Buffer
 			const bytes = read(path, JOURNAL_MAX_BYTES);
 			// Bytes after the last newline are an append in progress: drop, never parse or repair.
 			const end = bytes.lastIndexOf(10) + 1;
+			const torn = end < bytes.length || end === 0;
+			// A torn tail is only an append in progress while the writer's owner lease is live.
+			// With no live owner it can never complete: report it exactly as strict mode does.
+			if (torn && !ownerLive()) throw new VerifiedRunError("journal_truncated");
 			// An existing journal with no complete record is the first record mid-write, not a
 			// missing run: retry it like any other concurrent change.
 			if (end > 0) return bytes.subarray(0, end);
