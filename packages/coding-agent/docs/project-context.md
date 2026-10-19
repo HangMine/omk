@@ -1,5 +1,7 @@
 # Project Context
 
+> **Status: design document, not implemented.** `omk context` and Project Context auto-loading are not in any release (v1.5.0 through v1.5.3) or on main. The v1.5.0 changelog entry was a mistake. See spec 015 (`specs/015-project-context-bootstrap/`).
+
 OMK owns a small repository index, not another source of project truth. Source code, Git,
 AGENTS instructions, specs, ADRs and mission files remain authoritative. Spec Kitty's
 bootstrap/compact disclosure and continuation pointers inform this design; its governance
