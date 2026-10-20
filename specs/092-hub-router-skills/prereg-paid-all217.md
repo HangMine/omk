@@ -68,6 +68,10 @@ Context: the 092 free gate is FAIL at G2 before measuring (hubs over 25 skills).
 - Only the replacement key that 인호 entered via masked input in OMK's 1:1 chat is used, read at run time from env `TYPESAFE_API_KEY`.
 - The key value never appears in this PREREG, in logs, in result files, or in commits.
 - 키는 박스 로컬 env에만 두고 저장소에는 넣지 않는다.
+- The runner reads the key only from env `TYPESAFE_API_KEY` (`tools/paid_all217_run.ts` line 91:
+  `key: process.env.TYPESAFE_API_KEY ?? ""`). It does not read `auth.json`, `/jev` settings, or any other file for the key.
+- **Mandatory precondition before the paid run:** 인호 confirms that the env holds the new replacement key
+  (the old exposed key is revoked and replaced). Without this confirmation the run does not start.
 - Diff scan: `tools/scan_key_in_diff.py` (sha256 `56420df7260ea77aa54a7e279e8279b9a2a47e133fef8ab86070347b58bb9023`) reads the key from env at run time and counts occurrences of
   the full key and of the literal key marker in `git diff a4d150974c..HEAD` and commit messages. It prints counts only and
   stores no key, prefix or hash. Must report 0/0 before any push.
