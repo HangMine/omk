@@ -2,7 +2,11 @@ import { fauxAssistantMessage } from "omk-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.ts";
 import type { TaskCheckFact, TaskResultEvent } from "../../src/core/task-result.ts";
-import { publishHostTaskFact, TASK_RESULT_FACT_CHANNEL } from "../../src/core/task-result-collector.ts";
+import {
+	currentTaskRunId,
+	publishHostTaskFact,
+	TASK_RESULT_FACT_CHANNEL,
+} from "../../src/core/task-result-collector.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
 /** Spec 096 phase 2: AgentSession emits `task_result` right after `prompt_settled`, flag on only. */
@@ -68,7 +72,9 @@ describe("task_result emission (spec 096 phase 2)", () => {
 	});
 
 	it("B10: model says passed, host recorded a failure: required_failed, claim never a host pass", async () => {
-		const h = await runWith("1", "All tests passed.", (omk) => publishHostTaskFact(omk.events, failedReceipt));
+		const h = await runWith("1", "All tests passed.", (omk) =>
+			publishHostTaskFact(omk.events, failedReceipt, currentTaskRunId(omk.events)),
+		);
 		const projection = (h.eventsOfType("task_result") as TaskResultEvent[])[0]?.projection;
 		expect(projection?.check).toBe("required_failed");
 		expect(projection?.coverage).toEqual({ checksRun: 1, checksTotal: 1 });
@@ -86,12 +92,46 @@ describe("task_result emission (spec 096 phase 2)", () => {
 	it("facts do not leak into the next run", async () => {
 		let first = true;
 		const h = await runWith("1", "ok", (omk) => {
-			if (first) publishHostTaskFact(omk.events, failedReceipt);
+			if (first) publishHostTaskFact(omk.events, failedReceipt, currentTaskRunId(omk.events));
 			first = false;
 		});
 		h.setResponses([fauxAssistantMessage("ok")]);
 		await h.session.prompt("again");
 		const results = h.eventsOfType("task_result") as TaskResultEvent[];
 		expect(results.map((r) => r.projection.check)).toEqual(["required_failed", "none"]);
+	});
+
+	it("drops receipts stamped with another run, after settle, or from an earlier run", async () => {
+		let bus: ExtensionAPI["events"] | undefined;
+		let firstRunId: string | undefined;
+		let calls = 0;
+		const h = await runWith("1", "ok", (omk) => {
+			bus = omk.events;
+			calls += 1;
+			if (calls === 1) {
+				firstRunId = currentTaskRunId(omk.events);
+				publishHostTaskFact(omk.events, failedReceipt, "prompt-run-other");
+			} else {
+				// Second run: a receipt still carrying the first run's id (a late check) is dropped.
+				publishHostTaskFact(omk.events, failedReceipt, firstRunId);
+			}
+		});
+		expect(firstRunId).toBe(h.eventsOfType("prompt_settled")[0]?.promptRunId);
+		// Between runs: no run is collecting, so this is dropped as well.
+		if (bus) publishHostTaskFact(bus, failedReceipt, firstRunId);
+		h.setResponses([fauxAssistantMessage("ok")]);
+		await h.session.prompt("again");
+		const results = h.eventsOfType("task_result") as TaskResultEvent[];
+		expect(calls).toBe(2);
+		expect(results.map((r) => r.projection.facts)).toEqual([[], []]);
+		expect(results.map((r) => r.projection.check)).toEqual(["none", "none"]);
+	});
+
+	it("keeps a receipt stamped with the current run", async () => {
+		const h = await runWith("1", "ok", (omk) =>
+			publishHostTaskFact(omk.events, failedReceipt, currentTaskRunId(omk.events)),
+		);
+		const [result] = h.eventsOfType("task_result") as TaskResultEvent[];
+		expect(result?.projection.facts.map((f) => f.id)).toEqual([failedReceipt.id]);
 	});
 });

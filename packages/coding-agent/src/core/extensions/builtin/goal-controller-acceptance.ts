@@ -3,7 +3,7 @@ import type { DurableGoalStore } from "../../durable-goal-store.ts";
 import type { GoalAcceptance, GoalCheckOutcome } from "../../goal-acceptance.ts";
 import type { GoalContinuationDecision } from "../../goal-continuation.ts";
 import { factFromGoalAcceptance, isTaskResultEnabled } from "../../task-result.ts";
-import { publishHostTaskFact } from "../../task-result-collector.ts";
+import { currentTaskRunId, publishHostTaskFact } from "../../task-result-collector.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
 import { displayCommand, displayError, failureText, receiptLabel, renderGoal } from "./goal-controller-text.ts";
@@ -159,6 +159,8 @@ export class GoalAcceptanceFlow {
 	): Promise<GoalCheckOutcome> {
 		const command = this.acceptance.approvedCommand(goal) ?? "";
 		ctx.ui.notify(`goal: running acceptance check \`${displayCommand(command)}\``, "info");
+		// Spec 096: the run this check starts in; a receipt that lands after it settled is dropped.
+		const taskRunId = this.omk.events && isTaskResultEnabled() ? currentTaskRunId(this.omk.events) : undefined;
 		// At a settled turn the run still owns the session, so its abort (Esc) stops the check too.
 		const outcome = await this.acceptance.check(store, goal, ctx.cwd, ctx.signal);
 		const { result } = outcome;
@@ -174,7 +176,7 @@ export class GoalAcceptanceFlow {
 		});
 		// Spec 096: hand the host receipt to the task-result projection (flag on only).
 		if (this.omk.events && isTaskResultEnabled())
-			publishHostTaskFact(this.omk.events, factFromGoalAcceptance(result));
+			publishHostTaskFact(this.omk.events, factFromGoalAcceptance(result), taskRunId);
 		if (!result.passed && result.status !== "aborted") {
 			const tail = result.outputTail ? `\n${result.outputTail}` : "";
 			ctx.ui.notify(`goal: acceptance check ${failureText(result)} (${receiptLabel(result)})${tail}`, "warning");

@@ -26,9 +26,9 @@ node --input-type=module -e "
 const c = await import('$root/dist/core/task-result-collector.js');
 const settled = { promptRunId: 'p', outcome: 'completed' };
 delete process.env.OMK_TASK_RESULT;
-if (c.beginTaskResult(undefined, {}) !== undefined) throw new Error('flag off must not collect');
+if (c.beginTaskResult(undefined, {}, 'p') !== undefined) throw new Error('flag off must not collect');
 process.env.OMK_TASK_RESULT = '1';
-const r = c.beginTaskResult(undefined, {});
+const r = c.beginTaskResult(undefined, {}, 'p');
 const e = r.finish(settled, 'All tests passed.');
 if (e.type !== 'task_result' || e.projection.check !== 'none' || e.projection.modelClaims[0].source !== 'model_text')
 	throw new Error('unexpected projection ' + JSON.stringify(e));

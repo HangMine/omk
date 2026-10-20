@@ -81,6 +81,33 @@ describe("print mode (spec 096 B7/B8)", () => {
 	});
 });
 
+describe("print golden: flag off vs on (spec 096 B7/B8)", () => {
+	it("text mode: stdout and exit code identical; flag on adds exactly one stderr line", async () => {
+		delete process.env.OMK_TASK_RESULT;
+		const off = await print("text", [settled]);
+		printIo.output = [];
+		vi.restoreAllMocks();
+		process.env.OMK_TASK_RESULT = "1";
+		const on = await print("text", [settled, taskResult]);
+		expect(on.stdout).toBe(off.stdout);
+		expect(on.exitCode).toBe(off.exitCode);
+		expect(off.stderr).toBe("");
+		expect(on.stderr.split("\n").filter(Boolean)).toEqual([formatTaskResultLine(taskResult.projection)]);
+	});
+
+	it("json mode: flag on stdout is the flag-off stdout plus the one task_result line", async () => {
+		delete process.env.OMK_TASK_RESULT;
+		const off = await print("json", [settled]);
+		printIo.output = [];
+		vi.restoreAllMocks();
+		process.env.OMK_TASK_RESULT = "1";
+		const on = await print("json", [settled, taskResult]);
+		expect(on.stdout).toBe(`${off.stdout}${JSON.stringify(taskResult)}\n`);
+		expect(on.exitCode).toBe(off.exitCode);
+		expect(on.stderr).toBe("");
+	});
+});
+
 describe("B1: every surface renders the same projection", () => {
 	it("print json, RPC JSONL and the TUI/print-text line agree on check and coverage", async () => {
 		process.env.OMK_TASK_RESULT = "1";
@@ -114,6 +141,7 @@ describe("goal-controller-acceptance wiring", () => {
 	async function settleOnce() {
 		const bus = createEventBus();
 		const collector = new TaskResultCollector(bus);
+		collector.begin("fixture");
 		const entries: string[] = [];
 		const goal = { ref: { id: "g", revision: 1 }, completedRounds: 1, maxRounds: 1, status: "active" };
 		const acceptance = {

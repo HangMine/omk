@@ -674,7 +674,7 @@ export class AgentSession {
 
 	private _resourceLoader: ResourceLoader;
 	/** Spec 096: created only while `OMK_TASK_RESULT` is on. */
-	private _taskResultCollector: taskResultWiring.TaskResultCollector | undefined;
+	private _taskResult: taskResultWiring.TaskResultCollector | undefined;
 	private _customTools: ToolDefinition[];
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _mcpManager: McpManager | undefined;
@@ -1716,7 +1716,7 @@ export class AgentSession {
 	}
 
 	dispose(): void {
-		this._taskResultCollector = this._taskResultCollector?.dispose();
+		this._taskResult = this._taskResult?.dispose();
 		if (
 			this._shutdown.active ||
 			this._promptLifecycle.active ||
@@ -2122,8 +2122,8 @@ export class AgentSession {
 		this._pinNotice.resetTurn(); // spec 089: re-arm the once-per-turn pinned quota notice
 		const ownedRun = this._promptLifecycle.begin(promptRunId);
 		// Spec 096: undefined with OMK_TASK_RESULT off (no subscription, no event).
-		this._taskResultCollector = taskResultWiring.beginTaskResult(this._taskResultCollector, this._resourceLoader);
-		const taskResult = this._taskResultCollector;
+		this._taskResult = taskResultWiring.beginTaskResult(this._taskResult, this._resourceLoader, promptRunId);
+		const taskResult = this._taskResult;
 		// Roadmap M2: the lease spans the whole run including internal retries
 		// and continuations, so they share one admission decision (§8.3).
 		let resourceLease: Awaited<ReturnType<AgentSession["_beginResourceGovernedRun"]>> = null;
