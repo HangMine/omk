@@ -266,12 +266,25 @@ the PREREG before any run.
 - With a 217-skill catalog, k = 255 includes all skills, so recall at k = 255
   proves little (hence the k = 25 gate). An option is to skip bm25 and send all skills to
   Jev (within the 32k token limit).
-- Reasoning-on suggestion requests use `maxTokens = thinking budget + 128`
-  (off: 128). A real-provider check is a paid run, pending 인호's 1:1
-  approval.
+- 제안 요청의 출력 상한은 provider마다 달라요. reasoning이 꺼져 있으면 128이에요. `adjustMaxTokensForThinking`이 예산을 더해 주는 provider(anthropic-messages, adaptive가 아닌 Bedrock Claude)에는 128을 넘기고, 나머지 reasoning provider에는 예산+128을 바로 넘겨요. 실제 provider로는 확인하지 않았어요(유료라 인호님 1:1 승인 필요).
 - Korean suggestion text may break bm25 lexical match against the English
   catalog (KO set v1 shows this). Mitigation (English search keywords) is out
   of Stage 1 scope.
+- The EN gate set (`labels-en-v1.jsonl`, sha256
+  `adadd76d7d543ded09cf8e93472966c36483886bf4b094b13242671a3e0361dd`) was
+  written by the same author as KO set v1, so situations overlap; it is not
+  independent of the KO set. The pre-registered condition was only: written
+  fresh from SKILL.md bodies, no translation; bm25 output was never seen.
+- Six site-playbooks items (southwest, target, usps, ebay, etsy, resy) are
+  vague because their names and key words are banned. Their misses are
+  flagged separately in the results table but still count in the gate.
+- Six overlapping pairs have gold labels chosen by judgement: food-ordering;
+  flight-booking vs site-playbooks-google-flights; code-review vs
+  review-and-ship vs requesting-code-review; slides-executor vs office-pptx;
+  vercel-plugin-eval vs plugin-audit; get-pr-comments vs autofix. Misses are
+  flagged separately but still count in the gate.
+- Two sentences say "merge request" instead of PR because "PR"/"pull" are
+  banned for those skills; recall on them may be understated.
 
 ## Success criterion
 
