@@ -19,8 +19,8 @@ Context: the 092 free gate is FAIL at G2 before measuring (hubs over 25 skills).
 | model id | `jev-1.14.0` (pinned; not `jev-latest`) |
 | temperature | none: the `/v1/systemone` request body has no temperature or sampling field (https://docs.typesafe.ai/api: `state`, `model`, `questions` only). The 091 design sets none either. Nothing is sent. |
 | prompt template | `specs/092-hub-router-skills/tools/paid-all217-template.json` sha256 `fdce5368063ce81f78133d827483dc45edc4afab2db8f7c943a80f32e3f5ec41` |
-| runner | `specs/092-hub-router-skills/tools/paid_all217_run.ts` sha256 `fd652a0a1019b25e55d22fed7c29a3b9a45f311bdb09e47d4815434f90ee9952`; tests `paid_all217_run.test.ts` sha256 `3b12d9c25bd85a12e9ce0bbb53098beaab408fde09f1561f7b1a922aad7050c3` |
-| harness commit | `66239d62af513f7f60ca7dce383558750bbe43e8` (branch `spec/092-paid-prereg`; template, runner, tests, diff scan) |
+| runner | `specs/092-hub-router-skills/tools/paid_all217_run.ts` sha256 `fd652a0a1019b25e55d22fed7c29a3b9a45f311bdb09e47d4815434f90ee9952`; tests `paid_all217_run.test.ts` sha256 `63c41e3542c1bb6f0094c7d8d8a83a0daaa0f7cf1f23f9ba29d377aa0ffa8051` |
+| harness commit | `8965371547bf57e2ae56873b2895998caaacd43e` (branch `spec/092-paid-prereg`; template, runner, tests, diff scan) |
 | attach threshold | probability of the chosen option ≥ **0.6** (091 spec stage 3 PREREG value), used for both G1 and G4 |
 | cost cap | **TBD — set by 인호 in 1:1 before any run** (env `OMK_COST_CAP_USD`; runner refuses to start without it) |
 
@@ -55,7 +55,7 @@ Context: the 092 free gate is FAIL at G2 before measuring (hubs over 25 skills).
 - Failed-call billing: after the run, check on the TypeSafe dashboard whether failed calls were billed, and record it.
 - Offline tests (`node --experimental-strip-types --test tools/paid_all217_run.test.ts`, 8/8 pass, fake fetch, no network) cover:
   sha mismatch refuses with zero calls, no calls after cap, request body has no `gold`/`id` field, existing output refuses,
-  missing key/cap refuses, no retry, key never leaks (fake key `TEST_SECRET_KEY_123`; HTTP 200/401/429/500 and a network error that embeds the headers: the key and `Authorization` never appear in stdout, stderr, the output file, or thrown messages/stacks; failed calls are logged only as fixed labels `timeout`/`network`), and parsing → hit / miss / no attach / false attach.
+  missing key/cap refuses, no retry, key never leaks (fake key `TEST_SECRET_KEY_123`; HTTP 200/401/429/500 and a network error that embeds the headers: the key and `Authorization` never appear in stdout, stderr, the output file, or thrown messages/stacks; failed calls are logged only as fixed labels `timeout`/`network`), and parsing → hit / miss / no attach / false attach, including the threshold boundary (p = 0.6 attaches, p = 0.5999 does not).
 
 - Exactly one run (the only exception is the single cap-INVALID rerun above). The runner refuses to start if the output file exists. No retries; a failed call = no attach.
 - No cleanup or delete step in the run command; chain with `&&`.
