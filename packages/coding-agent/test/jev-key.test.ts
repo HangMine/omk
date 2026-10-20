@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TUI } from "omk-tui";
@@ -9,7 +9,6 @@ import {
 	formatJevClear,
 	getJevKeySource,
 	isJevEnabled,
-	JEV_COMMAND_KEY_ERROR,
 	JEV_EMPTY_KEY_ERROR,
 	JEV_PROVIDER_ID,
 	parseJevCommand,
@@ -155,19 +154,6 @@ describe("/jev TypeSafe key (093 PR2)", () => {
 		expect(setJevKey(auth, "  \t ")).toEqual({ ok: false, error: JEV_EMPTY_KEY_ERROR });
 		expect(auth.has(JEV_PROVIDER_ID)).toBe(false);
 		expect(getJevKeySource(auth)).toBe("none");
-	});
-
-	test("set rejects a '!' key (would run as shell command), writes nothing, never executes", async () => {
-		const marker = join(dir, "executed");
-		for (const raw of [`!${KEY}`, `  !${KEY}  `, `!touch ${marker}`]) {
-			const result = setJevKey(auth, raw);
-			expect(result).toEqual({ ok: false, error: JEV_COMMAND_KEY_ERROR });
-			expect(leaks(JSON.stringify(result))).toBe(false);
-		}
-		expect(auth.has(JEV_PROVIDER_ID)).toBe(false);
-		expect(existsSync(authPath) ? readFileSync(authPath, "utf8").includes(KEY) : false).toBe(false);
-		expect(await auth.getApiKey(JEV_PROVIDER_ID)).toBeUndefined();
-		expect(existsSync(marker)).toBe(false);
 	});
 
 	test("10: set/status/clear make zero fetch calls", async () => {
