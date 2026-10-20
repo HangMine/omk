@@ -39,6 +39,12 @@ output fit the caps.
 All matching, cutting and caps run on sanitized text
 (`util.stripVTControlCharacters` + 094 ANSI/binary/C0 stripping).
 
+0. **Patterns.** 094 list plus summary-line patterns `summary-failing`
+   `^\s*\d+ failing\b` and `summary-failed` `\b[1-9]\d* (?:tests? )?failed\b`
+   (success exclusions still apply first). **Note:** these were added after
+   seeing holdout2 (mocha `1 failing` miss), so holdout2 is not evidence for
+   them. holdout3 must not include mocha and must use only tools not used in
+   holdouts 1–2.
 1. **Eligible lines.** A line is an *anchor candidate* iff it matches a
    094 error pattern, matches no success exclusion, and passes the injection
    rule (below).
@@ -49,8 +55,9 @@ All matching, cutting and caps run on sanitized text
    window 2 = tail of the output.
 4. **Caps and fixed split** (total unchanged): 1,536 UTF-8 B / 40 lines,
    markers included. Window 1 ≤ 768 B / 20 lines, window 2 ≤ 768 B / 19
-   lines, 1 line for the middle marker. Unused budget of window 1 is **not**
-   moved to window 2 (fixed, simpler to reason about). Code-point-safe cuts.
+   lines, 1 line for the middle marker. **Fixed at 768/768** (20/19 lines +
+   marker). Unused budget of window 1 is **not** moved to window 2. No data
+   supports a longer window 2, so it is not given one. Code-point-safe cuts.
 5. **No candidate** → 094 head/tail fallback (768 B / 24-line head, rest tail).
    Output that fits the caps whole is passed through unchanged.
 6. Markers: `[… N bytes elided …]` before window 1 (if it does not start at
@@ -99,16 +106,22 @@ Each rule gets a unit test with a positive and a negative example.
    real line (1 / 2 / none), matched pattern(s), fallback yes/no, whole
    passthrough yes/no.
 
-**Pass = 10/10** real first error inside a window. Missing ground truth =
+**Pass (proposed, pending Tech Lead) = 10/10 real first error line inside
+WINDOW 1** (the first-error window). Presence only in window 2 counts as FAIL.
+Note this is stricter than the design bound above: a fake that takes window 1
+fails the fixture even if window 2 shows the real error. Missing ground truth =
 FAIL. Whole-passthrough hits are reported separately. holdout1 (10), holdout2
 (10) and the 12 original fixtures are **regression only**. No relaxation, no
 retuning after measurement; a miss means a new spec.
+
+10/10 gives a one-sided 95% Clopper–Pearson lower bound of ≈ 74%
+(0.05^(1/10) = 0.741). 10/10 means ship-eligible, not high reliability.
 
 ## Acceptance criteria
 
 | ID | Test | Pass |
 |---|---|---|
-| E1 | holdout3 | 10/10 real first error in window 1 or 2 |
+| E1 | holdout3 | 10/10 real first error line in window 1 (window 2 only = FAIL); proposed, pending Tech Lead |
 | E2 | caps, all 32 fixtures + 1 MiB generated | ≤ 1,536 B, ≤ 40 lines; each window within its share |
 | E3 | R1–R4 unit tests | each rule rejects its positive, accepts its negative |
 | E4 | fake-first fixture (unit) | real last error in window 2 |
@@ -134,8 +147,8 @@ temp HOME, Node ≥ 22.19, biome, tsgo.
 - R1–R4 may reject a real error line (e.g. a real error logged at WARN).
   holdout3 measures this.
 - Fake lines both before and after the real error defeat two windows.
-- Keyword-less first errors (mocha `1 failing`) are still only covered when
-  they sit within window 2's context or the tail.
+- Keyword-less first errors without a summary line are still only covered by
+  window 2 context or the tail, which E1 does not count.
 - Secrets in output reach the provider (masking removed by #165; accepted,
   default off).
 
@@ -146,5 +159,4 @@ lookup, changes to verdict/gate/completion.
 
 ## Open questions
 
-1. Is the fixed 768/768 split right, or should window 2 get more lines for stack traces?
-2. Should `1 failing`/`N failed` summary lines become a pattern (decided in Commit P, before holdout3)?
+1. Tech Lead to confirm the window-1-only pass criterion (E1).
