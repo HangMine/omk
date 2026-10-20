@@ -211,7 +211,6 @@ import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts
 import {
 	isQuotaExhaustionMessage,
 	isStickySafetyModel,
-	isUpstreamUnavailableMessage,
 	pickFailoverCandidate,
 	resolveFailoverCandidates,
 	resolveProviderResilience,
@@ -221,7 +220,6 @@ import {
 	stickySafetyBlockMessage,
 } from "./provider-resilience.ts";
 import {
-	computeRetryDelayMs,
 	failoverModelKey,
 	isEmptyStreamedCompletion,
 	isFailoverTriggerError,
@@ -229,6 +227,7 @@ import {
 	nextRetryAttempt,
 	retryBudgetForAssistantError,
 } from "./provider-retry.ts";
+import { planRetryWait, quotaAllowsRetry, recordQuotaOutcome, shouldRotateRoute } from "./quota-retry-policy.ts";
 import { getBiasStepsForCell, parseRouterBiasSnapshot, type RouterBiasSnapshot } from "./reasoning-router-bias.ts";
 import {
 	classifyTaskV4,
@@ -2428,6 +2427,7 @@ export class AgentSession {
 		if (this._isRetryableError(msg) && (await this._prepareRetry(msg))) {
 			return true;
 		}
+		recordQuotaOutcome(this, msg, this.settingsManager.getProviderResilienceSettings()); // spec 090
 
 		// The retry budget is exhausted without a real answer. This covers the
 		// empty-streamed-completion path whose success-shaped stopReason
@@ -4825,7 +4825,8 @@ export class AgentSession {
 	 * Context overflow errors are NOT retryable (handled by compaction instead).
 	 */
 	private _isRetryableError(message: AssistantMessage): boolean {
-		return isRetryableAssistantError(message, this.model?.contextWindow ?? 0);
+		const quotaOk = quotaAllowsRetry(message.errorMessage, this.settingsManager.getProviderResilienceSettings());
+		return quotaOk && isRetryableAssistantError(message, this.model?.contextWindow ?? 0);
 	}
 
 	/**
@@ -4989,7 +4990,6 @@ export class AgentSession {
 			maxRetries,
 		});
 		if (attempt === undefined) return false;
-		this._retryAttempt = attempt;
 
 		// Upstream-unavailable (gateway 5xx / dropped stream / dead relay stream):
 		// rotate to another authenticated route of the SAME model family so the
@@ -4997,19 +4997,15 @@ export class AgentSession {
 		// empty streamed completion is the same dead-stream signature wearing a
 		// success stopReason, so it rotates too — otherwise the retry re-hits the
 		// route that just returned nothing.
-		const rotatedTo =
-			isUpstreamUnavailableMessage(message.errorMessage) || isEmptyStreamedCompletion(message)
-				? await this._maybeRotateModelRoutes()
-				: undefined;
+		const rotatedTo = shouldRotateRoute(message) ? await this._maybeRotateModelRoutes() : undefined;
 
 		// Content/safety stop (Fable/Opus/Sonnet): switch model BEFORE delay so retry is not same-model refusal.
 		const failoverTo = await this._maybeFailoverFromSafetyStop(message);
 		const switchedVia = failoverTo ? `failover ${failoverTo}` : rotatedTo ? `route ${rotatedTo}` : undefined;
-		// Safety stops are usually immediate false positives — short delay after failover, full backoff otherwise.
-		const delayMs = Math.min(
-			computeRetryDelayMs(settings.baseDelayMs, attempt, switchedVia !== undefined),
-			this._runBudget.remainingMs ?? Infinity,
-		);
+		// Spec 090: quota failover waits 0, quota without failover ends with no retry; other waits cap at 60s.
+		const delayMs = planRetryWait(message, settings, attempt, failoverTo, rotatedTo, this._runBudget.remainingMs);
+		if (delayMs === undefined) return false;
+		this._retryAttempt = attempt;
 		const errorMessage = switchedVia
 			? `${message.errorMessage || "content/safety stop"} → ${switchedVia}`
 			: message.errorMessage || "Unknown error";
