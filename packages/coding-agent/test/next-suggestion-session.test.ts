@@ -421,8 +421,10 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		expect(editor.state.placeholder).toBe("base");
 		expect(h.main).toHaveLength(1);
 
-		await h.session.prompt("second");
+		// Submitting empties the editor before the turn runs, as the TUI does. Clearing it after
+		// prompt() resolved raced the suggestion, which is discarded while the editor has text.
 		editor.state.text = "";
+		await h.session.prompt("second");
 		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
 		expect(editor.onBeforeInput?.("x")).toBe(false);
 		expect(controller.suggestion).toBeUndefined();
