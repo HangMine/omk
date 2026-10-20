@@ -437,4 +437,44 @@ describe("/goal acceptance contract revision (spec 099)", () => {
 		await expect(acceptance.complete(goalStore, passed.goal, cwd)).rejects.toThrow(/run \/goal verify/);
 		expect((await goalStore.current())?.status).toBe("active");
 	});
+
+	it("does not revive an old pass when the approval returns to an earlier command", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal("verify true");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+		const goalStore = store(cwd);
+		const acceptance = new GoalAcceptance();
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		acceptance.approve(goal, "true");
+		const passed = await acceptance.check(goalStore, goal, cwd);
+		expect(passed.result.passed).toBe(true);
+
+		acceptance.approve(passed.goal, "false");
+		acceptance.approve(passed.goal, "true");
+		await expect(acceptance.complete(goalStore, passed.goal, cwd)).rejects.toThrow(/run \/goal verify/);
+
+		const rerun = await acceptance.check(goalStore, passed.goal, cwd);
+		expect(rerun.result.passed).toBe(true);
+		expect((await acceptance.complete(goalStore, rerun.goal, cwd)).status).toBe("completed");
+	});
+
+	it("never counts an aborted run as a pass", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		const goalStore = store(cwd);
+		const acceptance = new GoalAcceptance();
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		acceptance.approve(goal, "true");
+		const aborted = new AbortController();
+		aborted.abort();
+		const outcome = await acceptance.check(goalStore, goal, cwd, aborted.signal);
+		expect(outcome.result.status).toBe("aborted");
+
+		await expect(acceptance.complete(goalStore, outcome.goal, cwd)).rejects.toThrow(/run \/goal verify/);
+	});
 });
