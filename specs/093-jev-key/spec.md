@@ -46,36 +46,46 @@ Provider id in auth.json: `typesafe`.
 
 | Subcommand | Behavior |
 |---|---|
-| `/jev set` | Masked prompt (each char rendered as `•`, value never in render output). Trim; empty → error "key cannot be empty" (no echo). Stores `{type:"api_key", key}` via existing `AuthStorage.set("typesafe", …)`. |
-| `/jev status` | Prints source (`env` / `stored` / `none`) and masked prefix: first 4 chars + `…`. If both env and stored exist, says env is used. |
-| `/jev clear` | `AuthStorage.remove("typesafe")`. Reports if env still set (cannot be cleared from omk). |
-| `/jev` | Same as status plus usage line. |
+| `/jev set` | Masked prompt (each char rendered as `•`, value never in render output). Trim; empty → error "key cannot be empty" (no echo). Stores `{type:"api_key", key}` via existing `AuthStorage.set("typesafe", …)`. Input is not added to editor/input history or autocomplete history. |
+| `/jev status` | Prints ONLY the source: `stored`, `env` or `none`. Zero key characters. |
+| `/jev clear` | `AuthStorage.remove("typesafe")`. Reports if env is still set (cannot be cleared from omk). |
+| `/jev` | Same as status plus a usage line. |
 
-- **Masked input**: add an opt-in `mask` option to omk-tui `Input` (render-only; value unchanged). Login dialog untouched by default.
+- **Masked input**: add an opt-in `mask` option to omk-tui `Input` (default off; render-only, value unchanged). `/login` masking is a separate later PR.
 - **Storage**: existing auth.json only (0o600, dir 0o700). No new store; never the repo or project dir; never settings.json, session JSONL or run log.
-- **Precedence**: env `TYPESAFE_API_KEY` first, then stored. Implemented locally for `typesafe` only (Jev resolver), so other providers' precedence is unchanged.
-- **Flag**: `OMK_JEV=1` gates every Jev feature (091 selection). `/jev` key management works regardless, but `/jev` itself never makes a network/paid call.
+- **Precedence**: same as every other provider (`getApiKey`, :729-735): stored key first, then env `TYPESAFE_API_KEY`. No typesafe exception.
+- **Flag**: `OMK_JEV=1` (env only in v1) gates every Jev feature (091 selection). `/jev` key management works regardless, and `/jev` itself never makes a network or paid call.
 - **Fallback** (091 design): flag off, no key, or call failure → no skill attach, next-task suggestions only.
 - **Errors**: never include the key or headers; error names only.
 - Zero new dependencies.
 - Exposed-key revocation is done in the TypeSafe dashboard; the spec stores no real key, prefix or hash.
+- **Operational note**: when 인호 rotates the key, the box env `TYPESAFE_API_KEY` should be cleared too, otherwise an old env value remains as fallback.
+
+## Implementation split
+
+- **PR1**: omk-tui `Input` `mask` option, default off. Unit tests only (tests 1-2).
+- **PR2**: `/jev` command, on main after PR1 merges (tests 3-10).
 
 ## Tests (fake key `TEST_SECRET_KEY_123`, temp agent dir, mocked fetch with zero calls asserted)
 
-1. Key absent from TUI render output during and after `/jev set`, `/jev status`, errors, logs, session JSONL and run log (grep count 0; status shows only `TEST…`).
-2. auth.json mode 0o600 after set (and dir 0o700).
-3. Precedence: env set + stored set → env used, status says `env`; env unset → stored.
-4. `/jev clear` removes stored key; status → `none` (or `env` if env set).
-5. Empty input rejected, nothing written.
-6. `/jev` performs 0 fetch calls.
+PR1:
+1. `Input` with mask on: render output contains no character of the typed value; `getValue()` returns it unchanged.
+2. `Input` with mask off (default): render unchanged from today.
+
+PR2:
+3. Key absent from TUI render output during and after `/jev set`, `/jev status`, errors, logs, session JSONL and run log (grep count 0).
+4. Status shows source only: output is one of `stored`/`env`/`none` and contains no substring of the key (any length ≥ 1 run of key chars beyond the fixed label text).
+5. Key entered via `/jev set` never appears in input history or autocomplete history files (grep count 0).
+6. auth.json mode 0o600 after set (dir 0o700).
+7. Precedence: stored + env both set → stored key used, status says `stored`; stored absent + env set → env, status `env`.
+8. `/jev clear` removes the stored key; status → `none` (or `env` if env set).
+9. Empty input rejected, nothing written.
+10. `/jev` performs 0 fetch calls.
 
 ## Success criterion
 
-All 6 tests pass on Node 22; `rg TEST_SECRET_KEY_123` over every file the test run writes except auth.json = 0 matches; 0 new deps in package-lock diff; existing /login tests unchanged and green.
+All 10 tests pass on Node 22; `rg TEST_SECRET_KEY_123` over every file the test run writes except auth.json = 0 matches; 0 new deps in package-lock diff; existing /login and Input tests unchanged and green.
 
 ## Open questions
 
-1. Env-first for `typesafe` differs from omk's global stored-first order (:729-735). Keep the per-provider exception, or follow global order?
-2. Provider id `typesafe` vs `jev`; also accept extra env names?
-3. Should `/login` API-key prompt also adopt the mask (separate PR)?
-4. `OMK_JEV` as env only, or also a settings toggle?
+- None open. Decided in room: stored-first precedence, provider id `typesafe`, `/login` mask later, `OMK_JEV` env-only, status source-only, two PRs.
