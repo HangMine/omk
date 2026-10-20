@@ -196,7 +196,8 @@ export function repairDetail(outcome: GoalCheckOutcome): string {
 		receiptId: result.receiptId,
 		goalId: goal.ref.id,
 		goalRevision: goal.ref.revision,
-		round: goal.completedRounds,
+		// 1-based: the first checked round renders #1.
+		round: goal.completedRounds + 1,
 		workspaceSha256: result.workspace.sha256,
 		workspaceCompleteness: result.workspace.completeness,
 		status: result.status,

@@ -382,7 +382,7 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		expect(h.messages).toHaveLength(1);
 		const message = h.messages[0];
 		expect(message).toContain(`check="${receiptId}"`);
-		expect(message).toContain(`attempt="${before?.ref.id}@r${before?.ref.revision}#0"`);
+		expect(message).toContain(`attempt="${before?.ref.id}@r${before?.ref.revision}#1"`);
 		expect(message).toMatch(/workspace="[0-9a-f]{64}:[a-z_]+"/);
 		expect(message).toContain("\nmissing-feature\n</acceptance-diagnostic>");
 		expect(message).toContain('truncated="false"');
@@ -420,5 +420,18 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		h.context.pending = true;
 		await h.settle();
 		expect(h.messages).toEqual([]);
+	});
+
+	it("numbers the attempt from #1 and counts up per failed round", async () => {
+		vi.stubEnv("OMK_GOAL_DIAGNOSTICS", "1");
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal("verify exit 3");
+		await h.settle();
+		await h.settle();
+		expect(h.messages).toHaveLength(2);
+		expect(h.messages[0]).toMatch(/attempt="[^"]+#1"/);
+		expect(h.messages[1]).toMatch(/attempt="[^"]+#2"/);
 	});
 });
