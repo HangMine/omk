@@ -51,7 +51,7 @@ export class RequestTrace {
 		if (this.closedFile || this.failed || this.sequence >= this.limit) throw new Error("trace.unavailable");
 		const body = JSON.stringify({ sequence: this.sequence, previous: this.previous, ...payload });
 		const hash = createHash("sha256").update(body).digest("hex");
-		const bytes = Buffer.from(JSON.stringify({ body, hash }) + "\n");
+		const bytes = Buffer.from(`${JSON.stringify({ body, hash })}\n`);
 		if (bytes.length > 8192) throw new Error("trace.record_limit");
 		let offset = 0;
 		try {
