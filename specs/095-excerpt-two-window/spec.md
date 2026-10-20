@@ -114,7 +114,10 @@ last error line is inside window 2. 10/10 required. Missing ground truth =
 FAIL. A FAIL means no retune and no remeasure (new spec). Note this is
 stricter than the design bound above: a fake that takes window 1 fails the
 fixture even if window 2 shows the real error. Missing ground truth =
-FAIL. Whole-passthrough hits are reported separately. holdout1 (10), holdout2
+FAIL. **Every holdout3 fixture must exceed the cap (> 1,536 B or > 40 lines
+after sanitize).** A fixture that fits whole (passthrough) does not count toward
+10/10; such fixtures are invalid and must be replaced by the holdout author
+before measurement (bazel/kotlin in holdout2 passed only by fitting whole). holdout1 (10), holdout2
 (10) and the 12 original fixtures are **regression only**. No relaxation, no
 retuning after measurement; a miss means a new spec.
 
