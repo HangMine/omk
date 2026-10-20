@@ -266,7 +266,7 @@ the PREREG before any run.
 - With a 217-skill catalog, k = 255 includes all skills, so recall at k = 255
   proves little (hence the k = 25 gate). An option is to skip bm25 and send all skills to
   Jev (within the 32k token limit).
-- 제안 요청의 출력 상한: reasoning이 꺼져 있으면 128. 켜져 있으면 `adjustMaxTokensForThinking`이 thinking 예산을 더하는 provider(anthropic-messages, adaptive가 아닌 Bedrock Claude)에는 128을 넘기고, 나머지 provider에는 예산+128을 그대로 넘긴다. 실제 provider 확인은 유료라 인호님 1:1 승인 후.
+- Output cap: reasoning off → 128. Reasoning on → 128 for providers where `addsThinkingBudgetToMaxTokens` is true (anthropic-messages, non-adaptive Bedrock Claude), otherwise thinking budget + 128. Not verified against real providers (paid; needs 인호's 1:1 approval).
 - Korean suggestion text may break bm25 lexical match against the English
   catalog (KO set v1 shows this). Mitigation (English search keywords) is out
   of Stage 1 scope.
@@ -329,7 +329,7 @@ PREREG gate above; no non-installed skill is ever suggested.
 - The suggestion request differs from the main request only in `maxTokens`
   and its own abort signal. Reasoning is not disabled: with reasoning off,
   `maxTokens = 128` (`SUGGESTION_MAX_TOKENS`); with reasoning on,
-  `maxTokens = thinking budget + 128`. The reply is still cut to 200
+  `maxTokens = 128` for providers where `addsThinkingBudgetToMaxTokens` is true, otherwise `thinking budget + 128`. The reply is still cut to 200
   characters.
 - Usage ≥ 90% reads the active provider's subscription usage windows
   (`loadSubscriptionUsage`), only with the flag on, at most once per settled
@@ -353,6 +353,6 @@ the implementation commits; this spec has no runtime effect.
 - k=25: miss 39/100, recall 0.61 (Clopper-Pearson 95% [0.507, 0.706]). Report-only: k=10 miss 45, k=50 miss 35, k=255 miss 33.
 - Cause: bm25 returns only skills with score > 0, capped at 64, so 33 gold skills never enter the candidate list at any k. The assumption "k=255 means 100% recall" was wrong.
 - Flagged misses (counted in the gate): 13 site-playbooks misses (all 6 named items included). Overlapping pairs with judgement gold labels: food-ordering; flight-booking / site-playbooks-google-flights; code-review / review-and-ship / requesting-code-review; slides-executor / office-pptx; vercel-plugin-eval / plugin-audit; get-pr-comments / autofix.
-- No re-measurement: the boost formula was not pre-registered. Jev stage not built; implementation 984d4bc77e not opened as a PR; 091 is not in 1.5.5.
+- No re-measurement: the boost formula was not pre-registered. The bm25 candidate stage and the Jev stage are closed and not built. Stage 1 (next-task sentence and Tab fill, no bm25 or Jev, flag off by default) is unaffected and proceeds as its own PR.
 - Raw result `gate-en-v1.json` stays on the box; sha256 `3767de14c5f3326b29109ee174d5faffdb16b22300a345d6eee1559f36a00a88`.
-- Any retry is a new spec 092 with its method (e.g. all 217 skills to Jev, ~11.9k tokens, or a boost formula) pre-registered and a fresh EN set.
+- Skill attachment moves to a new spec 092 (all 217 skills to Jev, ~11.9k tokens), with its pass criteria, a fresh EN set and a new PREREG sha fixed before any paid run.
