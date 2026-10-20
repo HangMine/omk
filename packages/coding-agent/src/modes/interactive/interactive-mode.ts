@@ -106,6 +106,7 @@ import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/
 import { OMK_GITHUB_REPOSITORY_URL } from "../../core/github-repository.ts";
 import { captureHostResourceSnapshot } from "../../core/host-resource-snapshot.ts";
 import { formatHttpIdleTimeoutMs, scheduleHttpDispatcher } from "../../core/http-dispatcher-install.ts";
+import { parseJevCommand } from "../../core/jev-key.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
@@ -168,6 +169,7 @@ import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
+import { runJevCommand } from "./jev-command.ts";
 import { pinnedRailNotice, railFits } from "./layout-class.ts";
 import { formatResourceDescription } from "./resource-description.ts";
 import { createSkillPickerForDraft } from "./skill-picker-draft.ts";
@@ -2966,6 +2968,11 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (parseJevCommand(text)) {
+				this.editor.setText("");
+				await runJevCommand(text, this.session.modelRegistry.authStorage, this.ui, this.dialogHost);
+				return;
+			}
 			if (text === "/new") {
 				this.editor.setText("");
 				await this.handleClearCommand();
@@ -5532,7 +5539,7 @@ export class InteractiveMode {
 		this.dialogHost.show(dialog);
 	}
 
-	/** Swap the editor for a dialog and back; shared by the login dialogs. */
+	/** Swap the editor for a dialog and back; shared by login dialogs and /jev. */
 	private readonly dialogHost = {
 		show: (component: Component) => {
 			this.editorContainer.clear();
@@ -5546,6 +5553,8 @@ export class InteractiveMode {
 			this.ui.setFocus(this.editor);
 			this.ui.requestRender();
 		},
+		status: (message: string) => this.showStatus(message),
+		error: (message: string) => this.showError(message),
 	};
 
 	private async showApiKeyLoginDialog(providerId: string, providerName: string): Promise<void> {
