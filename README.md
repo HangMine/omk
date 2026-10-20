@@ -455,7 +455,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.3](.github/RELEASE_NOTES_v1.5.3.md)
+- [Release notes for v1.5.4](.github/RELEASE_NOTES_v1.5.4.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -546,6 +546,33 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.4
+
+### Added
+
+- `/jev set`, `/jev status`, and `/jev clear` manage the TypeSafe (JEV) key in `auth.json`. `status` prints only `stored`, `env`, or `none`; no subcommand echoes key characters or makes a network call. A stored key wins over `TYPESAFE_API_KEY`, as for every other provider.
+- An extension that registers `/jev` still receives `/jev <query>`. The built-in command handles only `set`, `status`, `clear`, and a bare `/jev`.
+- Next-task suggestions after a completed turn, behind `OMK_NEXT_SUGGESTIONS` (default off). A suggestion reuses the warm prompt cache of the same model, caps output at the thinking budget plus 128 tokens (128 with reasoning off), and is skipped when the cache is cold, the model changed, or provider usage is unavailable or at 90% or more.
+- A pinned model that fails over on quota exhaustion shows one warning per turn and writes a `pinned-quota-failover` run-log record. Set `providerResilience.autoFailoverOnQuotaExhaustion: false` to keep the pin.
+
+### Changed
+
+- Quota exhaustion is no longer retried on the same model. The turn fails over at once when `providerResilience.autoFailoverOnQuotaExhaustion` is on, and otherwise ends with `QuotaExhaustedNoRetryError` and a run-log record. Other retryable errors keep exponential backoff, honor a `Retry-After` hint, and cap a single wait at 60 s.
+
+### Fixed
+
+- A run-journal reader drops the torn tail of an in-progress append only while the owner lease is live, retries for at most 250 ms, and retries a journal that has no complete record yet.
+
+### Security
+
+- `/jev set` rejects keys that start with `!`. `getApiKey` runs such a stored value as a shell command, so the key is refused and nothing is written.
+
+### Tests
+
+- `test.sh` removes every variable whose name contains `KEY`, `SECRET`, `TOKEN`, `PASSWORD`, or `CREDENTIAL` (any case), plus a short list of credential-bearing names the pattern misses, so a release test run cannot reach a live provider with the operator's key.
+
+Release notes live in [RELEASE_NOTES_v1.5.4.md](.github/RELEASE_NOTES_v1.5.4.md).
+
 ## Release v1.5.3
 
 ### Fixed
@@ -571,19 +598,6 @@ Release notes live in [RELEASE_NOTES_v1.5.3.md](.github/RELEASE_NOTES_v1.5.3.md)
 - Lockstep version alignment with OMK 1.5.2 to restore publication of all seven workspace packages after the 1.5.1 registry staging conflict. Provider recovery behavior is unchanged from 1.5.1.
 
 Release notes live in [RELEASE_NOTES_v1.5.2.md](.github/RELEASE_NOTES_v1.5.2.md).
-
-## Release v1.5.1
-
-### Fixed
-
-- Cloudflare `520` through `527` gateway responses and Explabs/OpenRouter free-limit quota bodies are classified as retryable provider failures. `Turn prefix summarization failed: 429 Go usage limit exceeded` is recognized through the quota classifier.
-- Quota exhaustion can now fail over to an authenticated `providerResilience.failoverCandidates` entry even when `--model` or `--provider` pinned the current model. Safety-stop failover remains pin-gated. Disable the new behavior with `providerResilience.autoFailoverOnQuotaExhaustion: false`.
-
-### Changed
-
-- The default `retry.maxRetries` is now `5`, giving 2s, 4s, 8s, 16s, and 32s backoff instead of stopping after 2s, 4s, and 8s.
-
-Release notes live in [RELEASE_NOTES_v1.5.1.md](.github/RELEASE_NOTES_v1.5.1.md).
 
 <!-- releases:end -->
 
