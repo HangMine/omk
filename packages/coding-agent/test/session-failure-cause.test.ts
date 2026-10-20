@@ -35,11 +35,6 @@ describe("terminationMessage", () => {
 		expect(terminationMessage("a\0b", "fallback")).toBe("ab");
 		expect(terminationMessage("x".repeat(600), "fallback")).toHaveLength(512);
 	});
-
-	it("redacts secret-shaped content before it reaches the termination record", () => {
-		const redacted = terminationMessage("sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "fallback");
-		expect(redacted).not.toContain("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-	});
 });
 
 describe("providerFailureCause", () => {

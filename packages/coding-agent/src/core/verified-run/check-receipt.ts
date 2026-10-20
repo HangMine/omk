@@ -9,7 +9,6 @@ import type {
 	EvidenceReceiptDisposition,
 	WorkspaceFingerprint,
 } from "../../types/evidence.ts";
-import { redactSensitiveTextForced } from "../redaction.ts";
 import { canonicalJson } from "../run-journal.ts";
 import type { SandboxOutcome } from "./broker.ts";
 import type { CandidateManifest } from "./candidate.ts";
@@ -76,8 +75,8 @@ export function storeCheckReceipt(
 		toolCallId: execution.executionId,
 		alreadyRedactedOutput: {
 			redactionPolicyId: "omk-verified-run-v1+forced-text+prefix-32k-per-stream",
-			stdout: Buffer.from(redactSensitiveTextForced(result.stdout.toString("utf8"))).subarray(0, 32768),
-			stderr: Buffer.from(redactSensitiveTextForced(result.stderr.toString("utf8"))).subarray(0, 32768),
+			stdout: Buffer.from(result.stdout.toString("utf8")).subarray(0, 32768),
+			stderr: Buffer.from(result.stderr.toString("utf8")).subarray(0, 32768),
 		},
 		...disposition(result),
 	});

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import fc from "fast-check";
 import type { AgentMessage } from "omk-agent-core";
 import { fauxAssistantMessage } from "omk-ai";
@@ -144,42 +143,6 @@ describe("applyCompactionKnowledgeTriage", () => {
 		expect(result.summary).not.toContain("mixed prompt");
 	});
 
-	it("rejects credential-shaped source entry identifiers", () => {
-		const sourceId = ["xoxe", "1234567890", ["abcd", "efgh", "ijkl", "mnop"].join("")].join("-");
-		const result = applyCompactionKnowledgeTriage({
-			generatedSummary: "## Goal\nTest",
-			currentMessages: [user("RULE: safe text")],
-			currentEntries: [userEntry(sourceId, "RULE: safe text")],
-		});
-
-		expect(result.preservedRules).toEqual([]);
-		expect(result.summary).not.toContain(sourceId);
-	});
-
-	it("redacts credential-shaped content before persistence and repeated compaction", () => {
-		const token = ["xoxe", "1234567890", ["abcd", "efgh", "ijkl", "mnop"].join("")].join("-");
-		const direct = `RULE: ${token}`;
-		const sourceEntries = [userEntry("entry-secret", direct)];
-		const result = applyCompactionKnowledgeTriage({
-			generatedSummary: "## Goal\nTest",
-			currentMessages: [user(direct)],
-			currentEntries: sourceEntries,
-		});
-		const repeated = applyCompactionKnowledgeTriage({
-			generatedSummary: "## Goal\nRepeat",
-			currentMessages: [],
-			previousRules: result.preservedRules,
-			previousSummary: result.summary,
-			previousEntries: sourceEntries,
-		});
-
-		for (const value of [result.summary, JSON.stringify(result.preservedRules), repeated.summary]) {
-			expect(value).not.toContain(token);
-		}
-		expect(result.preservedRules[0]?.text).toContain("[REDACTED]");
-		expect(repeated.preservedRules).toEqual(result.preservedRules);
-	});
-
 	it("rejects forged persisted records and accepts only a block bound to source entries", () => {
 		const sourceEntries = [userEntry("entry-prior", "RULE: keep")];
 		const original = applyCompactionKnowledgeTriage({
@@ -191,24 +154,6 @@ describe("applyCompactionKnowledgeTriage", () => {
 		expect(normalizePreservedRules([forged])).toEqual([]);
 		const source = original.preservedRules[0];
 		expect(source).toBeDefined();
-		const credentialText = "RULE: password=secret123";
-		const credentialRecord = {
-			...source!,
-			text: credentialText,
-			sourceDigest: createHash("sha256")
-				.update(`${source!.sourceEntryId}\0${source!.sourceLine}\0${credentialText}`)
-				.digest("hex"),
-		};
-		expect(normalizePreservedRules([credentialRecord])).toEqual([]);
-		expect(
-			applyCompactionKnowledgeTriage({
-				generatedSummary: "## Goal\nSecond",
-				currentMessages: [],
-				previousRules: [credentialRecord],
-				previousSummary: `## Goal\nFirst\n\n${renderPreservedRulesBlock([credentialRecord])}`,
-				previousEntries: sourceEntries,
-			}).preservedRules,
-		).toEqual([]);
 
 		const withoutBoundSummary = applyCompactionKnowledgeTriage({
 			generatedSummary: "## Goal\nSecond",

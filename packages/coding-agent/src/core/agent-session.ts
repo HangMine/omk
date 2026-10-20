@@ -190,7 +190,6 @@ function firstTextContent(result: unknown): string | undefined {
 }
 
 import { createImmutableMessageSnapshot } from "./agent-session-snapshot.ts";
-import { redactCredentialShapedContent } from "./compaction/transaction.ts";
 import {
 	DeferredTurnInput,
 	inputAlreadyHandled,
@@ -237,7 +236,6 @@ import {
 	TASK_CLASS_THINKING_LEVELS_V4,
 	type TaskClassV4,
 } from "./reasoning-router-v4.ts";
-import { redactSensitiveText, redactSensitiveTextForced } from "./redaction.ts";
 import { getRepositoryRouterLearningPaths, type RepositoryRouterLearningPaths } from "./repository-learning-scope.ts";
 import {
 	createResourcePressureStabilizer,
@@ -2482,7 +2480,7 @@ export class AgentSession {
 	private async _prompt(text: string, options?: PromptOptions, bypassed = false): Promise<void> {
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
-		let currentText = redactSensitiveText(text);
+		let currentText = text;
 		const defaultActiveSkills = this._getDefaultActiveSkills();
 		let promptSkills = createActiveSkillState(
 			defaultActiveSkills,
@@ -2547,7 +2545,6 @@ export class AgentSession {
 				expandedText = this._expandSkillCommand(expandedText);
 				expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 			}
-			expandedText = redactSensitiveText(expandedText);
 
 			// While a run owns the session, queue instead of starting a competing top-level prompt; while another
 			// prompt is in preflight, defer for its run (or run as a full prompt at idle if that prompt fails).
@@ -2739,7 +2736,7 @@ export class AgentSession {
 	 */
 	async steer(text: string, images?: ImageContent[]): Promise<void> {
 		this._shutdown.assertOpen();
-		const sanitizedText = redactSensitiveText(text);
+		const sanitizedText = text;
 
 		// Check for extension commands (cannot be queued)
 		if (sanitizedText.startsWith("/")) {
@@ -2750,7 +2747,7 @@ export class AgentSession {
 		let expandedText = this._expandSkillCommand(sanitizedText);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
-		await this._queueSteer(redactSensitiveText(expandedText), images);
+		await this._queueSteer(expandedText, images);
 	}
 
 	/**
@@ -2762,7 +2759,7 @@ export class AgentSession {
 	 */
 	async followUp(text: string, images?: ImageContent[]): Promise<void> {
 		this._shutdown.assertOpen();
-		const sanitizedText = redactSensitiveText(text);
+		const sanitizedText = text;
 
 		// Check for extension commands (cannot be queued)
 		if (sanitizedText.startsWith("/")) {
@@ -2773,7 +2770,7 @@ export class AgentSession {
 		let expandedText = this._expandSkillCommand(sanitizedText);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
-		await this._queueFollowUp(redactSensitiveText(expandedText), images);
+		await this._queueFollowUp(expandedText, images);
 	}
 
 	/**
@@ -3746,7 +3743,7 @@ export class AgentSession {
 			}
 
 			const compactionResult: CompactionResult = {
-				summary: redactCredentialShapedContent(redactSensitiveTextForced(summary)),
+				summary: summary,
 				firstKeptEntryId,
 				tokensBefore,
 				details,
@@ -4145,7 +4142,7 @@ export class AgentSession {
 			}
 
 			const result: CompactionResult = {
-				summary: redactCredentialShapedContent(redactSensitiveTextForced(summary)),
+				summary: summary,
 				firstKeptEntryId,
 				tokensBefore,
 				details,

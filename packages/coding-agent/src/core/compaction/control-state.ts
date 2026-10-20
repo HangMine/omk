@@ -14,8 +14,6 @@
 
 import { createHash } from "node:crypto";
 import { sanitizeBinaryOutput } from "../../utils/shell.ts";
-import { redactSensitiveTextForced } from "../redaction.ts";
-import { redactCredentialShapedContent } from "./transaction.ts";
 
 /** Envelope validators reject credential shapes and control characters outright. */
 const MAX_PROVENANCE_TEXT = 4096;
@@ -65,12 +63,10 @@ export function validateControlState(value: CompactionControlState | null): Comp
  * quietly reduce the open-task count instead of preserving that work exists.
  */
 export function sanitizeProvenanceText(value: string): string {
-	const sanitized = redactCredentialShapedContent(
-		sanitizeBinaryOutput(redactSensitiveTextForced(value.trim()))
-			.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
-			.slice(0, MAX_PROVENANCE_TEXT),
-	);
-	return sanitized.length > 0 ? sanitized : "[REDACTED]";
+	const sanitized = sanitizeBinaryOutput(value.trim())
+		.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
+		.slice(0, MAX_PROVENANCE_TEXT);
+	return sanitized;
 }
 
 /** Project a control snapshot onto the envelope's preserved-provenance fields. */

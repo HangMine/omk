@@ -40,14 +40,6 @@ interface Classification {
 	readonly transcriptIssue?: TranscriptTerminationCauseCode;
 }
 
-const CREDENTIAL_SHAPES = [
-	/-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
-	/\b(?:sk-[A-Za-z0-9_-]{16,}|github_pat_[A-Za-z0-9_]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|AKIA[A-Z0-9]{16})\b/,
-	/\bBearer\s+[A-Za-z0-9._~+/-]{8,}={0,2}\b/i,
-	/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/,
-	/(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]+[_-])*(?:authorization|api[-_ ]?key|access[-_ ]?token|token|password|secret(?:[-_ ]?key)?|private[-_ ]?key|cookie)["']?\s*[:=]/i,
-] as const;
-
 const TOP_LEVEL_KEYS = new Set([
 	"sessionId",
 	"runId",
@@ -235,9 +227,6 @@ export function assertPreRedactedTerminationMessage(message: string): void {
 	}
 	if (message.includes("\0")) {
 		throw new TypeError("message must not contain NUL");
-	}
-	if (CREDENTIAL_SHAPES.some((pattern) => pattern.test(message))) {
-		throw new TypeError("message contains a credential-shaped literal; redact it before classification");
 	}
 }
 

@@ -5,8 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runPackageDoctorCli } from "../src/commands/package-doctor-cli.ts";
 import type { PackageInspection } from "../src/core/package-manager.ts";
 
-const SECRET = "sk-proj-package-doctor-secret-value-1234567890";
-
 describe("package doctor CLI", () => {
 	let root: string;
 	let lines: string[];
@@ -78,21 +76,5 @@ describe("package doctor CLI", () => {
 		});
 
 		expect(outcome).toEqual({ handled: true, exitCode: 1 });
-	});
-
-	it("redacts secrets from failures", async () => {
-		const outcome = await runPackageDoctorCli(["package", "doctor", "npm:fixture"], {
-			writeLine: (line) => lines.push(line),
-			prepare: async () => {
-				throw new Error(`registry rejected ${SECRET} at https://alice:hunter2@example.test/package`);
-			},
-		});
-		const output = lines.join("\n");
-
-		expect(outcome).toEqual({ handled: true, exitCode: 1 });
-		expect(output).not.toContain(SECRET);
-		expect(output).not.toContain("alice");
-		expect(output).not.toContain("hunter2");
-		expect(output).toContain("[REDACTED]");
 	});
 });

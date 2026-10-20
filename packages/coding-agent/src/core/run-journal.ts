@@ -272,19 +272,6 @@ const TERMINATION_ALLOWED_KEYS = [
 	"transcriptIssue",
 ] as const;
 
-/** High-confidence credential shapes; rejected at every trust boundary. */
-const CREDENTIAL_SHAPES = [
-	/-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
-	/\bsk-[A-Za-z0-9_-]{16,}\b/,
-	/\bgh[pousr]_[A-Za-z0-9]{16,}\b/,
-	/\bgithub_pat_[A-Za-z0-9_]{16,}\b/,
-	/\bxox[baprs]-[A-Za-z0-9-]{16,}\b/,
-	/\bAKIA[A-Z0-9]{16}\b/,
-	/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/,
-	/\bBearer\s+[A-Za-z0-9._~+/-]{8,}={0,2}\b/i,
-	/(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]+[_-])*(?:authorization|api[-_ ]?key|access[-_ ]?token|token|password|secret(?:[-_ ]?key)?|private[-_ ]?key|cookie)["']?\s*[:=]/i,
-] as const;
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -316,10 +303,6 @@ function assertPlainDataRecord(value: unknown, name: string, allowedKeys: readon
 	}
 }
 
-function looksLikeCredential(value: string): boolean {
-	return CREDENTIAL_SHAPES.some((pattern) => pattern.test(value));
-}
-
 function isBoundedIdentifier(value: unknown): value is string {
 	return (
 		typeof value === "string" &&
@@ -335,12 +318,6 @@ function assertIdentifier(value: unknown, name: string, maxLength: number): asse
 	}
 	if (/[\u0000-\u001f\u007f]/.test(value)) {
 		throw new TypeError(`${name} must not contain C0 or DEL control characters`);
-	}
-}
-
-function rejectCredential(value: string, name: string): void {
-	if (looksLikeCredential(value)) {
-		throw new TypeError(`${name} contains a credential-shaped literal`);
 	}
 }
 
@@ -444,19 +421,15 @@ function assertBoundedSessionTermination(
 	if (v.retryAfterMs !== undefined) assertSafeNonNegativeInt(v.retryAfterMs, "termination.retryAfterMs");
 	if (v.provider !== undefined) {
 		assertIdentifier(v.provider, "termination.provider", 128);
-		rejectCredential(v.provider, "termination.provider");
 	}
 	if (v.model !== undefined) {
 		assertIdentifier(v.model, "termination.model", 256);
-		rejectCredential(v.model, "termination.model");
 	}
 	if (v.toolCallId !== undefined) {
 		assertIdentifier(v.toolCallId, "termination.toolCallId", 512);
-		rejectCredential(v.toolCallId, "termination.toolCallId");
 	}
 	if (v.toolName !== undefined) {
 		assertIdentifier(v.toolName, "termination.toolName", 128);
-		rejectCredential(v.toolName, "termination.toolName");
 	}
 	if (v.processSignal !== undefined) {
 		if (typeof v.processSignal !== "string" || !SESSION_PROCESS_SIGNALS.has(v.processSignal)) {
@@ -500,11 +473,9 @@ function assertBoundedAuditDetails(value: unknown): asserts value is RunJournalA
 	const v = value as Record<string, unknown>;
 	if (v.toolCallId !== undefined) {
 		assertIdentifier(v.toolCallId, "details.toolCallId", 512);
-		rejectCredential(v.toolCallId, "details.toolCallId");
 	}
 	if (v.toolName !== undefined) {
 		assertIdentifier(v.toolName, "details.toolName", 128);
-		rejectCredential(v.toolName, "details.toolName");
 	}
 	if (v.disposition !== undefined && (typeof v.disposition !== "string" || !AUDIT_DISPOSITIONS.has(v.disposition))) {
 		throw new TypeError("details.disposition is out of bounds");
@@ -524,12 +495,10 @@ function assertBoundedAuditDetails(value: unknown): asserts value is RunJournalA
 		}
 		for (const id of v.insertedToolCallIds) {
 			assertIdentifier(id, "details.insertedToolCallIds[]", 512);
-			rejectCredential(id, "details.insertedToolCallIds[]");
 		}
 	}
 	if (v.reason !== undefined) {
 		assertIdentifier(v.reason, "details.reason", MAX_AUDIT_REASON_LENGTH);
-		rejectCredential(v.reason, "details.reason");
 	}
 	if (v.sessionRisk !== undefined && v.sessionRisk !== "elevated") {
 		throw new TypeError("details.sessionRisk is out of bounds");
@@ -607,7 +576,6 @@ export class RunJournal {
 		}
 		this.hashFn = init.hashFn;
 		assertIdentifier(init.sessionId, "sessionId", MAX_RUN_JOURNAL_ID_LENGTH);
-		rejectCredential(init.sessionId, "sessionId");
 		this.sessionId = init.sessionId;
 		const startSeq = init.seq ?? 0;
 		assertSafeNonNegativeInt(startSeq, "seq");
@@ -624,7 +592,6 @@ export class RunJournal {
 		} else {
 			// Audit-first journal: validate the seed runId shape, append nothing.
 			assertIdentifier(init.runId, "runId", MAX_RUN_JOURNAL_ID_LENGTH);
-			rejectCredential(init.runId, "runId");
 		}
 	}
 
@@ -704,7 +671,6 @@ export class RunJournal {
 	private appendStarted(input: RunJournalStartInput): RunJournalStartedRecord {
 		assertPlainDataRecord(input, "RunJournalStartInput", ["runId", "sessionRevision", "timestamp"]);
 		assertIdentifier(input.runId, "runId", MAX_RUN_JOURNAL_ID_LENGTH);
-		rejectCredential(input.runId, "runId");
 		assertSafeNonNegativeInt(input.sessionRevision, "sessionRevision");
 		if (input.sessionRevision < this.lastSessionRevision) {
 			throw new Error("sessionRevision must not regress across the journal");
@@ -824,8 +790,8 @@ function validateCommonShape(value: unknown): CommonShape | null {
 	if (value.schemaVersion !== RUN_JOURNAL_SCHEMA_VERSION) return null;
 	if (typeof value.event !== "string" || !RUN_JOURNAL_EVENTS.has(value.event as RunJournalEvent)) return null;
 	if (typeof value.seq !== "number" || !Number.isSafeInteger(value.seq) || value.seq < 0) return null;
-	if (!isBoundedIdentifier(value.runId) || looksLikeCredential(value.runId)) return null;
-	if (!isBoundedIdentifier(value.sessionId) || looksLikeCredential(value.sessionId)) return null;
+	if (!isBoundedIdentifier(value.runId)) return null;
+	if (!isBoundedIdentifier(value.sessionId)) return null;
 	if (
 		typeof value.sessionRevision !== "number" ||
 		!Number.isSafeInteger(value.sessionRevision) ||

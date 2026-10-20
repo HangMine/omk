@@ -8,7 +8,6 @@ import {
 	createSessionRevisionToken,
 	decideCompactionCommit,
 	evaluateCompactionBarrier,
-	redactCredentialShapedContent,
 } from "../src/core/compaction/transaction.ts";
 
 vi.mock("omk-agent-core", () => vi.importActual("../../agent/src/index.ts"));
@@ -423,25 +422,6 @@ describe("createCompactionTransaction", () => {
 		);
 	});
 
-	it("rejects credential-shaped latestIntent", () => {
-		const txn = minimalTransaction();
-		expect(() =>
-			createCompactionTransaction({
-				...txn,
-				preserved: { ...txn.preserved, latestIntent: "Bearer abc123def456ghi789" },
-			} as never),
-		).toThrow(/credential/);
-	});
-
-	it("rejects credential-shaped metadata in transactionId", () => {
-		expect(() =>
-			createCompactionTransaction({
-				...minimalTransaction(),
-				transactionId: "sk-abc123def456ghi789",
-			} as never),
-		).toThrow(/credential/);
-	});
-
 	it("rejects duplicate provenance IDs", () => {
 		const txn = minimalTransaction();
 		const dup = validId("dup");
@@ -558,16 +538,6 @@ describe("createCompactionTransaction", () => {
 		).toThrow(/unique entryId/);
 	});
 
-	it("rejects credential-shaped nextAction", () => {
-		const txn = minimalTransaction();
-		expect(() =>
-			createCompactionTransaction({
-				...txn,
-				preserved: { ...txn.preserved, nextAction: "Bearer abc123def456ghi789" },
-			} as never),
-		).toThrow(/credential/);
-	});
-
 	it("rejects control characters in openTasks", () => {
 		const txn = minimalTransaction();
 		expect(() =>
@@ -586,16 +556,6 @@ describe("createCompactionTransaction", () => {
 				preserved: { ...txn.preserved, blockerReasons: ["x".repeat(10_000)] },
 			} as never),
 		).toThrow(/bounded/);
-	});
-
-	it("rejects credential-shaped branch", () => {
-		const txn = minimalTransaction();
-		expect(() =>
-			createCompactionTransaction({
-				...txn,
-				preserved: { ...txn.preserved, branch: "Bearer abc123def456ghi789" },
-			} as never),
-		).toThrow(/credential/);
 	});
 
 	it("rejects modelHistory with extra keys", () => {
@@ -1030,25 +990,6 @@ describe("createCompactionEnvelope", () => {
 		).toThrow(/does not match/);
 	});
 
-	it("rejects credential-shaped summary", () => {
-		const txn = minimalTransaction();
-		const decision: CompactionCommitDecision = {
-			decision: "commit",
-			reason: "exact_match",
-			transactionId: txn.transactionId,
-			revision: txn.baseRevision,
-			source: txn.source,
-		};
-		expect(() =>
-			createCompactionEnvelope({
-				transaction: txn,
-				decision,
-				summary: 'api_key = "abc123"',
-				summarySha256: validSummarySha256(),
-			}),
-		).toThrow(/credential/);
-	});
-
 	it("accepts prose containing hyphenated sk-suffixed words", () => {
 		const prose = "fix the task-scheduler and risk-assessment modules";
 		const txn = minimalTransaction({
@@ -1084,31 +1025,6 @@ describe("createCompactionEnvelope", () => {
 		).not.toThrow();
 	});
 
-	it("masks credential-shaped spans until content validators pass", () => {
-		const masked = redactCredentialShapedContent(
-			"deploy with bearer abc123def456 then passwd: hunter2-value and sk-abc123def456ghi789",
-		);
-		expect(masked).toContain("[REDACTED]");
-		expect(masked).not.toContain("abc123def456");
-		expect(masked).not.toContain("hunter2-value");
-		const txn = minimalTransaction();
-		const decision: CompactionCommitDecision = {
-			decision: "commit",
-			reason: "exact_match",
-			transactionId: txn.transactionId,
-			revision: txn.baseRevision,
-			source: txn.source,
-		};
-		expect(() =>
-			createCompactionEnvelope({
-				transaction: txn,
-				decision,
-				summary: masked,
-				summarySha256: validSummarySha256(),
-			}),
-		).not.toThrow();
-	});
-
 	it("accepts a redacted credential placeholder in a summary", () => {
 		const txn = minimalTransaction();
 		const decision: CompactionCommitDecision = {
@@ -1128,27 +1044,6 @@ describe("createCompactionEnvelope", () => {
 		});
 
 		expect(envelope.summary).toBe(summary);
-	});
-
-	it("rejects text appended to a redacted credential placeholder", () => {
-		const txn = minimalTransaction();
-		const decision: CompactionCommitDecision = {
-			decision: "commit",
-			reason: "exact_match",
-			transactionId: txn.transactionId,
-			revision: txn.baseRevision,
-			source: txn.source,
-		};
-		for (const summary of ['api_key = "[REDACTED]"synthetic', "api_key = [REDACTED]-synthetic"]) {
-			expect(() =>
-				createCompactionEnvelope({
-					transaction: txn,
-					decision,
-					summary,
-					summarySha256: validSummarySha256(),
-				}),
-			).toThrow(/credential/);
-		}
 	});
 
 	it("rejects oversized summary", () => {
@@ -1382,41 +1277,3 @@ describe("validBarrierResult integration via decideCompactionCommit", () => {
 // ---------------------------------------------------------------------------
 // P2: Credential pattern hardening (Authorization:Bearer et al)
 // ---------------------------------------------------------------------------
-
-describe("credential shape rejection", () => {
-	it("rejects Authorization:Bearer header in metadata", () => {
-		expect(() =>
-			createCompactionTransaction({
-				...minimalTransaction(),
-				transactionId: "Authorization:Bearer abc123def456ghi789",
-			} as never),
-		).toThrow(/credential/);
-	});
-
-	it("rejects Bearer with capital B in metadata", () => {
-		expect(() =>
-			createCompactionTransaction({
-				...minimalTransaction(),
-				transactionId: "Bearer abc123def456ghi789",
-			} as never),
-		).toThrow(/credential/);
-	});
-
-	it("rejects short quoted credential in metadata", () => {
-		expect(() =>
-			createCompactionTransaction({
-				...minimalTransaction(),
-				transactionId: 'password = "abc"',
-			} as never),
-		).toThrow(/credential/);
-	});
-
-	it("rejects secret_key pattern in metadata", () => {
-		expect(() =>
-			createCompactionTransaction({
-				...minimalTransaction(),
-				transactionId: "secret_key = abc123def",
-			} as never),
-		).toThrow(/credential/);
-	});
-});

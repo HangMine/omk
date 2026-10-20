@@ -2,7 +2,6 @@
  * `omk sdk session` — inspect and append to persisted sessions without starting TUI.
  */
 import { resolve } from "node:path";
-import { redactSensitiveTextForced } from "../core/redaction.ts";
 import { requestSessionControl } from "../core/session-control-client.ts";
 import {
 	type SessionEntry,
@@ -41,7 +40,7 @@ function summarizeSession(session: SessionInfo) {
 		name: session.name,
 		modified: session.modified.toISOString(),
 		messageCount: session.messageCount,
-		firstMessage: redactSensitiveTextForced(session.firstMessage),
+		firstMessage: session.firstMessage,
 	};
 }
 
@@ -49,7 +48,7 @@ function renderStatus(sessions: readonly SessionInfo[]): string[] {
 	if (sessions.length === 0) return ["No sessions found."];
 	return sessions.map((session) => {
 		const name = session.name ? ` ${session.name}` : "";
-		return `${session.id}${name}  ${session.messageCount} msgs  ${session.modified.toISOString()}  ${redactSensitiveTextForced(session.firstMessage)}`;
+		return `${session.id}${name}  ${session.messageCount} msgs  ${session.modified.toISOString()}  ${session.firstMessage}`;
 	});
 }
 
@@ -71,7 +70,7 @@ function entryPreview(entry: SessionEntry): Record<string, unknown> {
 			type: entry.type,
 			role: entry.message.role,
 			timestamp: entry.timestamp,
-			text: redactSensitiveTextForced(messageText(entry.message)).slice(0, 400),
+			text: messageText(entry.message).slice(0, 400),
 		};
 	}
 	return { id: entry.id, type: entry.type, timestamp: entry.timestamp };

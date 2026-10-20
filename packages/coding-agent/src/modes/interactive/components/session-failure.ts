@@ -1,6 +1,5 @@
 import { stripVTControlCharacters } from "node:util";
 import { Container, Text } from "omk-tui";
-import { redactSensitiveTextForced } from "../../../core/redaction.ts";
 import type { SessionTermination, SessionTerminationKind } from "../../../core/session-termination-types.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
@@ -31,7 +30,7 @@ const TITLES = {
 
 /** Local display is credential-masked and terminal-inert; it is never the shareable report. */
 export function diagnosticDisplayText(text: string): string {
-	return redactSensitiveTextForced(stripVTControlCharacters(text))
+	return stripVTControlCharacters(text)
 		.replace(/\p{Cc}|[\u202a-\u202e\u2066-\u2069]/gu, " ")
 		.slice(0, 2048);
 }

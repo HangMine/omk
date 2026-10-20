@@ -1,6 +1,6 @@
 import { type EvaluationResult, PROTOCOL_VERSION, type SemanticVerdict } from "omk-protocol";
 import { describe, expect, it, vi } from "vitest";
-import { type AdvisoryJudge, type AdvisoryJudgeRequest, chooseWithAdvisoryJudge } from "../src/index.ts";
+import { type AdvisoryJudge, chooseWithAdvisoryJudge } from "../src/index.ts";
 
 const RUBRIC = [
 	{ id: "correctness", description: "Satisfies the task and cited evidence", weight: 3 },
@@ -54,55 +54,6 @@ function validScores(first: number, second: number): string {
 }
 
 describe("advisory best-of-N judge", () => {
-	it("admits only deterministic passes and redacts candidate material before the judge", async () => {
-		let captured: AdvisoryJudgeRequest | undefined;
-		const judge: AdvisoryJudge = async (request: AdvisoryJudgeRequest) => {
-			captured = request;
-			return validScores(2, 4);
-		};
-		const secret = `sk-${"x".repeat(24)}`;
-
-		const decision = await chooseWithAdvisoryJudge({
-			taskGoal: `Choose a patch; api_key=${secret}`,
-			judgeId: "reviewer-1",
-			judge,
-			rubric: RUBRIC,
-			candidates: [
-				{
-					id: "candidate-a",
-					deterministicRank: 1,
-					material: `safe A token=${secret}`,
-					evaluation: evaluation("a", "pass"),
-				},
-				{ id: "candidate-b", deterministicRank: 2, material: "safe B", evaluation: evaluation("b", "pass") },
-				{
-					id: "candidate-failed",
-					deterministicRank: 0,
-					material: "failed candidate",
-					evaluation: evaluation("f", "fail"),
-				},
-			],
-		});
-
-		expect(captured?.candidates.map((candidate: AdvisoryJudgeRequest["candidates"][number]) => candidate.id)).toEqual(
-			["candidate-a", "candidate-b"],
-		);
-		expect(captured?.candidates.every((candidate) => /^[a-f0-9]{64}$/u.test(candidate.evaluationSha256))).toBe(true);
-		expect(JSON.stringify(captured)).not.toContain(secret);
-		expect(JSON.stringify(captured)).toContain("[REDACTED]");
-		expect(decision).toMatchObject({
-			status: "selected",
-			reason: "judge-ranked",
-			source: "llm-judge",
-			selectedCandidateId: "candidate-b",
-			eligibleCandidateIds: ["candidate-a", "candidate-b"],
-		});
-		expect(decision.candidateScores).toEqual([
-			{ candidateId: "candidate-b", score: 4 },
-			{ candidateId: "candidate-a", score: 2 },
-		]);
-	});
-
 	it("falls back deterministically when the judge throws or returns malformed scores", async () => {
 		const candidates = [
 			{ id: "candidate-b", deterministicRank: 2, material: "B", evaluation: evaluation("b", "pass") },
@@ -223,15 +174,6 @@ describe("advisory best-of-N judge", () => {
 				candidates: [base, { ...base, id: "candidate-b", deterministicRank: 2, evaluation: otherTask }],
 			}),
 		).rejects.toThrow("one taskId");
-		await expect(
-			chooseWithAdvisoryJudge({
-				taskGoal: "Choose",
-				judgeId: "reviewer-1",
-				judge,
-				rubric: RUBRIC,
-				candidates: [{ ...base, id: `sk-${"x".repeat(24)}` }],
-			}),
-		).rejects.toThrow("candidate id is invalid");
 		expect(judge).not.toHaveBeenCalled();
 	});
 });

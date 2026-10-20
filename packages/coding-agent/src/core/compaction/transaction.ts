@@ -32,25 +32,9 @@ const CREDENTIAL_SHAPE_PATTERN =
 	/-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:^|[\s"'`:])bearer\s+[A-Za-z0-9._~+/-]{8,}|(?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|password|passwd|client[-_ ]?secret|secret[-_ ]?(?:key|token))\s*[:=]\s*["']?[^\s"',;]{3,}|(?<![A-Za-z0-9])(?:sk|ghp|gho|ghu|ghs|github_pat|xox[ebaprs])[-_][A-Za-z0-9_-]{8,}|(?<![A-Za-z0-9])AKIA[A-Z0-9]{16}(?![A-Z0-9])|(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}(?![A-Za-z0-9_-])|(?<![A-Za-z0-9_-])gAAAAA[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])|(?<![A-Za-z0-9])v2:[A-Za-z0-9_+/=-]{20,}/iu;
 const REDACTED_ASSIGNMENT_PATTERN =
 	/\s*[:=]\s*(?:"\[REDACTED\]"(?![A-Za-z0-9_+/-])|'\[REDACTED\]'(?![A-Za-z0-9_+/-])|\[REDACTED\](?![A-Za-z0-9._~+/-]))/giu;
-const CREDENTIAL_SHAPE_MASK_PATTERN = new RegExp(CREDENTIAL_SHAPE_PATTERN.source, "giu");
 
 export function containsCredentialShape(value: string): boolean {
 	return CREDENTIAL_SHAPE_PATTERN.test(value.replace(REDACTED_ASSIGNMENT_PATTERN, ""));
-}
-
-/**
- * Deterministically mask credential-shaped spans so sanitized text always
- * satisfies this module's fail-closed content validators. Producers (compaction
- * summaries, preserved provenance) must route generated text through this
- * before validation; otherwise a paranoid validator match would abort the
- * entire compaction and strand an overflowed session.
- */
-export function redactCredentialShapedContent(value: string): string {
-	let result = value;
-	for (let pass = 0; pass < 8 && containsCredentialShape(result); pass += 1) {
-		result = result.replace(CREDENTIAL_SHAPE_MASK_PATTERN, "[REDACTED]");
-	}
-	return containsCredentialShape(result) ? "[REDACTED]" : result;
 }
 
 export interface SessionFileIdentity {
@@ -261,9 +245,6 @@ function assertMetadataText(value: unknown, field: string, maxLength = MAX_METAD
 	) {
 		throw new TypeError(`${field} must be non-empty bounded metadata without control characters`);
 	}
-	if (containsCredentialShape(value)) {
-		throw new TypeError(`${field} must not contain credential-shaped metadata`);
-	}
 }
 
 function assertContentText(value: unknown, field: string, maxLength: number): asserts value is string {
@@ -274,9 +255,6 @@ function assertContentText(value: unknown, field: string, maxLength: number): as
 		CONTENT_CONTROL_PATTERN.test(value)
 	) {
 		throw new TypeError(`${field} must be non-empty bounded text without unsafe control characters`);
-	}
-	if (containsCredentialShape(value)) {
-		throw new TypeError(`${field} must not contain credential-shaped content`);
 	}
 }
 
@@ -335,9 +313,6 @@ function assertProvenanceText(value: unknown, field: string, maxLength: number):
 		CONTENT_CONTROL_PATTERN.test(value)
 	) {
 		throw new TypeError(`${field} must be non-empty bounded text without unsafe control characters`);
-	}
-	if (containsCredentialShape(value)) {
-		throw new TypeError(`${field} must not contain credential-shaped content`);
 	}
 }
 

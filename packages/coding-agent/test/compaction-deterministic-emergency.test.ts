@@ -122,19 +122,6 @@ describe("compactDeterministic", () => {
 		expect(result.summary).toContain("src/changed.ts");
 	});
 
-	it("redacts a credential-shaped reason instead of persisting it", () => {
-		// Assembled at runtime so the fixture never lands in source as a literal
-		// credential shape for the secret scanner to flag.
-		const fakeSecret = `sk-${"x".repeat(24)}`;
-		const result = compactDeterministic(
-			makePreparation(),
-			`provider rejected api_key=${fakeSecret} while summarizing`,
-		);
-
-		expect(result.summary).not.toContain(fakeSecret);
-		expect(details(result).deterministicReason).not.toContain(fakeSecret);
-	});
-
 	it("bounds an unreasonably long reason", () => {
 		const result = compactDeterministic(makePreparation(), "x".repeat(5000));
 

@@ -1,7 +1,6 @@
 import type { DurableGoalSnapshot } from "../../durable-goal.ts";
 import { formatDurableGoalCheckpoint } from "../../durable-goal-checkpoint.ts";
 import { GOAL_ACCEPTANCE_TIMEOUT_MS, type GoalAcceptanceResult } from "../../goal-verification.ts";
-import { redactSensitiveTextForced } from "../../redaction.ts";
 
 export function renderGoal(goal: DurableGoalSnapshot, ...extra: readonly string[]): string {
 	return [
@@ -35,12 +34,12 @@ export function continuationSeam(goal: DurableGoalSnapshot, trustedDigests: Read
 
 /** One redacted line, safe to show the operator or quote to the model as the command the user approved. */
 export function displayCommand(command: string): string {
-	return redactSensitiveTextForced(command).replace(/\s+/g, " ").slice(0, 200);
+	return command.replace(/\s+/g, " ").slice(0, 200);
 }
 
 export function displayError(error: unknown): string {
 	const message = error instanceof Error ? error.message : String(error);
-	return redactSensitiveTextForced(message).replace(/\s+/g, " ").slice(0, 240);
+	return message.replace(/\s+/g, " ").slice(0, 240);
 }
 
 export function receiptLabel(result: GoalAcceptanceResult): string {

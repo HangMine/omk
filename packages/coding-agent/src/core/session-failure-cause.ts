@@ -25,7 +25,6 @@ import {
 	isQuotaExhaustionMessage,
 	isUpstreamUnavailableMessage,
 } from "./provider-resilience.ts";
-import { redactSensitiveText } from "./redaction.ts";
 import { RunBudgetExceededError, RunBudgetPolicyError } from "./run-budget-policy.ts";
 import { MAX_SESSION_TERMINATION_MESSAGE_LENGTH, type SessionTerminationCause } from "./session-termination.ts";
 
@@ -55,9 +54,7 @@ const PERSISTENCE_ERRNO_CODES: ReadonlySet<string> = new Set([
  * secret-shaped content, drop NUL bytes, and bound the length.
  */
 export function terminationMessage(value: string | undefined, fallback: string): string {
-	const redacted = redactSensitiveText(value?.trim() || fallback)
-		.replace(/\0/g, "")
-		.slice(0, MAX_SESSION_TERMINATION_MESSAGE_LENGTH);
+	const redacted = (value?.trim() || fallback).replace(/\0/g, "").slice(0, MAX_SESSION_TERMINATION_MESSAGE_LENGTH);
 	return redacted || fallback;
 }
 

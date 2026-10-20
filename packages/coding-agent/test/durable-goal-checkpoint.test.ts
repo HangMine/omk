@@ -48,13 +48,13 @@ function checkpoint(current: DurableGoalSnapshot) {
 }
 
 describe("durable goal seam checkpoints", () => {
-	it("stores a redacted Goal/Core/Verified/Open/Next checkpoint with a bound digest", () => {
+	it("stores a Goal/Core/Verified/Open/Next checkpoint with a bound digest", () => {
 		const recorded = checkpoint(withEvidence());
 		const seam = recorded.checkpoint;
 
 		expect(seam).toMatchObject({
 			schemaVersion: "omk.goal.checkpoint.v1",
-			core: ["Deterministic gates remain authoritative", "api_key=[REDACTED]"],
+			core: ["Deterministic gates remain authoritative", `api_key=sk-${"x".repeat(24)}`],
 			verifiedEvidenceIds: ["focused-tests"],
 			open: ["Calibrate the advisory rubric"],
 			next: "Run the package quality gates",
@@ -64,7 +64,6 @@ describe("durable goal seam checkpoints", () => {
 		expect(seam?.digest).toMatch(/^[0-9a-f]{64}$/u);
 		expect(formatDurableGoalCheckpoint(recorded)).toContain("Goal: Ship the verifier");
 		expect(formatDurableGoalCheckpoint(recorded)).toContain("Verified: focused-tests");
-		expect(JSON.stringify(recorded)).not.toContain(`sk-${"x".repeat(24)}`);
 	});
 
 	it("keeps the prior seam across a round boundary and clears it when the goal definition changes", () => {
