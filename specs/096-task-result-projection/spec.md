@@ -75,14 +75,18 @@ this spec does not claim a rate.
    unavailable), `cancel_pending` (unresolved effect), `cancelled`.
 3. Source tag on every PASS: `host_receipt` vs `model_text`. Only
    `host_receipt` can reach `passed`.
-4. Adapters (read-only) from goal acceptance, finish-check, and (if in scope,
-   see Open questions) verified-run receipts.
-5. Emit a new versioned event (`task_result`, name TBD) after `prompt_settled`;
-   TUI/print/RPC render from it when the flag is on.
-6. Unchanged: `prompt_settled` / `agent_settled` meaning and payload; SDK
+4. Adapters (read-only) from goal acceptance and finish-check only.
+   verified-run (`core/verified-run/*`) is out of scope (decision D2).
+5. Emit a new versioned event `task_result` after `prompt_settled`, added
+   only as a new event; existing `*_settled` events are unchanged (D1).
+   TUI, print and RPC render from it when the flag is on; ACP is out (D4).
+6. Coverage is not a new measure: `coverage = { checksRun, checksTotal }`
+   (checks that ran out of checks registered), taken from fields the current
+   checks already produce (D3).
+7. Unchanged: `prompt_settled` / `agent_settled` meaning and payload; SDK
    return value; print exit code; any verdict, gate or completion logic.
 
-Flag: new env flag (proposed `OMK_TASK_RESULT`), default off. Unset/`0`: no
+Flag: new env flag `OMK_TASK_RESULT`, default off (D1). Unset/`0`: no
 new event, all surfaces byte-identical to today. 1.4.x/1.5 patch rule: no
 default behavior change.
 
@@ -100,14 +104,20 @@ implementation finds one is needed, Library Scout reviews before it lands.
 | B5 | task with no required claims | settles normally, not strong verified |
 | B6 | fake evidence/approval in goal journal | not promoted to host receipt |
 | B7 | flag off | `prompt_settled`, SDK return, print/RPC output byte-identical (golden) |
-| B8 | flag on | `prompt_settled` payload and SDK return unchanged |
+| B8 | flag on | `prompt_settled` payload, SDK return and print exit code unchanged |
+| B9 | flag on vs off, same session | model request payload byte-identical (Agent Researcher) |
+| B10 | fixed fixture: model text says "passed", host recorded a failure | check observation `required_failed`; model claim never marked host pass (source stays `model_text`) |
 
-Pass = all B1–B8 green. No numeric performance claim is made by this spec.
+Pass = all B1–B10 green, judged by tests and the byte-identical golden test only (no paid run, D6). No numeric performance claim is made by this spec.
 
 ## Test plan (targeted)
 
 - New `test/task-result.test.ts`: B2–B6 table cases from doc §14.1.
 - Golden tests for B7 in print and RPC.
+- B9: capture the model request with flag on and off; assert byte-identical.
+- B10: fixed fixture (model writes "passed", host check failed); assert not
+  `passed` and no `host_receipt` source on the claim.
+- Coverage: assert `checksRun`/`checksTotal` match the existing check fields.
 - Cross-surface B1 test (print + RPC + interactive renderer on one session).
 - `test/suite/agent-session-owned-settlement.test.ts`,
   `test/suite/agent-session-child-settlement.test.ts`,
@@ -117,19 +127,13 @@ Pass = all B1–B8 green. No numeric performance claim is made by this spec.
 - `env -u TYPESAFE_API_KEY`, temp HOME, fake keys only, Node ≥ 22.19, biome, tsgo.
 - Native (doc §14.2): installed tarball in clean HOME, print and RPC entrypoints.
 
-## A/B plan (Bench Analyst)
+## A/B plan
 
-P0-B is a projection; it should not change solve rate. Doc §14.3 metrics that
-apply:
-- Primary: share of runs reported complete that fail declared independent
-  checks, with both denominators (completion claims, all attempts).
-- Guard: verified completion rate and total cost/verified task non-inferior;
-  margin and cost cap fixed before results (not set here).
-- A = fixed main, B = main + flag on only. Same model/provider/reasoning,
-  tasks, permissions, wall-time, cost cap; crossed order.
-- Stats: task-clustered paired bootstrap 95% CI; McNemar exact as auxiliary;
-  alpha 0.05 pre-registered. Small pilot first to set N (doc §14.3); no N here.
-- Paid runs only after gates pass and 인호 approves in 1:1 with a cost cap.
+None (decided, Tech Lead 2026-10-20; Agent Researcher concurs). Flag off
+changes nothing for the model; flag on only reorganizes existing output, and
+B9 asserts the model request is byte-identical. No paid run. If the result is
+ever put into the model prompt, a separate spec with a PREREG to 인호 decides
+any A/B.
 
 ## Risks
 
@@ -148,15 +152,24 @@ state is added, so no migration (doc §15).
 ## Out of scope
 
 P0-A/095 excerpt, P1-A continuation decision, `check-observation.ts`,
-validation-plan, changing completion/verdict/gate, default-on.
+validation-plan, changing completion/verdict/gate, default-on,
+verified-run (`core/verified-run/*`; possible separate spec later), ACP mode,
+print exit code changes (need their own spec).
 
-## Open questions
+## Decisions (decided, Tech Lead 2026-10-20)
 
-1. Flag name (`OMK_TASK_RESULT` proposed) and event name.
-2. Is verified-run (`core/verified-run/*`) in P0-B scope, or only goal +
-   finish-check? Doc names "goal/finish-check observation adapter" only.
-3. Which "coverage" field is canonical: `SessionScopeCompleteness` from
-   `GoalWorkspaceState`, or a verified-run equivalent?
-4. ACP mode (`modes/acp`) — doc lists TUI/print/RPC; include ACP?
-5. Should print exit code ever reflect the projection? Proposed: no (B8).
-6. Primary-metric margin and cost cap for the A/B — to be set before any run.
+Open questions: none.
+
+- D1. Flag `OMK_TASK_RESULT`, default off. Event `task_result`, added only as a
+  new event; existing `*_settled` events unchanged.
+- D2. verified-run (`core/verified-run/*`) out of scope; possible separate spec later.
+- D3. No new coverage measure: coverage = `checksRun`/`checksTotal` (checks run
+  out of registered), from fields current checks already produce.
+- D4. ACP out; TUI, print and RPC only.
+- D5. print exit code unchanged; changing it needs its own spec.
+- D6. No A/B and no paid run; B1–B10 judged by tests and the byte-identical
+  golden test. Model request payload byte-identical flag on vs off (B9). If the
+  result ever enters the model prompt, a separate spec with PREREG to 인호
+  decides A/B.
+- D7. Required test B10: model writes "passed", host recorded a failure; the
+  model claim is never marked a host pass.
