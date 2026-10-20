@@ -237,15 +237,14 @@ const MODEL_ZERO_FAIL =
 
 /**
  * A free-text model claim, if the text makes one. Kept as `model_text` whatever it quotes.
- * Zero-count failure phrases are not failures. Mixed or zero-count-only text is `unknown`:
- * `passed` needs an explicit pass phrase and no remaining failure phrase.
+ * Zero-count failure phrases are not failures; any remaining (nonzero) failure phrase is `failed`,
+ * even next to a pass phrase. `passed` needs an explicit pass phrase; zero-count-only text is `unknown`.
  */
 export function claimFromModelText(text: string): TaskModelClaim | undefined {
 	const hasZeroFail = new RegExp(MODEL_ZERO_FAIL.source, "i").test(text);
 	const rest = text.replace(MODEL_ZERO_FAIL, " ");
 	const fail = MODEL_FAIL.test(rest);
 	const pass = MODEL_PASS.test(rest);
-	if (fail && (pass || hasZeroFail)) return { source: "model_text", says: "unknown", text: boundClaim(text) };
 	if (fail) return { source: "model_text", says: "failed", text: boundClaim(text) };
 	if (pass) return { source: "model_text", says: "passed", text: boundClaim(text) };
 	if (hasZeroFail) return { source: "model_text", says: "unknown", text: boundClaim(text) };

@@ -221,15 +221,8 @@ describe("task-result projection", () => {
 		}
 	});
 
-	it("zero-count failure phrases alone or mixed signals -> unknown", () => {
-		for (const text of [
-			"0 failed",
-			"0 errors",
-			"no failures",
-			"0 failing",
-			"3 passed, 1 failed",
-			"0 errors but 2 tests failed",
-		]) {
+	it("zero-count failure phrases alone -> unknown", () => {
+		for (const text of ["0 failed", "0 errors", "no failures", "0 failing"]) {
 			expect(claimFromModelText(text)?.says, text).toBe("unknown");
 		}
 	});
@@ -237,6 +230,16 @@ describe("task-result projection", () => {
 	it("a real failure phrase still reads as failed", () => {
 		expect(claimFromModelText("2 tests failed")?.says).toBe("failed");
 		expect(claimFromModelText("FAIL src/a.test.ts")?.says).toBe("failed");
+		expect(claimFromModelText("3 passed, 1 failed")?.says).toBe("failed");
+		expect(claimFromModelText("0 errors but 2 tests failed")?.says).toBe("failed");
+	});
+
+	it("'0 failed, 12 passed' -> passed", () => {
+		expect(claimFromModelText("0 failed, 12 passed")?.says).toBe("passed");
+	});
+
+	it("'1 failed' -> failed", () => {
+		expect(claimFromModelText("1 failed")?.says).toBe("failed");
 	});
 
 	it("B10 still holds: model says passed, host failed -> required_failed, claim from model_text", () => {
