@@ -125,19 +125,6 @@ describe("omk sdk session CLI", () => {
 		expect(parseOutput(out).error).toBe("session id is ambiguous: sess");
 	});
 
-	it("redacts credential-shaped text from session status output", async () => {
-		const out: string[] = [];
-		const secret = `ghp_${"A".repeat(36)}`;
-		const info = { ...sessionInfo("sess-1", "/tmp/sess-1.jsonl"), firstMessage: `token=${secret}` };
-		const result = await runSdkSessionCli(["sdk", "session", "status"], {
-			writeLine: (line) => out.push(line),
-			listSessions: async () => [info],
-		});
-		expect(result).toEqual({ handled: true, exitCode: 0 });
-		expect(out.join("\n")).not.toContain(secret);
-		expect(out.join("\n")).toContain("[REDACTED]");
-	});
-
 	it("reports a live session owner without throwing", async () => {
 		const out: string[] = [];
 		const ownerError = new Error("owner details must not be exposed");

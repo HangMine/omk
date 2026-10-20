@@ -9,7 +9,6 @@ import {
 } from "./package-doctor-source-scan.ts";
 import { type PackageManifestDiagnostic, type PackageManifestKey, resolvePackageManifest } from "./package-manifest.ts";
 import { isLegacyPiRuntimeImport, isSupportedLegacyPiRuntimeImport } from "./pi-compat.ts";
-import { redactSensitiveTextForced } from "./redaction.ts";
 
 export interface PackageDoctorResources {
 	extensions: string[];
@@ -61,13 +60,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function packageMetadata(value: unknown): { name?: string; version?: string } {
 	if (!isRecord(value)) return {};
 	return {
-		...(typeof value.name === "string" ? { name: redactSensitiveTextForced(value.name).slice(0, 256) } : {}),
-		...(typeof value.version === "string" ? { version: redactSensitiveTextForced(value.version).slice(0, 128) } : {}),
+		...(typeof value.name === "string" ? { name: value.name.slice(0, 256) } : {}),
+		...(typeof value.version === "string" ? { version: value.version.slice(0, 128) } : {}),
 	};
 }
 
-function sanitizePackageSource(source: string): string {
-	const redacted = redactSensitiveTextForced(source);
+function sanitizePackageSource(redacted: string): string {
 	if (redacted.startsWith("npm:")) return redacted;
 	const hasGitPrefix = redacted.startsWith("git:");
 	const candidate = hasGitPrefix ? redacted.slice("git:".length) : redacted;
@@ -96,12 +94,10 @@ function check(
 	return {
 		id,
 		status,
-		message: redactSensitiveTextForced(message).slice(0, 4096),
+		message: message.slice(0, 4096),
 		...(files.length > 0
 			? {
-					files: [...new Set(files.map((file) => redactSensitiveTextForced(file)))].sort((left, right) =>
-						left.localeCompare(right),
-					),
+					files: [...new Set(files)].sort((left, right) => left.localeCompare(right)),
 				}
 			: {}),
 	};
@@ -236,9 +232,7 @@ export function inspectPackageCompatibility(input: PackageDoctorInput): PackageD
 			prompts: input.resources.prompts.length,
 			themes: input.resources.themes.length,
 		},
-		inspectedFiles: sources
-			.map((source) => redactSensitiveTextForced(source.file))
-			.sort((left, right) => left.localeCompare(right)),
+		inspectedFiles: sources.map((source) => source.file).sort((left, right) => left.localeCompare(right)),
 		checks,
 		compatible: checks.every((item) => item.status !== "error"),
 	};

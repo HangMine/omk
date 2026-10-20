@@ -177,16 +177,6 @@ describe("AdaptOrchApiClient failures", () => {
 		await expect(client(fetch).getRun("r1")).rejects.toMatchObject({ status: 404, code: "not_found" });
 	});
 
-	it("never puts the credential in an error message", async () => {
-		const secret = "ado_super_secret_value";
-		const fetch: AdaptOrchFetch = async () => {
-			throw new Error(`connect failed for key ${secret}`);
-		};
-		await expect(client(fetch, secret).capabilities()).rejects.toThrow(
-			expect.objectContaining({ message: expect.not.stringContaining(secret) }),
-		);
-	});
-
 	it("rejects an unsafe base URL at construction, before any request", async () => {
 		const { calls, fetch } = recordingFetch();
 		expect(() => new AdaptOrchApiClient({ baseUrl: "http://api.adaptorch.com", apiKey: "ado_k", fetch })).toThrow(

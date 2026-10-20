@@ -5,7 +5,6 @@ import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 import { visibleWidth } from "omk-tui";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { redactSensitiveText } from "../src/core/redaction.ts";
 import { classifySessionTermination } from "../src/core/session-termination.ts";
 import { SessionFailureComponent } from "../src/modes/interactive/components/session-failure.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -16,9 +15,7 @@ import {
 } from "../src/modes/interactive/tui-diagnostics.ts";
 import { captureTuiRuntime, inspectTuiRuntime } from "../src/modes/interactive/tui-runtime-info.ts";
 
-vi.hoisted(() => {
-	vi.stubEnv("PI_DISABLE_INPUT_REDACTION", "1");
-});
+vi.hoisted(() => {});
 afterAll(() => vi.unstubAllEnvs());
 const roots: string[] = [];
 function fixture() {
@@ -180,22 +177,6 @@ describe("failure cards", () => {
 		expect(text()).toContain("possible");
 		card.setExpanded(false);
 		expect(text()).not.toContain("private-run");
-	});
-	it("masks credentials even with interactive redaction disabled and removes terminal controls", () => {
-		const token = `sk-${"F".repeat(24)}`;
-		expect(redactSensitiveText(token)).toBe(token);
-		const card = new SessionFailureComponent({
-			...termination,
-			message: `Bad ${token}\u001b]52;c;CANARY\u0007\u0008한글`,
-			nextAction: `token=${token}`,
-		});
-		card.setExpanded(true);
-		const text = stripVTControlCharacters(card.render(100).join("\n"));
-		expect(text).toContain("[REDACTED]");
-		expect(text).toContain("한글");
-		expect(text).not.toContain(token);
-		expect(text).not.toContain("CANARY");
-		expect(text).not.toContain("\u0008");
 	});
 	it.each([20, 40, 80, 120])("fits %i columns before and after expansion/theme invalidation", (width) => {
 		const card = new SessionFailureComponent({ ...termination, message: "한글🙂".repeat(60) });

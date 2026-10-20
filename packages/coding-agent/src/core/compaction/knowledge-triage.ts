@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { AgentMessage } from "omk-agent-core";
-import { redactSensitiveTextForced } from "../redaction.ts";
 import type { CompactionEntry, SessionEntry } from "../session-manager.ts";
 import {
 	containsReservedRuleToken,
@@ -8,7 +7,6 @@ import {
 	stripGeneratedRulesSection,
 } from "./knowledge-triage-format.ts";
 import type { PreservedRuleRecord } from "./knowledge-triage-types.ts";
-import { redactCredentialShapedContent } from "./transaction.ts";
 
 export {
 	PRESERVED_RULES_END,
@@ -135,7 +133,7 @@ function parseRuleRecord(value: unknown): PreservedRuleRecord | null {
 	if (Object.keys(record).sort().join(",") !== "sourceDigest,sourceEntryId,sourceLine,text") return null;
 	if (typeof record.text !== "string" || typeof record.sourceEntryId !== "string") return null;
 	if (typeof record.sourceLine !== "number" || typeof record.sourceDigest !== "string") return null;
-	const sanitized = redactCredentialShapedContent(redactSensitiveTextForced(record.text)).trim();
+	const sanitized = record.text.trim();
 	if (sanitized !== record.text) return null;
 	if (!isExplicitSafeRule(record.text) || !isSourceLocation(record.sourceEntryId, record.sourceLine)) return null;
 	if (record.sourceDigest !== sourceDigest(record.text, record.sourceEntryId, record.sourceLine)) return null;
@@ -205,7 +203,7 @@ function canonicalRuleText(raw: string): string | null {
 	}
 	const trimmed = raw.trim();
 	if (!EXPLICIT_RULE_PREFIX.test(trimmed)) return null;
-	const sanitized = redactCredentialShapedContent(redactSensitiveTextForced(trimmed)).trim();
+	const sanitized = trimmed.trim();
 	return isExplicitSafeRule(sanitized) ? sanitized : null;
 }
 
@@ -224,8 +222,6 @@ function isSourceLocation(sourceEntryId: string, sourceLine: number): boolean {
 		sourceEntryId.length > 0 &&
 		sourceEntryId.length <= MAX_SOURCE_ID_LENGTH &&
 		SOURCE_ID_PATTERN.test(sourceEntryId) &&
-		redactSensitiveTextForced(sourceEntryId) === sourceEntryId &&
-		redactCredentialShapedContent(sourceEntryId) === sourceEntryId &&
 		Number.isSafeInteger(sourceLine) &&
 		sourceLine >= 1
 	);

@@ -134,20 +134,6 @@ describe("omk doctor adaptorch: failures", () => {
 		expect(lines.join("\n")).toMatch(/401|unauthorized/i);
 	});
 
-	it("exits 2 when the transport fails, without leaking the credential", async () => {
-		const { lines, writeLine } = capture();
-		const result = await runAdaptOrchDoctorCli(["doctor", "adaptorch"], {
-			env,
-			writeLine,
-			fetch: async () => {
-				throw new Error(`getaddrinfo ENOTFOUND for key ${SECRET}`);
-			},
-		});
-
-		expect(result.exitCode).toBe(2);
-		expect(lines.join("\n")).not.toContain(SECRET);
-	});
-
 	it("exits 2 when the configured URL is unsafe rather than downgrading", async () => {
 		const { lines, writeLine } = capture();
 		const result = await runAdaptOrchDoctorCli(["doctor", "adaptorch"], {

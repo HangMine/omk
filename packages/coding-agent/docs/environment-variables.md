@@ -84,8 +84,6 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `OMK_TRUST_PROJECT_MCP` | `1` trusts a project's `.omk/mcp.json` servers without asking; separate from `OMK_TRUST_PROJECT`. See [MCP](mcp.md) |
 | `OMK_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `OMK_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
-| `PI_DISABLE_INPUT_REDACTION` | Stop masking credentials on the way to the model and the session. Persistence and report boundaries still mask |
-| `OMK_DISABLE_REDACTION` | Alias for the input-redaction opt-out when `PI_DISABLE_INPUT_REDACTION` is unset. Only `1`/`true`/`yes`/`on` enable it. Forced persistence/report redaction remains active; this does not disable masking everywhere |
 | `OMK_HARDWARE_CURSOR` | Set to `1` to show the hardware cursor; see [Terminal setup](terminal-setup.md) |
 | `OMK_SCROLLBACK_SCREENS` | Transcript history screens rendered above the live tail on session load/rebuild. `0` renders only the live tail. Blank or non-finite values use default 50; negatives clamp to zero and fractions are floored. A finite `terminal.scrollbackSeedScreens` setting takes precedence. Skipped prefix children still undergo identity checks; the complete exit log is rendered separately |
 | `OMK_CONTEXT_GOVERNOR` | Context Budget V2 process override: `1` forces it on and `0` forces it off; otherwise the global `contextBudget.enabled` setting applies |

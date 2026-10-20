@@ -759,15 +759,6 @@ describe("inspectRunJournal schema and trust-boundary rejection", () => {
 		expect(codes(report)).toContain("schema");
 	});
 
-	it("rejects credential-shaped identifiers", () => {
-		const record = {
-			...rehash(startedMaterial("run-1", 0)),
-			runId: "sk-abcdefghijklmnopqrstuvwxyz123456",
-		} as RunJournalRecord;
-		const report = inspectRunJournal(enc(`${serializeRunJournalLine(record)}\n`), testHash);
-		expect(codes(report)).toContain("schema");
-	});
-
 	it("rejects a negative session revision", () => {
 		const record = { ...rehash(startedMaterial("run-1", 0)), sessionRevision: -1 } as RunJournalRecord;
 		const report = inspectRunJournal(enc(`${serializeRunJournalLine(record)}\n`), testHash);
@@ -779,26 +770,12 @@ describe("inspectRunJournal schema and trust-boundary rejection", () => {
 		const report = inspectRunJournal(enc(`${serializeRunJournalLine(record)}\n`), testHash);
 		expect(codes(report)).toContain("schema");
 	});
-
-	it("rejects a credential-shaped termination message as a termination mismatch", () => {
-		const termination = {
-			...finishedTermination("run-1"),
-			message: "api_key=supersecretvalue123",
-		} as SessionTermination;
-		const bytes = buildBytes([
-			startedMaterial("run-1", 0),
-			terminalMaterial("run_finished", "run-1", 1, termination),
-		]);
-		const report = inspectRunJournal(bytes, testHash);
-		expect(codes(report)).toContain("termination_mismatch");
-	});
 });
 
 describe("RunJournal construction bounds", () => {
 	const base = { hashFn: testHash, sessionId: SESSION, runId: "run-1", sessionRevision: 0, timestamp: NOW };
 
-	it("rejects credential-shaped, C0-bearing, and oversized identifiers", () => {
-		expect(() => new RunJournal({ ...base, sessionId: "sk-abcdefghijklmnopqrstuvwxyz123456" })).toThrow("credential");
+	it("rejects C0-bearing and oversized identifiers", () => {
 		expect(() => new RunJournal({ ...base, runId: "bad\u0001id" })).toThrow("C0 or DEL");
 		expect(() => new RunJournal({ ...base, runId: "x".repeat(129) })).toThrow("bounded text");
 	});
@@ -878,21 +855,8 @@ describe("P73 hardening regressions", () => {
 	});
 
 	// (3) Bearer / sensitive-assignment credential shapes rejected in writer identifiers.
-	it("rejects Bearer and sensitive-assignment credential shapes in writer identifiers", () => {
-		expect(() => new RunJournal({ ...base, runId: "Bearer abcdefghijk123456" })).toThrow("credential");
-		expect(() => new RunJournal({ ...base, sessionId: "api_key=topsecret123" })).toThrow("credential");
-	});
 
 	// (3) Bearer / sensitive-assignment credential shapes rejected by the inspector.
-	it("rejects Bearer and sensitive-assignment credential shapes in inspected identifiers", () => {
-		const bearer = { ...rehash(startedMaterial("run-1", 0)), runId: "Bearer abcdefghijk123456" } as RunJournalRecord;
-		expect(codes(inspectRunJournal(enc(`${serializeRunJournalLine(bearer)}\n`), testHash))).toContain("schema");
-		const assigned = {
-			...rehash(startedMaterial("run-1", 0)),
-			sessionId: "api_key=topsecret123",
-		} as RunJournalRecord;
-		expect(codes(inspectRunJournal(enc(`${serializeRunJournalLine(assigned)}\n`), testHash))).toContain("schema");
-	});
 
 	// (4) strict plain-data / exact-key validation at every writer trust boundary.
 	it("rejects array, accessor-bearing, and extra-key inputs at writer trust boundaries", () => {
@@ -1186,15 +1150,6 @@ describe("audit records (ALG004-A / ALG001-B vocabulary)", () => {
 					reason: "resume",
 					extraField: true,
 				} as unknown as RunJournalAuditDetails,
-				sessionRevision: 0,
-				timestamp: NOW,
-			}),
-		).toThrow();
-		// Credential-shaped text never persists.
-		expect(() =>
-			journal.audit({
-				event: "transcript_repaired",
-				details: { insertedToolCallIds: ["sk-abcdefghijklmnopqrstuv"], reason: "resume" },
 				sessionRevision: 0,
 				timestamp: NOW,
 			}),

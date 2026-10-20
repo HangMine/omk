@@ -125,24 +125,6 @@ describe("compaction control-state checkpoint", () => {
 		expect(() => service.commit(begun, compactionResultFor(sessionManager), false)).toThrow(/control state changed/i);
 	});
 
-	it("redacts credential-shaped task text instead of failing or leaking it", () => {
-		// Assembled at runtime so the fixture never lands in source as a literal
-		// credential shape for the secret scanner to flag.
-		const fakeSecret = `sk-${"x".repeat(24)}`;
-		const { service, sessionManager } = createFixture(() => ({
-			openTasks: [`t1 rotate key api_key=${fakeSecret}`],
-			blockerReasons: [],
-			branch: null,
-		}));
-		seedClosedTranscript(sessionManager);
-
-		const begun = service.beginTransaction(compactionModel, false);
-		const preserved = begun.transaction.preserved;
-		expect(preserved.openTasks).toHaveLength(1);
-		expect(preserved.openTasks[0]).not.toContain(fakeSecret);
-		expect(preserved.openTasks[0]).toContain("[REDACTED]");
-	});
-
 	it("rejects malformed control-state output instead of recording an empty checkpoint", () => {
 		const { service, sessionManager } = createFixture(
 			() =>

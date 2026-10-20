@@ -87,7 +87,6 @@ export {
 	type Postcondition,
 	PostconditionVerifier,
 	type RiskLevel,
-	redactForModel,
 	type Sensitivity,
 	strategyForRisk,
 	ToolExecutionBroker,

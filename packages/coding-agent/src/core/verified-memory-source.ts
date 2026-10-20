@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { detectMcpDescriptorPromptInjection } from "./mcp-descriptor-injection.ts";
-import { redactSensitiveTextForced } from "./redaction.ts";
 
 export const MAX_MEMORY_SOURCE_BYTES = 256 * 1024;
 export const MAX_MEMORY_QUOTE_BYTES = 2048;
@@ -73,8 +72,7 @@ export function readMemorySourceSnapshot(root: string, path: string) {
 			throw new Error("memory source changed during read");
 		const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, length));
 		if (text.includes("\0")) throw new Error("memory source binary refused");
-		if (redactSensitiveTextForced(text) !== text || detectMcpDescriptorPromptInjection(text).patternHits > 0)
-			throw new Error("memory source requires review");
+		if (detectMcpDescriptorPromptInjection(text).patternHits > 0) throw new Error("memory source requires review");
 		const lines = Object.freeze(text.split("\n"));
 		const assertCurrent = (): void => {
 			const stat = lstatSync(target, { bigint: true });

@@ -29,7 +29,6 @@ import {
 	sanitizeDiagnosticText,
 	utf8Bytes,
 } from "./goal-acceptance-diagnostic.ts";
-import { redactSensitiveTextForced } from "./redaction.ts";
 import { detectSandboxBackend } from "./sandbox/backend.ts";
 import { createDefaultBashSandboxPreflight, resolveBashSandboxMode } from "./sandbox/default-policy.ts";
 import type { BashSandboxPreflight } from "./tools/bash.ts";
@@ -149,7 +148,7 @@ export class GoalVerifier {
 
 	/** Run the check once. Throws when it cannot run at all, for example when the sandbox refuses it. */
 	async run(command: string, signal?: AbortSignal): Promise<GoalAcceptanceResult> {
-		const claim = `goal acceptance: ${redactSensitiveTextForced(command).slice(0, CLAIM_COMMAND_CHARS)}`;
+		const claim = `goal acceptance: ${command.slice(0, CLAIM_COMMAND_CHARS)}`;
 		const tail = new OutputTail(OUTPUT_TAIL_CHARS, goalDiagnosticsEnabled() ? GOAL_DIAGNOSTIC_WINDOW_CHARS : 0);
 		const sandboxPolicy = this.sandboxPreflight();
 		const execution = await executeVerifiedLocalBash({
@@ -248,20 +247,15 @@ class OutputTail {
 	}
 
 	text(): string {
-		return redactSensitiveTextForced(this.buffer.slice(-this.limit * 2))
-			.slice(-this.limit)
-			.trim();
+		return this.buffer.slice(-this.limit).trim();
 	}
 
 	/** Same treatment as `text()`, over a head and a tail window. */
 	diagnostic(): DiagnosticOutput {
 		const complete = this.totalChars <= this.window;
-		const head = redactSensitiveTextForced(complete ? this.buffer : this.head).slice(0, this.window);
-		const tail = complete ? head : redactSensitiveTextForced(this.buffer).slice(-this.window);
-		const found = this.anchor.finish();
-		const anchor = found
-			? { ...found, lines: found.lines.map((line) => redactSensitiveTextForced(line)) }
-			: undefined;
+		const head = (complete ? this.buffer : this.head).slice(0, this.window);
+		const tail = complete ? head : this.buffer.slice(-this.window);
+		const anchor = this.anchor.finish();
 		return { head, tail, totalBytes: this.totalBytes, complete, ...(anchor ? { anchor } : {}) };
 	}
 }

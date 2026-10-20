@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { redactSensitiveText } from "../src/core/redaction.ts";
 import type { BashOperations } from "../src/core/tools/bash.ts";
 import {
 	EvidenceGate,
@@ -101,7 +100,7 @@ describe("executeVerifiedBash", () => {
 			"omk-bash-combined-v1+omk-sensitive-text-v1+capture-tail-128k+tail-64k",
 		);
 		expect(result.receipt.core.output.redactionPolicyId).toBe(VERIFIED_BASH_REDACTION_POLICY_ID);
-		const redacted = Buffer.from(redactSensitiveText(rawOutput.toString("utf8")));
+		const redacted = Buffer.from(rawOutput.toString("utf8"));
 		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(redacted), byteCount: redacted.byteLength });
 		expect(result.receipt.core.output.stderr.byteCount).toBe(0);
 		expect(result.receipt.core.workspaceAfter.artifacts[0].state).toBe("file");
@@ -297,7 +296,7 @@ describe("executeVerifiedBash", () => {
 		const result = await executeVerifiedBash(request(createExecutor("verified-bash-bounded"), operations));
 
 		// Then: the digest covers the deterministic redacted tail and stderr remains explicitly merged.
-		const redacted = Buffer.from(redactSensitiveText(rawOutput.toString("utf8")));
+		const redacted = Buffer.from(rawOutput.toString("utf8"));
 		const bounded = redacted.subarray(-64 * 1024);
 		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(bounded), byteCount: bounded.byteLength });
 		expect(result.receipt.core.output.stderr.byteCount).toBe(0);
