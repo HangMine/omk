@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- `getEnvApiKey("typesafe")` reads `TYPESAFE_API_KEY`.
+- `DEFAULT_THINKING_BUDGETS` is exported from the package entry point.
+
+### Changed
+
+- The model catalog was regenerated with refresh values pinned to verified entries.
+
 ## [1.5.3] - 2026-10-19
 
 ### Changed

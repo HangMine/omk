@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Lockstep version alignment with OMK 1.5.4. No functional changes in this package.
+
 ## [1.5.3] - 2026-10-19
 
 ### Changed
