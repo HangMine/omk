@@ -5513,12 +5513,7 @@ export class InteractiveMode {
 	}
 
 	private showBedrockSetupDialog(providerId: string, providerName: string): void {
-		const restoreEditor = () => {
-			this.editorContainer.clear();
-			this.editorContainer.addChild(this.editor);
-			this.ui.setFocus(this.editor);
-			this.ui.requestRender();
-		};
+		const restoreEditor = this.dialogHost.restoreEditor;
 
 		const dialog = new LoginDialogComponent(
 			this.ui,
@@ -5534,11 +5529,24 @@ export class InteractiveMode {
 			theme.fg("accent", `  ${path.join(getDocsPath(), "providers.md")}`),
 		]);
 
-		this.editorContainer.clear();
-		this.editorContainer.addChild(dialog);
-		this.ui.setFocus(dialog);
-		this.ui.requestRender();
+		this.dialogHost.show(dialog);
 	}
+
+	/** Swap the editor for a dialog and back; shared by the login dialogs. */
+	private readonly dialogHost = {
+		show: (component: Component) => {
+			this.editorContainer.clear();
+			this.editorContainer.addChild(component);
+			this.ui.setFocus(component);
+			this.ui.requestRender();
+		},
+		restoreEditor: () => {
+			this.editorContainer.clear();
+			this.editorContainer.addChild(this.editor);
+			this.ui.setFocus(this.editor);
+			this.ui.requestRender();
+		},
+	};
 
 	private async showApiKeyLoginDialog(providerId: string, providerName: string): Promise<void> {
 		const previousModel = this.session.model;
@@ -5552,17 +5560,9 @@ export class InteractiveMode {
 			providerName,
 		);
 
-		this.editorContainer.clear();
-		this.editorContainer.addChild(dialog);
-		this.ui.setFocus(dialog);
-		this.ui.requestRender();
+		this.dialogHost.show(dialog);
 
-		const restoreEditor = () => {
-			this.editorContainer.clear();
-			this.editorContainer.addChild(this.editor);
-			this.ui.setFocus(this.editor);
-			this.ui.requestRender();
-		};
+		const restoreEditor = this.dialogHost.restoreEditor;
 
 		try {
 			const apiKey = (await dialog.showPrompt("Enter API key:")).trim();
@@ -5631,10 +5631,7 @@ export class InteractiveMode {
 		);
 
 		// Show dialog in editor container
-		this.editorContainer.clear();
-		this.editorContainer.addChild(dialog);
-		this.ui.setFocus(dialog);
-		this.ui.requestRender();
+		this.dialogHost.show(dialog);
 
 		// Promise for manual code input (racing with callback server)
 		let manualCodeResolve: ((code: string) => void) | undefined;
@@ -5645,12 +5642,7 @@ export class InteractiveMode {
 		});
 
 		// Restore editor helper
-		const restoreEditor = () => {
-			this.editorContainer.clear();
-			this.editorContainer.addChild(this.editor);
-			this.ui.setFocus(this.editor);
-			this.ui.requestRender();
-		};
+		const restoreEditor = this.dialogHost.restoreEditor;
 
 		try {
 			await this.session.modelRegistry.authStorage.login(providerId as OAuthProviderId, {
