@@ -47,7 +47,14 @@ Context: the 092 free gate is FAIL at G2 before measuring (hubs over 25 skills).
 - Exactly one run. No retries of the whole run. Per-call failures are recorded as unavailable (no attach); no substitute.
 - No cleanup or delete step in the run command; chain with `&&`.
 - Raw output on the box only, mode 600: `/workspace/omk-eval-092/paid-all217-raw.json`. No sentence text or key in logs or the room; aggregates only.
-- Key: 인호 provides it in 1:1 by env var only; never written to disk or logs.
+- Key: see Security.
+
+## Security
+
+- The TypeSafe key that was previously exposed in the room is never used for this run.
+- Only the replacement key that 인호 provided via masked 1:1 input is used, read at run time from the env var `TYPESAFE_API_KEY`.
+- The key value never appears in this PREREG, in logs, in result files, or in commits.
+- No new dependencies: plain `fetch` only.
 
 ## Risks
 
