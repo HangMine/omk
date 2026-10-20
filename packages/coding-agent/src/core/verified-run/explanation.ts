@@ -26,7 +26,7 @@ export interface RunExplanation {
 
 /** One journal snapshot supplies every projection; no writer, verifier or recovery is dispatched. */
 export function readRunExplanation(runPath: string, runId: string, authority: AuthorityStatus): RunExplanation {
-	const journal = readRunJournal(runPath);
+	const journal = readRunJournal(runPath, { mode: "reader" });
 	const first = journal?.records[0]?.event;
 	if (!journal || first?.kind !== "created" || journal.state.runId !== runId)
 		throw new VerifiedRunError("missing_run");
