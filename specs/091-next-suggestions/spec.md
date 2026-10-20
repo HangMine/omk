@@ -266,7 +266,7 @@ the PREREG before any run.
 - With a 217-skill catalog, k = 255 includes all skills, so recall at k = 255
   proves little (hence the k = 25 gate). An option is to skip bm25 and send all skills to
   Jev (within the 32k token limit).
-- Output cap: reasoning off → 128. Reasoning on → 128 for providers where `addsThinkingBudgetToMaxTokens` is true (anthropic-messages, non-adaptive Bedrock Claude), otherwise thinking budget + 128. Not verified against real providers (paid; needs 인호's 1:1 approval).
+- Output cap: reasoning off → 128. Reasoning on → 128 for providers where `addsThinkingBudgetToMaxTokens` is true (anthropic-messages, non-adaptive Bedrock Claude), otherwise thinking budget + 128. Not verified on a real provider (paid; needs 인호's 1:1 approval).
 - Korean suggestion text may break bm25 lexical match against the English
   catalog (KO set v1 shows this). Mitigation (English search keywords) is out
   of Stage 1 scope.
@@ -349,10 +349,10 @@ the implementation commits; this spec has no runtime effect.
 
 ## Result (2026-10-20 KST): gate FAIL, spec closed
 
-- EN gate set `adadd76d7d543ded09cf8e93472966c36483886bf4b094b13242671a3e0361dd`, k=25, existing `rankSkills("bm25")` at 984d4bc77e, 217 invocable skills, 0 paid calls.
-- k=25: miss 39/100, recall 0.61 (Clopper-Pearson 95% [0.507, 0.706]). Report-only: k=10 miss 45, k=50 miss 35, k=255 miss 33.
+- Inputs: EN gate set `adadd76d7d543ded09cf8e93472966c36483886bf4b094b13242671a3e0361dd`, meta `cea29791…f39be`, catalog-v2 `ce30f5f6…448c`; k=25, existing `rankSkills("bm25")` at 984d4bc77e, 217 invocable skills, 0 paid calls.
+- k=25: miss 39/100, recall 0.61 (Clopper-Pearson 95% [0.5073, 0.7060]); candidate tokens max 3,927, median 3,381. Report-only: k=10 miss 45, k=50 miss 35, k=255 miss 33.
 - Cause: bm25 returns only skills with score > 0, capped at 64, so 33 gold skills never enter the candidate list at any k. The assumption "k=255 means 100% recall" was wrong.
-- Flagged misses (counted in the gate): 13 site-playbooks misses (all 6 named items included). Overlapping pairs with judgement gold labels: food-ordering; flight-booking / site-playbooks-google-flights; code-review / review-and-ship / requesting-code-review; slides-executor / office-pptx; vercel-plugin-eval / plugin-audit; get-pr-comments / autofix.
+- Flagged misses (all counted in the gate): 13 site-playbooks misses (airbnb, facebook-marketplace, google-flights, instacart, linkedin, luma, opentable, realtor, resy, southwest, target, united, usps); of the 6 pre-flagged vague items, 4 missed (southwest, target, usps, resy) and ebay and etsy were in the top 25. 7 misses in overlapping pairs with judgement gold labels (food-ordering, flight-booking, site-playbooks-google-flights, requesting-code-review, slides-executor, office-pptx, get-pr-comments); the vercel-plugin-eval / plugin-audit pair had none. google-flights is in both groups, so 19 flagged misses in total and 20 unflagged. Flags file `gate-en-v1-flags.json` sha256 `62d20978539a0f347ca2c56b42b57cca083540cf6854bfb43b93d2eeea91b9bf` (box only).
 - No re-measurement: the boost formula was not pre-registered. The bm25 candidate stage and the Jev stage are closed and not built. Stage 1 (next-task sentence and Tab fill, no bm25 or Jev, flag off by default) is unaffected and proceeds as its own PR.
 - Raw result `gate-en-v1.json` stays on the box; sha256 `3767de14c5f3326b29109ee174d5faffdb16b22300a345d6eee1559f36a00a88`.
 - Skill attachment moves to a new spec 092 (all 217 skills to Jev, ~11.9k tokens), with its pass criteria, a fresh EN set and a new PREREG sha fixed before any paid run.
