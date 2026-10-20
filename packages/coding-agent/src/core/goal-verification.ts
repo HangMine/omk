@@ -21,6 +21,12 @@ import { stripAnsi } from "../utils/ansi.ts";
 import { sanitizeBinaryOutput } from "../utils/shell.ts";
 import { DEFAULT_BUILTIN_TOOL_TIMEOUTS } from "./agent-tool-settings.ts";
 import type { DurableGoalSnapshot } from "./durable-goal.ts";
+import {
+	type DiagnosticOutput,
+	GOAL_DIAGNOSTIC_WINDOW_CHARS,
+	goalDiagnosticsEnabled,
+	utf8Bytes,
+} from "./goal-acceptance-diagnostic.ts";
 import { redactSensitiveTextForced } from "./redaction.ts";
 import { detectSandboxBackend } from "./sandbox/backend.ts";
 import { createDefaultBashSandboxPreflight, resolveBashSandboxMode } from "./sandbox/default-policy.ts";
@@ -57,6 +63,8 @@ export interface GoalAcceptanceResult {
 	readonly workspace: GoalWorkspaceState;
 	/** Redacted end of the combined output, for the operator only. */
 	readonly outputTail: string;
+	/** Head/tail window for the spec 094 diagnostic; present only with OMK_GOAL_DIAGNOSTICS on. */
+	readonly diagnosticOutput?: DiagnosticOutput;
 }
 
 export interface GoalVerifierOptions {
@@ -140,7 +148,7 @@ export class GoalVerifier {
 	/** Run the check once. Throws when it cannot run at all, for example when the sandbox refuses it. */
 	async run(command: string, signal?: AbortSignal): Promise<GoalAcceptanceResult> {
 		const claim = `goal acceptance: ${redactSensitiveTextForced(command).slice(0, CLAIM_COMMAND_CHARS)}`;
-		const tail = new OutputTail(OUTPUT_TAIL_CHARS);
+		const tail = new OutputTail(OUTPUT_TAIL_CHARS, goalDiagnosticsEnabled() ? GOAL_DIAGNOSTIC_WINDOW_CHARS : 0);
 		const sandboxPolicy = this.sandboxPreflight();
 		const execution = await executeVerifiedLocalBash({
 			evidenceExecutor: this.executor,
@@ -175,6 +183,7 @@ export class GoalVerifier {
 			gateReason: gate.reason,
 			workspace: captureGoalWorkspace(this.cwd),
 			outputTail: tail.text(),
+			...(tail.capturesDiagnostic ? { diagnosticOutput: tail.diagnostic() } : {}),
 		};
 	}
 
@@ -208,18 +217,43 @@ function canonicalPath(path: string): string {
 class OutputTail {
 	private readonly decoder = new TextDecoder();
 	private readonly limit: number;
+	private readonly window: number;
 	private buffer = "";
+	private head = "";
+	private totalChars = 0;
+	private totalBytes = 0;
 
-	constructor(limit: number) {
+	/** `window` > 0 also keeps the head of the output and its size for the spec 094 diagnostic. */
+	constructor(limit: number, window = 0) {
 		this.limit = limit;
+		this.window = window;
+	}
+
+	get capturesDiagnostic(): boolean {
+		return this.window > 0;
 	}
 
 	push(data: Buffer): void {
 		const text = sanitizeBinaryOutput(stripAnsi(this.decoder.decode(data, { stream: true }))).replace(/\r/g, "");
-		this.buffer = (this.buffer + text).slice(-this.limit * 2);
+		this.buffer = (this.buffer + text).slice(-Math.max(this.limit, this.window) * 2);
+		if (this.window > 0) {
+			if (this.head.length < this.window * 2) this.head = (this.head + text).slice(0, this.window * 2);
+			this.totalChars += text.length;
+			this.totalBytes += utf8Bytes(text);
+		}
 	}
 
 	text(): string {
-		return redactSensitiveTextForced(this.buffer).slice(-this.limit).trim();
+		return redactSensitiveTextForced(this.buffer.slice(-this.limit * 2))
+			.slice(-this.limit)
+			.trim();
+	}
+
+	/** Same treatment as `text()`, over a head and a tail window. */
+	diagnostic(): DiagnosticOutput {
+		const complete = this.totalChars <= this.window;
+		const head = redactSensitiveTextForced(complete ? this.buffer : this.head).slice(0, this.window);
+		const tail = complete ? head : redactSensitiveTextForced(this.buffer).slice(-this.window);
+		return { head, tail, totalBytes: this.totalBytes, complete };
 	}
 }
