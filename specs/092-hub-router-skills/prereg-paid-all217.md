@@ -40,12 +40,14 @@ Context: the 092 free gate is FAIL at G2 before measuring (hubs over 25 skills).
 - Output tokens: $0. Source quote (TypeSafe Models, https://docs.typesafe.ai/models, checked 2026-10-20):
   "You pay per input token. Output tokens are free." Jev 1.14 `jev-1.14.0`: "$42 / $0.042" per Btok / per Mtok.
   So the estimate with output included stays **$0.1205** (≈ $0.13 with 10% for state/instructions). Recheck the price on the run day.
-- Proposed cap for 인호: $1.00. The runner skips the remaining calls once cumulative cost ≥ cap (recorded as `cap_reached` = miss).
+- Proposed cap for 인호: $1.00. The runner skips the remaining calls once cumulative cost ≥ cap (recorded as `cap_reached`).
+- **Cap stop = INVALID, not FAIL.** If any call is `cap_reached`, the whole run is INVALID and no gate verdict is given.
+  At most one rerun is allowed after that, and only with 인호's fresh re-approval in a 1:1 chat (a new cap may be set then).
 - Per-call accounting in raw output: `usage.input_tokens`, `usage.output_tokens`, USD, latency, HTTP status, model echoed back.
 
 ## Execution rules
 
-- Exactly one run. The runner refuses to start if the output file exists. No retries; a failed call = no attach.
+- Exactly one run (the only exception is the single cap-INVALID rerun above). The runner refuses to start if the output file exists. No retries; a failed call = no attach.
 - No cleanup or delete step in the run command; chain with `&&`.
 - Raw output on the box only, mode 600: `/workspace/omk-eval-092/paid-all217-raw.json`. It holds ids, choices,
   probabilities and usage, no sentence text and no key. Room gets aggregates only.
