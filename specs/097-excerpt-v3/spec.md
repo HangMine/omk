@@ -28,7 +28,13 @@ Flag `OMK_GOAL_DIAGNOSTICS_V3=1`; flag off = byte-identical 095/094 behaviour (g
 - **D1 Failure-marker anchors** (tool-agnostic): line-level `FAILED`/`FAIL`/`Failed`/`***Failed`/`✗`/`failing` tokens as whole words or status columns.
 - **D2 Diagnostic-shape anchor**: `^\S+:\d+(:\d+)?:\s` (file:line[:col]:) regardless of keyword, ranked below explicit errors, above fallback.
 - **D3 Decoy suppression**: a line with a success marker (`ok`, `PASSED`, `✓`, `passed`) on the same line never anchors, even if it contains "error".
-- **D4 Middle-aware fallback**: if no anchor, window 1 = first diagnostic-shape or non-log-prefix (`level=info|warning`) block, not raw head.
+- **D4 Middle-aware fallback**: if no anchor, window 1 = first diagnostic-shape block or first block that is not a known structured-log info/warning line, not raw head.
+  D4 skips lines **only** in these listed known formats (no generic `level=` matching):
+  - logfmt: a `level=` key-value token with value `info`, `debug`, `trace`, `warn` or `warning` (e.g. `ts=… level=info msg=…`);
+  - JSON line: a top-level `"level":` field with one of the same values (e.g. `{"level":"info",…}`).
+  Lines whose level is `error` or `fatal` (logfmt `level=error|fatal`, JSON `"level":"error"|"fatal"`, case-insensitive) are **never skipped**.
+  Lines in any other format are never skipped by D4. Required unit tests: (a) logfmt and JSON info/warning lines are skipped;
+  (b) logfmt and JSON error/fatal lines are never skipped; (c) an unlisted format containing `level=info` is not skipped.
 - **D5 Warnings**: warnings never anchor window 1 when a D1/D2 line exists later.
 - Windows: window 1 around first anchor; window 2 around last anchor; if they overlap they merge into one window (allowed).
 
@@ -43,16 +49,22 @@ Fixtures that fit the cap whole are invalid (hard stop), as in 095.
 | ID | Test | Pass |
 |---|---|---|
 | A1 | holdout4 (≥10 fixtures) | **10/10** by the rule above |
-| A2 | holdout1 + holdout2 + holdout3 (regression, training) | ≥ 28/30 by the same rule; no fixture that passed under 095 rule turns from "first shown" to "first not shown" |
+| A2 | holdout1 + holdout2 + holdout3 (regression floor, training) | ≥ 28/30 by the same rule **and** first error line (`groundTruthLine`) shown in 30/30 (no regression) |
 | A3 | flag off | byte-identical to main on all existing goal-diagnostics fixtures |
 | A4 | caps | every excerpt ≤ 1,536 B and ≤ 40 lines |
 | A5 | unit | decoy (success line containing "error") never anchors |
+| A6 | unit | D4 known-format tests (skip info/warning; never skip error/fatal; unlisted format not skipped) |
+
+D1–D5 were designed after seeing holdout3, so holdout1–3 results prove nothing about generalisation.
+A2 is only a regression floor; the only real evidence is A1 (holdout4 10/10).
 
 ## Ordering (each a separate commit, in this order)
 
 1. This spec (rule + criteria).
 2. Scorer change + **unit tests asserting the scorer implements the 097 rule exactly** (inside-excerpt, merged windows count, elision markers don't, hard stop on fits-whole). Before any implementation commit.
-3. **holdout4** committed: ≥10 new fixtures, authored blind by someone other than the implementer who has not read 097's patterns (D1-D5); manifest with 1-based `groundTruthLine`/`groundTruthLastLine`; ≥3 decoy, ≥2 keyword-less, ≥2 warnings-first, ≥2 ">24-before", at least 5 tools not in holdout1-3.
+3. **holdout4** committed: ≥10 new fixtures, authored by **Bench Analyst outside the team room**. Room members
+   (Harness Engineer, Agent Researcher, Library Scout, PR Architect, Tech Lead, OMK) are not blind, since D1–D5 were posted there.
+   The author receives only the format conditions (`/workspace/holdout4-request.md`), never D1–D5 or any pattern; manifest with 1-based `groundTruthLine`/`groundTruthLastLine`; ≥3 decoy, ≥2 keyword-less, ≥2 warnings-first, ≥2 ">24-before", at least 5 tools not in holdout1-3.
 4. Implementation (flag-gated).
 5. **Single measurement** of holdout4 at the implementation head. FAIL ⇒ result recorded, no retune, new spec.
 
@@ -66,9 +78,9 @@ holdout3 is training only; it is not acceptance.
 - Overfitting to holdout3 tool formats; mitigated by "5 new tools" in holdout4.
 - Author independence of holdout4 cannot be enforced technically; recorded in commit message.
 
-## Open questions (Tech Lead)
+## Resolved questions (Tech Lead, before implementation)
 
-1. Is A2 threshold 28/30 right, or require 30/30?
-2. Should D4 skip `level=info|warning` structured logs generically or only known formats?
-3. Who authors holdout4 (Agent Researcher or Library Scout)?
-4. Separate flag (`…_V3`) vs reuse `OMK_GOAL_DIAGNOSTICS` with version value?
+1. A2 threshold — **resolved:** keep ≥ 28/30, plus first error line 30/30; A2 is a regression floor only, A1 is the evidence.
+2. D4 scope — **resolved:** only listed known formats (logfmt `level=`, JSON `"level":`); error/fatal never skipped; tests for both.
+3. holdout4 author — **resolved:** Bench Analyst outside the room, given format conditions only; no room member authors it.
+4. Flag — **resolved:** separate `OMK_GOAL_DIAGNOSTICS_V3` (rollback = unset; A3 byte-identity simpler to check).
