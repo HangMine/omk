@@ -266,7 +266,7 @@ the PREREG before any run.
 - With a 217-skill catalog, k = 255 includes all skills, so recall at k = 255
   proves little (hence the k = 25 gate). An option is to skip bm25 and send all skills to
   Jev (within the 32k token limit).
-- 제안 요청의 출력 상한은 provider마다 달라요. reasoning이 꺼져 있으면 128이에요. `adjustMaxTokensForThinking`이 예산을 더해 주는 provider(anthropic-messages, adaptive가 아닌 Bedrock Claude)에는 128을 넘기고, 나머지 reasoning provider에는 예산+128을 바로 넘겨요. 실제 provider로는 확인하지 않았어요(유료라 인호님 1:1 승인 필요).
+- 제안 요청의 출력 상한: reasoning이 꺼져 있으면 128. 켜져 있으면 `adjustMaxTokensForThinking`이 thinking 예산을 더하는 provider(anthropic-messages, adaptive가 아닌 Bedrock Claude)에는 128을 넘기고, 나머지 provider에는 예산+128을 그대로 넘긴다. 실제 provider 확인은 유료라 인호님 1:1 승인 후.
 - Korean suggestion text may break bm25 lexical match against the English
   catalog (KO set v1 shows this). Mitigation (English search keywords) is out
   of Stage 1 scope.
