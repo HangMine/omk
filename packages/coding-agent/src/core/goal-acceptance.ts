@@ -6,6 +6,7 @@
  * back from them can approve a command or vouch for a receipt: after a restart
  * the user approves the check again with `/goal verify <command>`.
  */
+import { createHash } from "node:crypto";
 import {
 	DurableGoalError,
 	type DurableGoalSnapshot,
@@ -33,12 +34,28 @@ export interface GoalCheckOutcome {
 
 interface TrustedReceipt {
 	readonly goalKey: string;
+	readonly checkId: string;
+	readonly contractRevision: number;
+	readonly contractDigest: string;
 	readonly digest: string;
 	readonly workspace: GoalWorkspaceState;
 }
 
+/** The approved check of one goal; the revision rises on every change or withdrawal. */
+interface CheckContract {
+	readonly command: string | undefined;
+	readonly revision: number;
+	readonly digest: string;
+	/** Whether the latest completed (non-aborted) run of this revision passed. */
+	readonly latestPassed?: boolean;
+}
+
+function contractDigestOf(command: string): string {
+	return createHash("sha256").update(command).digest("hex");
+}
+
 export class GoalAcceptance {
-	private readonly approved = new Map<string, string>();
+	private readonly contracts = new Map<string, CheckContract>();
 	private readonly trusted = new Map<string, TrustedReceipt>();
 	private readonly verifiers = new Map<string, GoalVerifier>();
 	private readonly createVerifier: GoalVerifierFactory;
@@ -50,18 +67,25 @@ export class GoalAcceptance {
 
 	/** Approve `command` for `goal`, or withdraw the approval with `undefined`. */
 	approve(goal: DurableGoalSnapshot, command: string | undefined): void {
-		if (command === undefined) this.approved.delete(goalKeyOf(goal));
-		else this.approved.set(goalKeyOf(goal), command);
+		const key = goalKeyOf(goal);
+		const previous = this.contracts.get(key);
+		if (previous?.command === command) return;
+		if (previous === undefined && command === undefined) return;
+		this.contracts.set(key, {
+			command,
+			revision: (previous?.revision ?? 0) + 1,
+			digest: command === undefined ? "" : contractDigestOf(command),
+		});
 	}
 
 	approvedCommand(goal: DurableGoalSnapshot): string | undefined {
-		return this.approved.get(goalKeyOf(goal));
+		return this.contracts.get(goalKeyOf(goal))?.command;
 	}
 
 	/** Drop the approval and trusted receipts of a cleared or replaced goal. */
 	forget(goal: DurableGoalSnapshot): void {
 		const key = goalKeyOf(goal);
-		this.approved.delete(key);
+		this.contracts.delete(key);
 		for (const [receiptId, receipt] of this.trusted) {
 			if (receipt.goalKey === key) this.trusted.delete(receiptId);
 		}
@@ -78,8 +102,9 @@ export class GoalAcceptance {
 		signal?: AbortSignal,
 	): Promise<GoalCheckOutcome> {
 		const key = goalKeyOf(goal);
-		const command = this.approved.get(key);
-		if (command === undefined) {
+		const contract = this.contracts.get(key);
+		const command = contract?.command;
+		if (contract === undefined || command === undefined) {
 			throw new DurableGoalError("invalid-input", "no acceptance check is approved for this goal in this session");
 		}
 		if (this.running) throw new DurableGoalError("invalid-input", "an acceptance check is already running");
@@ -88,6 +113,9 @@ export class GoalAcceptance {
 		try {
 			const stop = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
 			const result = await this.verifierFor(cwd, key).run(command, stop);
+			if (result.status !== "aborted" && this.contracts.get(key) === contract) {
+				this.contracts.set(key, { ...contract, latestPassed: result.passed });
+			}
 			if (!result.passed) return { command, result, goal };
 			const latest = await store.current();
 			if (!latest || goalKeyOf(latest) !== key) {
@@ -106,7 +134,14 @@ export class GoalAcceptance {
 				},
 				nextDurableGoalTimestamp(latest, capturedAt),
 			);
-			this.trusted.set(result.receiptId, { goalKey: key, digest: result.digest, workspace: result.workspace });
+			this.trusted.set(result.receiptId, {
+				goalKey: key,
+				checkId: key,
+				contractRevision: contract.revision,
+				contractDigest: contract.digest,
+				digest: result.digest,
+				workspace: result.workspace,
+			});
 			return { command, result, goal: next };
 		} finally {
 			if (this.running === controller) this.running = undefined;
@@ -120,10 +155,20 @@ export class GoalAcceptance {
 	 */
 	acceptanceGap(goal: DurableGoalSnapshot, cwd: string): string | undefined {
 		const key = goalKeyOf(goal);
+		const contract = this.contracts.get(key);
+		if (contract?.command === undefined) return "the approved acceptance check was withdrawn";
+		if (contract.latestPassed === false) return "the latest acceptance check failed";
+		// Receipts of an earlier contract stay attached but no longer vouch for this one.
 		const candidates = freshDurableGoalEvidence(goal)
 			.flatMap((evidence) => {
 				const trusted = this.trusted.get(evidence.id);
-				return trusted?.goalKey === key && trusted.digest === evidence.digest ? [{ evidence, trusted }] : [];
+				return trusted?.goalKey === key &&
+					trusted.checkId === key &&
+					trusted.contractRevision === contract.revision &&
+					trusted.contractDigest === contract.digest &&
+					trusted.digest === evidence.digest
+					? [{ evidence, trusted }]
+					: [];
 			})
 			.reverse();
 		if (candidates.length === 0) return "no passing acceptance receipt in this goal generation";
@@ -139,11 +184,21 @@ export class GoalAcceptance {
 
 	/** Complete `goal`. With an approved check, only on a matching trusted receipt; otherwise the reducer's rule. */
 	async complete(store: DurableGoalStore, goal: DurableGoalSnapshot, cwd: string): Promise<DurableGoalSnapshot> {
-		if (this.approved.has(goalKeyOf(goal))) {
+		if (this.gated(goal)) {
 			const gap = this.acceptanceGap(goal, cwd);
 			if (gap !== undefined) throw new DurableGoalError("evidence-required", `${gap}; run /goal verify`);
 		}
 		return store.transition({ kind: "complete", ref: goal.ref }, nextDurableGoalTimestamp(goal));
+	}
+
+	/** An approved check gates completion, and so does a withdrawn one once a check of the goal has passed. */
+	private gated(goal: DurableGoalSnapshot): boolean {
+		const key = goalKeyOf(goal);
+		const contract = this.contracts.get(key);
+		if (contract === undefined) return false;
+		if (contract.command !== undefined) return true;
+		for (const receipt of this.trusted.values()) if (receipt.goalKey === key) return true;
+		return false;
 	}
 
 	/** Stop a running check; its receipt records `aborted` and attaches nothing. */

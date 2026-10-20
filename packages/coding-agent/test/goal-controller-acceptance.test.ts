@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { createDurableGoal, nextDurableGoalTimestamp } from "../src/core/durable
 import { DurableGoalStore } from "../src/core/durable-goal-store.ts";
 import goalController, { type GoalControllerOptions } from "../src/core/extensions/builtin/goal-controller.ts";
 import type { ExtensionAPI, ExtensionCommandContext, RegisteredCommand } from "../src/core/extensions/types.ts";
+import { GoalAcceptance } from "../src/core/goal-acceptance.ts";
 import { GoalVerifier } from "../src/core/goal-verification.ts";
 import { createWorkspaceSandboxPolicy } from "../src/core/sandbox/default-policy.ts";
 
@@ -344,5 +345,136 @@ describe("/goal acceptance checks", () => {
 		expect(goal?.status).toBe("blocked");
 		expect(goal?.blockedReason).toMatch(/acceptance check could not run: .*sandbox\.backend_missing/);
 		expect(h.messages).toEqual([]);
+	});
+});
+
+describe("/goal acceptance contract revision (spec 099)", () => {
+	function outsideFlag(): string {
+		const dir = realpathSync(mkdtempSync(join(tmpdir(), "omk-goal-flag-")));
+		roots.push(dir);
+		return join(dir, "flag");
+	}
+
+	it("refuses completion when a changed check fails after the old check passed", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal("verify true");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+
+		await h.goal("verify false");
+		expect(h.notifications.at(-1)?.level).toBe("warning");
+		await h.goal("complete");
+
+		expect((await store(cwd).current())?.status).toBe("active");
+	});
+
+	it("refuses completion when the same check fails after it passed", async () => {
+		const cwd = gitRepo();
+		const flag = outsideFlag();
+		writeFileSync(flag, "ok\n");
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(`verify test -f ${flag}`);
+		expect(lastNotice(h)).toContain("acceptance check passed");
+
+		unlinkSync(flag);
+		await h.goal("verify");
+		expect(h.notifications.at(-1)?.level).toBe("warning");
+		await h.goal("complete");
+
+		expect((await store(cwd).current())?.status).toBe("active");
+	});
+
+	it("allows completion when the same check passes after it failed", async () => {
+		const cwd = gitRepo();
+		const flag = outsideFlag();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(`verify test -f ${flag}`);
+		expect(h.notifications.at(-1)?.level).toBe("warning");
+
+		writeFileSync(flag, "ok\n");
+		await h.goal("verify");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+		await h.goal("complete");
+
+		expect((await store(cwd).current())?.status).toBe("completed");
+	});
+
+	it("refuses completion when the check script changes to fail and is restored", async () => {
+		const cwd = gitRepo();
+		const script = join(cwd, "check.sh");
+		writeFileSync(script, "exit 0\n");
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal("verify sh check.sh");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+
+		writeFileSync(script, "exit 1\n");
+		await h.goal("verify");
+		expect(h.notifications.at(-1)?.level).toBe("warning");
+		writeFileSync(script, "exit 0\n");
+		await h.goal("complete");
+
+		expect((await store(cwd).current())?.status).toBe("active");
+	});
+
+	it("refuses completion on a passing receipt once its approval is withdrawn", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		const goalStore = store(cwd);
+		const acceptance = new GoalAcceptance();
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		acceptance.approve(goal, "true");
+		const passed = await acceptance.check(goalStore, goal, cwd);
+		expect(passed.result.passed).toBe(true);
+
+		acceptance.approve(passed.goal, undefined);
+
+		await expect(acceptance.complete(goalStore, passed.goal, cwd)).rejects.toThrow(/run \/goal verify/);
+		expect((await goalStore.current())?.status).toBe("active");
+	});
+
+	it("does not revive an old pass when the approval returns to an earlier command", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal("verify true");
+		expect(lastNotice(h)).toContain("acceptance check passed");
+		const goalStore = store(cwd);
+		const acceptance = new GoalAcceptance();
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		acceptance.approve(goal, "true");
+		const passed = await acceptance.check(goalStore, goal, cwd);
+		expect(passed.result.passed).toBe(true);
+
+		acceptance.approve(passed.goal, "false");
+		acceptance.approve(passed.goal, "true");
+		await expect(acceptance.complete(goalStore, passed.goal, cwd)).rejects.toThrow(/run \/goal verify/);
+
+		const rerun = await acceptance.check(goalStore, passed.goal, cwd);
+		expect(rerun.result.passed).toBe(true);
+		expect((await acceptance.complete(goalStore, rerun.goal, cwd)).status).toBe("completed");
+	});
+
+	it("never counts an aborted run as a pass", async () => {
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		const goalStore = store(cwd);
+		const acceptance = new GoalAcceptance();
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		acceptance.approve(goal, "true");
+		const aborted = new AbortController();
+		aborted.abort();
+		const outcome = await acceptance.check(goalStore, goal, cwd, aborted.signal);
+		expect(outcome.result.status).toBe("aborted");
+
+		await expect(acceptance.complete(goalStore, outcome.goal, cwd)).rejects.toThrow(/run \/goal verify/);
 	});
 });
