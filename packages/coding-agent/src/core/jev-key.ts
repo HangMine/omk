@@ -11,6 +11,8 @@ export type JevSubcommand = "set" | "status" | "clear" | "usage" | "unknown";
 
 export const JEV_USAGE = "Usage: /jev set | /jev status | /jev clear";
 export const JEV_EMPTY_KEY_ERROR = "key cannot be empty";
+/** Stored keys starting with "!" are run as shell commands by resolveConfigValue; /jev never stores one. */
+export const JEV_COMMAND_KEY_ERROR = "key format not accepted";
 
 /** OMK_JEV=1 (env only in v1) gates Jev features such as 091 skill selection. /jev key management ignores it. */
 export function isJevEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -38,12 +40,15 @@ export function getJevKeySource(authStorage: AuthStorage): JevKeySource {
 	return "none";
 }
 
-export type JevSetResult = { ok: true } | { ok: false; error: typeof JEV_EMPTY_KEY_ERROR };
+export type JevSetResult =
+	| { ok: true }
+	| { ok: false; error: typeof JEV_EMPTY_KEY_ERROR | typeof JEV_COMMAND_KEY_ERROR };
 
 /** Trims and stores the key in auth.json. Empty input writes nothing. Error text never echoes input. */
 export function setJevKey(authStorage: AuthStorage, rawKey: string): JevSetResult {
 	const key = rawKey.trim();
 	if (!key) return { ok: false, error: JEV_EMPTY_KEY_ERROR };
+	if (key.startsWith("!")) return { ok: false, error: JEV_COMMAND_KEY_ERROR };
 	authStorage.set(JEV_PROVIDER_ID, { type: "api_key", key });
 	return { ok: true };
 }
