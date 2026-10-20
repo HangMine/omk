@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Next-task suggestions follow the editor on screen. An extension that swaps in its own editor at session start (for example `pi-powerline-footer`) left the gray suggestion on the hidden default editor, so it never appeared and Tab never inserted it.
+
 ## [1.5.4] - 2026-10-20
 
 ### Added
