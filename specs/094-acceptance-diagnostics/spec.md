@@ -148,6 +148,35 @@ Pass = first-error line in the head window, 10/10 required.
 error whenever more than 24 lines precede it. Next design step needs a Tech
 Lead decision (not taken here).
 
+### Anchored excerpt (Tech Lead approved after the 6/10 holdout)
+
+- Sanitize first: `util.stripVTControlCharacters` + existing ANSI/binary/C0
+  stripping. Matching, cutting and caps (1,536 UTF-8 B / 40 lines) all run on
+  sanitized text.
+- The first line matching a pattern (leading whitespace trimmed, success
+  exclusions applied first) is the anchor. Window = anchor − N .. filled to the
+  caps; elided bytes before/after are marked. N = **3**
+  (`GOAL_DIAGNOSTIC_ANCHOR_CONTEXT_LINES`).
+- Patterns (`GOAL_DIAGNOSTIC_ERROR_PATTERNS`, in order): `fail-marker`
+  `^(FAIL|FAILED|BUILD FAILED)\b`; `go-fail` `^--- FAIL:`; `error-word`
+  `^(ERROR|Error)\b`; `error-code` `\berror\[[A-Z]?\d+\]`; `error-ts`
+  `\berror TS\d+`; `error-colon` `\berror:` (i); `eslint-error`
+  `^\d+:\d+\s+error\s`; `named-error` `\b\w*(Error|Exception):`;
+  `traceback` `^Traceback \(most recent call last\)`; `panic`
+  `\bpanic(ked)?\b`; `npm-err` `^npm ERR!`; `cross-mark` `^[✗✖×❌]`;
+  `pytest-e` `^E\s{2,}\S`; `rspec-failure` `Failure/Error:`.
+- Success exclusions (`GOAL_DIAGNOSTIC_SUCCESS_EXCLUSIONS`): `\b(0|no|zero)
+  (errors?|failures?|problems?)\b` (i); `\bno errors? found\b` (i); `[✓✔]`;
+  `^(PASS|ok)\b`.
+- No match → the 768 B / 24-line head/tail fallback above. Output that fits
+  the caps whole is passed through unchanged.
+- The verifier scans while streaming (`AnchorScanner`, bounded to 40 kept
+  lines, 4 KiB per line). The pattern only picks the window: no effect on
+  verdict, gate, completion or approvals (AC7 unchanged).
+- Regression on the 22 existing fixtures (12 original + 10 closed holdout,
+  plus the generated 1 MiB case): **22/22** first error kept (holdout set was
+  6/10 with the plain split).
+
 ## Acceptance criteria (numeric pass/fail)
 
 | ID | Test | Pass |

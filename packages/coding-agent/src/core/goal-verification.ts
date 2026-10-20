@@ -22,9 +22,11 @@ import { sanitizeBinaryOutput } from "../utils/shell.ts";
 import { DEFAULT_BUILTIN_TOOL_TIMEOUTS } from "./agent-tool-settings.ts";
 import type { DurableGoalSnapshot } from "./durable-goal.ts";
 import {
+	AnchorScanner,
 	type DiagnosticOutput,
 	GOAL_DIAGNOSTIC_WINDOW_CHARS,
 	goalDiagnosticsEnabled,
+	sanitizeDiagnosticText,
 	utf8Bytes,
 } from "./goal-acceptance-diagnostic.ts";
 import { redactSensitiveTextForced } from "./redaction.ts";
@@ -222,6 +224,7 @@ class OutputTail {
 	private head = "";
 	private totalChars = 0;
 	private totalBytes = 0;
+	private readonly anchor = new AnchorScanner();
 
 	/** `window` > 0 also keeps the head of the output and its size for the spec 094 diagnostic. */
 	constructor(limit: number, window = 0) {
@@ -240,6 +243,7 @@ class OutputTail {
 			if (this.head.length < this.window * 2) this.head = (this.head + text).slice(0, this.window * 2);
 			this.totalChars += text.length;
 			this.totalBytes += utf8Bytes(text);
+			this.anchor.push(sanitizeDiagnosticText(text));
 		}
 	}
 
@@ -254,6 +258,10 @@ class OutputTail {
 		const complete = this.totalChars <= this.window;
 		const head = redactSensitiveTextForced(complete ? this.buffer : this.head).slice(0, this.window);
 		const tail = complete ? head : redactSensitiveTextForced(this.buffer).slice(-this.window);
-		return { head, tail, totalBytes: this.totalBytes, complete };
+		const found = this.anchor.finish();
+		const anchor = found
+			? { ...found, lines: found.lines.map((line) => redactSensitiveTextForced(line)) }
+			: undefined;
+		return { head, tail, totalBytes: this.totalBytes, complete, ...(anchor ? { anchor } : {}) };
 	}
 }

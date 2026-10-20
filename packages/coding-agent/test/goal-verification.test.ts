@@ -218,6 +218,7 @@ describe("spec 094 diagnostic window", () => {
 		expect(output?.totalBytes).toBeGreaterThan(300_000);
 		const excerpt = output ? buildDiagnosticExcerpt(output) : undefined;
 		expect(excerpt?.text).toContain("early: error TS2322");
-		expect(excerpt?.text.endsWith("60000")).toBe(true);
+		expect(excerpt?.mode).toBe("error-ts");
+		expect(output?.anchor?.line).toBe(1);
 	});
 });
