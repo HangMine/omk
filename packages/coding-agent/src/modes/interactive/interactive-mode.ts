@@ -10,6 +10,7 @@ import * as path from "node:path";
 import { spawn, spawnSync } from "child_process";
 import type { AgentMessage, ThinkingLevel } from "omk-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, OAuthProviderId, OAuthSelectPrompt } from "omk-ai";
+import { formatTaskResultLine } from "../../core/task-result.ts";
 import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
@@ -3138,6 +3139,10 @@ export class InteractiveMode {
 		this.footer.invalidate();
 
 		switch (event.type) {
+			case "task_result":
+				// Spec 096: emitted only with OMK_TASK_RESULT on; renders the shared projection.
+				this.showStatus(formatTaskResultLine(event.projection));
+				break;
 			case "prompt_settled":
 				// §17 (M4): fire-and-forget — the sound must never delay the prompt
 				// path or change outcomes; failures are diagnostics only.

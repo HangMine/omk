@@ -2,6 +2,8 @@ import { DurableGoalError, type DurableGoalSnapshot, nextDurableGoalTimestamp } 
 import type { DurableGoalStore } from "../../durable-goal-store.ts";
 import type { GoalAcceptance, GoalCheckOutcome } from "../../goal-acceptance.ts";
 import type { GoalContinuationDecision } from "../../goal-continuation.ts";
+import { factFromGoalAcceptance, isTaskResultEnabled } from "../../task-result.ts";
+import { publishHostTaskFact } from "../../task-result-collector.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
 import { displayCommand, displayError, failureText, receiptLabel, renderGoal } from "./goal-controller-text.ts";
@@ -10,11 +12,15 @@ type ContinueGoal = (advanced: DurableGoalSnapshot, detail: string) => void;
 
 /** `/goal verify` and the settled-turn acceptance loop of the goal controller. */
 export class GoalAcceptanceFlow {
-	private readonly omk: Pick<ExtensionAPI, "appendEntry">;
+	private readonly omk: Pick<ExtensionAPI, "appendEntry"> & Partial<Pick<ExtensionAPI, "events">>;
 	private readonly acceptance: GoalAcceptance;
 	private readonly continueGoal: ContinueGoal;
 
-	constructor(omk: Pick<ExtensionAPI, "appendEntry">, acceptance: GoalAcceptance, continueGoal: ContinueGoal) {
+	constructor(
+		omk: Pick<ExtensionAPI, "appendEntry"> & Partial<Pick<ExtensionAPI, "events">>,
+		acceptance: GoalAcceptance,
+		continueGoal: ContinueGoal,
+	) {
 		this.omk = omk;
 		this.acceptance = acceptance;
 		this.continueGoal = continueGoal;
@@ -166,6 +172,9 @@ export class GoalAcceptanceFlow {
 			passed: result.passed,
 			trigger,
 		});
+		// Spec 096: hand the host receipt to the task-result projection (flag on only).
+		if (this.omk.events && isTaskResultEnabled())
+			publishHostTaskFact(this.omk.events, factFromGoalAcceptance(result));
 		if (!result.passed && result.status !== "aborted") {
 			const tail = result.outputTail ? `\n${result.outputTail}` : "";
 			ctx.ui.notify(`goal: acceptance check ${failureText(result)} (${receiptLabel(result)})${tail}`, "warning");

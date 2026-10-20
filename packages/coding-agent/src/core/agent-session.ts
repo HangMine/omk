@@ -298,6 +298,7 @@ import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPromptPlan } from "./system-prompt.ts";
 import { resolveExtendedSystemPromptCache } from "./system-prompt-cache-boundary.ts";
+import * as taskResultWiring from "./task-result-collector.ts";
 import { todoControlState } from "./todo-runtime-state.ts";
 import { mcpToolGroup } from "./tool-schema-budget.ts";
 import { type BashOperations, type BashSandboxPreflight, createLocalBashOperations } from "./tools/bash.ts";
@@ -351,6 +352,7 @@ export type AgentSessionEvent =
 			willRetry: boolean;
 	  }
 	| promptSettlement.PromptSettledEvent
+	| taskResultWiring.TaskResultEvent
 	| {
 			type: "queue_update";
 			steering: readonly string[];
@@ -671,6 +673,8 @@ export class AgentSession {
 	private _turnIndex = 0;
 
 	private _resourceLoader: ResourceLoader;
+	/** Spec 096: created only while `OMK_TASK_RESULT` is on. */
+	private _taskResultCollector: taskResultWiring.TaskResultCollector | undefined;
 	private _customTools: ToolDefinition[];
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _mcpManager: McpManager | undefined;
@@ -1712,6 +1716,7 @@ export class AgentSession {
 	}
 
 	dispose(): void {
+		this._taskResultCollector = this._taskResultCollector?.dispose();
 		if (
 			this._shutdown.active ||
 			this._promptLifecycle.active ||
@@ -2116,6 +2121,9 @@ export class AgentSession {
 		this._overflowRecoveryAttempts = 0; // spec 061: fresh overflow-recovery budget per user prompt
 		this._pinNotice.resetTurn(); // spec 089: re-arm the once-per-turn pinned quota notice
 		const ownedRun = this._promptLifecycle.begin(promptRunId);
+		// Spec 096: undefined with OMK_TASK_RESULT off (no subscription, no event).
+		this._taskResultCollector = taskResultWiring.beginTaskResult(this._taskResultCollector, this._resourceLoader);
+		const taskResult = this._taskResultCollector;
 		// Roadmap M2: the lease spans the whole run including internal retries
 		// and continuations, so they share one admission decision (§8.3).
 		let resourceLease: Awaited<ReturnType<AgentSession["_beginResourceGovernedRun"]>> = null;
@@ -2148,6 +2156,9 @@ export class AgentSession {
 				}
 				resourceObservations?.record("prompt_settled_v1", settledObservationFacts(event));
 				this._emit(event);
+				// Spec 096: a new event after `prompt_settled`; `prompt_settled` itself is unchanged.
+				if (taskResult)
+					this._emit(taskResult.finish(event, taskResultWiring.finalAssistantText(this.agent.state.messages)));
 				this._drainDeferredTurnInput();
 			});
 		}
