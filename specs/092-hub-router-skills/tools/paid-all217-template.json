@@ -1,0 +1,10 @@
+{
+ "model": "jev-1.14.0",
+ "state_field": "sentence",
+ "question_id": "skill",
+ "type": "choice",
+ "instructions": "The state is the next task a coding-agent user is about to give. Which installed skill should be attached to help with exactly this task? Pick none if no listed skill clearly fits.",
+ "criteria_source": "catalog-v3 selectable skills, sorted by name: option = skill name, description = catalog desc",
+ "extra_options": { "none": "No listed skill clearly fits this task." },
+ "attach_threshold": 0.6
+}
