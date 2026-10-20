@@ -66,7 +66,7 @@ export function sanitizeProvenanceText(value: string): string {
 	const sanitized = sanitizeBinaryOutput(value.trim())
 		.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
 		.slice(0, MAX_PROVENANCE_TEXT);
-	return sanitized;
+	return sanitized.length > 0 ? sanitized : "[empty]";
 }
 
 /** Project a control snapshot onto the envelope's preserved-provenance fields. */

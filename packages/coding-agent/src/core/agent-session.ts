@@ -2736,15 +2736,15 @@ export class AgentSession {
 	 */
 	async steer(text: string, images?: ImageContent[]): Promise<void> {
 		this._shutdown.assertOpen();
-		const sanitizedText = text;
+		const inputText = text;
 
 		// Check for extension commands (cannot be queued)
-		if (sanitizedText.startsWith("/")) {
-			this._throwIfExtensionCommand(sanitizedText);
+		if (inputText.startsWith("/")) {
+			this._throwIfExtensionCommand(inputText);
 		}
 
 		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(sanitizedText);
+		let expandedText = this._expandSkillCommand(inputText);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueSteer(expandedText, images);
@@ -2759,15 +2759,15 @@ export class AgentSession {
 	 */
 	async followUp(text: string, images?: ImageContent[]): Promise<void> {
 		this._shutdown.assertOpen();
-		const sanitizedText = text;
+		const inputText = text;
 
 		// Check for extension commands (cannot be queued)
-		if (sanitizedText.startsWith("/")) {
-			this._throwIfExtensionCommand(sanitizedText);
+		if (inputText.startsWith("/")) {
+			this._throwIfExtensionCommand(inputText);
 		}
 
 		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(sanitizedText);
+		let expandedText = this._expandSkillCommand(inputText);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueFollowUp(expandedText, images);

@@ -54,8 +54,8 @@ const PERSISTENCE_ERRNO_CODES: ReadonlySet<string> = new Set([
  * secret-shaped content, drop NUL bytes, and bound the length.
  */
 export function terminationMessage(value: string | undefined, fallback: string): string {
-	const redacted = (value?.trim() || fallback).replace(/\0/g, "").slice(0, MAX_SESSION_TERMINATION_MESSAGE_LENGTH);
-	return redacted || fallback;
+	const normalized = (value?.trim() || fallback).replace(/\0/g, "").slice(0, MAX_SESSION_TERMINATION_MESSAGE_LENGTH);
+	return normalized || fallback;
 }
 
 /** Classify a failed provider turn from the assistant message it produced. */

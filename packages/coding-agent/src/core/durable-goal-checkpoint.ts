@@ -149,9 +149,9 @@ function evidenceIds(value: readonly string[], code: "invalid-input" | "invalid-
 
 function text(value: string, maxChars: number, label: string, code: "invalid-input" | "invalid-store"): string {
 	if (typeof value !== "string") throw goalError(code, `${label} must be text`);
-	const redacted = value.trim();
-	if (redacted.length === 0 || redacted.length > maxChars) throw goalError(code, `${label} is invalid`);
-	return redacted;
+	const normalized = value.trim();
+	if (normalized.length === 0 || normalized.length > maxChars) throw goalError(code, `${label} is invalid`);
+	return normalized;
 }
 
 function timestamp(value: string, label: string): string {
