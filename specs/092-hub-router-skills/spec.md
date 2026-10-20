@@ -21,9 +21,7 @@ the hub router picks one hub, and only that hub's member skills become candidate
 2. Hubs (12 + fallback, from `OMK_HUB_ROUTES`): omk-frontend, omk-backend-data, omk-loop, omk-plan,
    omk-engineering, omk-security, omk-devops-release, omk-research-docs, omk-design-media,
    omk-agent-ops, omk-product-ops, omk-workspace-ops; fallback omk-skills.
-3. Membership: hub → member skills is taken from each hub skill's SKILL.md body (the skills it lists).
-   The membership table is frozen as a file with its sha256 before measuring (see PREREG).
-   Skills listed by no hub keep their place in the sample; their gold hub is `omk-skills`.
+3. Membership: generated mechanically by the frozen router (see Membership below), single hub per skill.
 4. Candidate block: members of the routed hub rendered with the 091 `renderCandidates` format
    (`<skill_candidates>` / name, description, location). Routed to `omk-skills` → no candidate block
    (only the index skill, as today).
