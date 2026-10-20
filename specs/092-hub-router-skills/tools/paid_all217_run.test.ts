@@ -78,3 +78,34 @@ test("parsing → hit / miss / no-attach / false attach", () => {
 	assert.equal(outcome(attachOf(ok("a", 0.5), 0.6), null), "no_attach_ok");
 	assert.equal(outcome(attachOf(ok("a", 0.7), 0.6), null), "false_attach");
 });
+
+test("key never leaks: 200, 401, 429, 500, network error embedding headers", async () => {
+	const KEY = "TEST_SECRET_KEY_123";
+	const cases: Array<[string, typeof fetch]> = [
+		...[200, 401, 429, 500].map((status) => [String(status), (async (_u: any, init: any) =>
+			new Response(JSON.stringify(status === 200
+				? { answers: { skill: { choice: "a", probabilities: { a: 0.9 } } }, usage: { input_tokens: 10, output_tokens: 1 } }
+				: { error: `bad request with Authorization: ${init.headers.authorization}` }), { status })) as typeof fetch] as [string, typeof fetch]),
+		["network", (async (_u: any, init: any) => {
+			const e = new Error(`connect failed; headers=${JSON.stringify(init.headers)} body=${init.body}`);
+			e.name = `FetchError Authorization ${KEY}`; throw e; }) as typeof fetch],
+	];
+	for (const [label, f] of cases) {
+		const { paths, expected } = fixture(2);
+		const captured: string[] = [];
+		const ow = process.stdout.write.bind(process.stdout), ew = process.stderr.write.bind(process.stderr);
+		const ol = console.log, oe = console.error, owarn = console.warn;
+		const grab = (...a: any[]) => { captured.push(a.map(String).join(" ")); return true; };
+		process.stdout.write = grab as any; process.stderr.write = grab as any; console.log = grab; console.error = grab; console.warn = grab;
+		let thrown = "";
+		try { await run({ paths, key: KEY, cap: 1, fetchFn: f, expected }); }
+		catch (e: any) { thrown = `${e?.message}\n${e?.stack}`; }
+		finally { process.stdout.write = ow; process.stderr.write = ew; console.log = ol; console.error = oe; console.warn = owarn; }
+		const file = existsSync(paths.out) ? readFileSync(paths.out, "utf8") : "";
+		for (const [where, text] of [["stdout/stderr", captured.join("\n")], ["output file", file], ["thrown", thrown]] as const) {
+			assert.ok(!text.includes(KEY), `${label}: key in ${where}`);
+			assert.ok(!/authorization/i.test(text), `${label}: Authorization in ${where}`);
+		}
+		assert.ok(file.length > 0, `${label}: output written`);
+	}
+});

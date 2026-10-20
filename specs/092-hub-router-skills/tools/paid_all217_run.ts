@@ -77,7 +77,7 @@ export async function run(opts: { paths: Paths; key: string; cap: number; fetchF
 			const j: any = await res.json().catch(() => null);
 			rec = { id: r.id, ...parseAnswer(res.status, j, T.question_id) };
 			rec.usd = rec.input_tokens * PRICE_IN + rec.output_tokens * PRICE_OUT; usd += rec.usd; maxSeenIn = Math.max(maxSeenIn, rec.input_tokens);
-		} catch (e: any) { rec = { id: r.id, status: "error", error: String(e?.name ?? "error") }; }
+		} catch (e: any) { rec = { id: r.id, status: "error", error: e?.name === "TimeoutError" ? "timeout" : "network" }; } // fixed labels only: never copy error text (may embed headers)
 		rec.ms = Date.now() - t0; out.push(rec); save();
 	}
 	save();
