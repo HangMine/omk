@@ -10,6 +10,7 @@ import type { AssistantMessage, ImageContent } from "omk-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
 import { OVERFLOW_RECOVERY_FAILED } from "../core/compaction/overflow-recovery-progress.ts";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
+import { formatPinnedQuotaFailoverNotice } from "../core/pinned-quota-failover-notice.ts";
 import type { PromptSettlementOutcome } from "../core/prompt-settlement.ts";
 import { startRunBudgetClock } from "../core/remaining-budget.ts";
 import { formatSessionTermination, type SessionTermination } from "../core/session-termination.ts";
@@ -158,6 +159,8 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		unsubscribe?.();
 		unsubscribe = session.subscribe((event) => {
 			if (event.type === "prompt_settled") latestOutcome = event.outcome;
+			if (event.type === "pinned_quota_failover")
+				process.stderr.write(`${formatPinnedQuotaFailoverNotice(event)}\n`);
 			if (
 				event.type === "compaction_end" &&
 				event.reason === "overflow" &&

@@ -220,6 +220,120 @@ describe("AgentSession retry", () => {
 		expect(events).toContain("end:success=true");
 	});
 
+	it("shows one pinned-quota failover notice per turn on a pinned model (spec 089)", async () => {
+		const created = createSession({
+			failCount: 1,
+			errorMessage: "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).",
+			modelPinned: true,
+		});
+		const notices: string[] = [];
+		created.session.subscribe((event) => {
+			if (event.type === "pinned_quota_failover") notices.push(`${event.to}|${event.message}`);
+		});
+
+		await created.session.prompt("Test");
+
+		expect(notices).toHaveLength(1);
+		expect(notices[0]).toContain("deepseek/deepseek-v4-flash|");
+		expect(notices[0]).toContain("autoFailoverOnQuotaExhaustion: false");
+	});
+
+	it("keeps one pinned-quota notice across two separate retries in one turn and re-arms next turn (spec 089)", async () => {
+		const quota = "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).";
+		const echoTool: AgentTool = {
+			name: "echo",
+			label: "Echo",
+			description: "Echo text back",
+			parameters: Type.Object({ text: Type.String() }),
+			execute: async () => ({ content: [{ type: "text", text: "echoed" }], details: undefined }),
+		};
+		// 1 quota → retry ok with tool call; 3 quota (second, separate retry) → 4 ok; next turn: 5 quota → 6 ok.
+		let callCount = 0;
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model: getModel("anthropic", "claude-sonnet-4-5")!, systemPrompt: "Test", tools: [] },
+			streamFn: () => {
+				callCount++;
+				const n = callCount;
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					if (n === 1 || n === 3 || n === 5) {
+						const msg = createAssistantMessage("", { stopReason: "error", errorMessage: quota });
+						stream.push({ type: "start", partial: msg });
+						stream.push({ type: "error", reason: "error", error: msg });
+					} else if (n === 2) {
+						const msg: AssistantMessage = {
+							...createAssistantMessage(""),
+							stopReason: "toolUse",
+							content: [{ type: "toolCall", id: "call_1", name: "echo", arguments: { text: "hi" } }],
+						};
+						stream.push({ type: "start", partial: msg });
+						stream.push({ type: "done", reason: "toolUse", message: msg });
+					} else {
+						const msg = createAssistantMessage("Done");
+						stream.push({ type: "start", partial: msg });
+						stream.push({ type: "done", reason: "stop", message: msg });
+					}
+				});
+				return stream;
+			},
+		});
+		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+		authStorage.setRuntimeApiKey("deepseek", "test-key");
+		settingsManager.applyOverrides({
+			retry: { enabled: true, maxRetries: 3, baseDelayMs: 1 },
+			providerResilience: {
+				failoverCandidates: [
+					{ provider: "deepseek", id: "deepseek-v4-flash" },
+					{ provider: "anthropic", id: "claude-sonnet-4-5" },
+				],
+			},
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settingsManager,
+			cwd: tempDir,
+			modelRegistry: ModelRegistry.create(authStorage, tempDir),
+			modelPinned: true,
+			resourceLoader: createTestResourceLoader(),
+			baseToolsOverride: { echo: echoTool },
+		});
+		const notices: string[] = [];
+		const retryEnds: boolean[] = [];
+		session.subscribe((event) => {
+			if (event.type === "pinned_quota_failover") notices.push(`${event.from}->${event.to}`);
+			if (event.type === "auto_retry_end") retryEnds.push(event.success);
+		});
+
+		await session.prompt("Test");
+		expect(callCount).toBe(4);
+		expect(retryEnds).toEqual([true, true]);
+		expect(notices).toHaveLength(1);
+
+		await session.prompt("Next turn");
+		expect(callCount).toBe(6);
+		expect(notices).toHaveLength(2);
+	});
+
+	it("shows no pinned-quota notice when the model was not pinned (spec 089)", async () => {
+		const created = createSession({
+			failCount: 1,
+			errorMessage: "429 You've hit the free limit for DeepSeek V4.1 Flash 1017 free (your free daily allowance).",
+		});
+		let notices = 0;
+		created.session.subscribe((event) => {
+			if (event.type === "pinned_quota_failover") notices += 1;
+		});
+
+		await created.session.prompt("Test");
+
+		expect(created.getCallCount()).toBe(2);
+		expect(notices).toBe(0);
+	});
+
 	it("exhausts max retries and emits failure", async () => {
 		const created = createSession({ failCount: 99, maxRetries: 2 });
 		const events: string[] = [];
