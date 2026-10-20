@@ -196,17 +196,21 @@ which 264 trials per arm would suffice. The pilot is therefore dropped.
   for on/off of one harness), Δ = 0.05, ρ = 0.4858, DE = 1.9716, m = 3.
 - N_main = ⌈(1.96 + 0.84)² · p_disc / Δ²⌉ = ⌈7.84 · 0.409 / 0.0025⌉ =
   **1,283** pairs.
-- Trials per arm = ⌈1,283 · 1.9716⌉ = **2,530**; over 88 tasks ≈ **29 reps
-  per task** (⌈2,530 / 88⌉ = 29; DE was computed at m = 3, so DE at m = 29
-  would be larger — this N is a lower bound, noted, not re-derived).
-- **Cost estimate** (estimate, not a quote): $0.581 per omk attempt
-  (`cost_per_trial.omk` in `/workspace/tb-bench/jobs/r8/final/r8_summary.json`,
-  sha256 `88d1586504599081bf9b483c888006bc14b740f1752324cbdcc80787bba53eab`)
-  × 2,530 × 2 arms ≈ **$2,940**. Needs 인호 OK.
-- Rule: no OK → no run, flag stays default off. The −5 pp criterion is not
-  relaxed and nothing changes after results.
-- Paid run only after 인호's OK and after the strict measurement on the box
-  ends.
+- **Undecidable with the current task set at any cost.** With 88 tasks and
+  m reps, effective n = 88·m / (1 + (m − 1)·ρ), which rises toward
+  88 / ρ = 88 / 0.4858 ≈ **181** as m → ∞. 181 < 1,283, so the −5 pp
+  criterion cannot be decided on the 88-task set however many reps are run.
+  The earlier 2,530 trials/arm ($2,940) plan is withdrawn and not proposed.
+- **094 ships default-off for 1.5.0** (confirmed by Tech Lead).
+- Default-on A/B requires a larger task set: approximately
+  **≥ 624 tasks** (1,283 × 0.4858 ≈ 623.3; approximation, assumes the same ρ
+  and few reps per task). Handled in a separate spec, not here.
+- Caveat: ρ = 0.4858 is the ICC of per-trial success, while the verdict uses
+  the ICC of on−off pair differences, which may differ. 88 tasks would
+  suffice only if that ICC ≤ 88 / 1,283 ≈ 0.069; judged unlikely given
+  ρ ≈ 0.36–0.49 across harnesses, so the conclusion stands.
+- The −5 pp criterion is not relaxed. CI method unchanged (task-level cluster
+  bootstrap, 10k, seed 20261011).
 
 ## Risks
 
@@ -229,5 +233,4 @@ promotion, any masking/redaction work.
 ## Open questions
 
 1. Head/tail split pending fixture measurement (see step above).
-2. Default-on A/B needs ≈ $2,940 (2,530 trials/arm); 인호 to decide. Without OK, 094 stays default off permanently.
-3. DE at m = 29 reps exceeds 1.9716; Tech Lead to accept N = 1,283/2,530 as a lower bound or ask for re-derivation.
+2. Default-on A/B needs a ≥ ~624-task set; separate spec to be written.
