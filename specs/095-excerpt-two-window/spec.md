@@ -41,7 +41,9 @@ All matching, cutting and caps run on sanitized text
 
 0. **Patterns.** 094 list plus summary-line patterns `summary-failing`
    `^\s*\d+ failing\b` and `summary-failed` `\b[1-9]\d* (?:tests? )?failed\b`
-   (success exclusions still apply first). **Note:** these were added after
+   (success exclusions still apply first). **Tech Lead rule:** summary-line
+   patterns may anchor **only window 2**, and only when no other error pattern
+   matched anywhere; they never anchor window 1. **Note:** these were added after
    seeing holdout2 (mocha `1 failing` miss), so holdout2 is not evidence for
    them. holdout3 must not include mocha and must use only tools not used in
    holdouts 1–2.
@@ -95,21 +97,23 @@ Each rule gets a unit test with a positive and a negative example.
 
 1. **Commit P:** patterns, exclusions, R1–R4, N1/N2, window caps as code
    constants + unit tests, and this spec section frozen.
-2. **Commit H:** new `test/fixtures/goal-diagnostics-holdout3/` with 10 fixtures
-   + `manifest.json`; every fixture has `groundTruthLine` (1-based, sanitized
-   text) and `groundTruthText`. Composition: ≥ 3 with > 24 lines before the
-   real error; ≥ 3 deceptive, of which ≥ 2 have pattern-like strings first
-   (`0 errors`, `error-handler.test.ts ✓`, `no errors found`, `error.ts`);
-   ≥ 2 keyword-less / fallback; ≥ 1 planted fake `Error:` line. New tools not
-   used in holdout1/2. Authored without running the excerpt on them.
-3. **Commit M:** measurement test. Report per fixture: window containing the
-   real line (1 / 2 / none), matched pattern(s), fallback yes/no, whole
+2. **Commit H (Agent Researcher authors; Harness Engineer does not see or
+   create it):** after Commit P, new `test/fixtures/goal-diagnostics-holdout3/`
+   with 10 fixtures + `manifest.json`; every fixture has `groundTruthLine`
+   (first real error) and `groundTruthLastLine` (last real error), 1-based on
+   sanitized text. Composition: ≥ 3 with > 24 lines before the error; ≥ 3
+   decoys; 1 planted fake `Error:`; ≥ 2 fallback (no pattern); ≥ 1
+   summary-line-only; no mocha; only tools unused in holdouts 1–2.
+3. **Commit M:** measurement test. Report per fixture: windows containing the
+   real first and last lines (1 / 2 / none), matched pattern(s), fallback yes/no, whole
    passthrough yes/no.
 
-**Pass (proposed, pending Tech Lead) = 10/10 real first error line inside
-WINDOW 1** (the first-error window). Presence only in window 2 counts as FAIL.
-Note this is stricter than the design bound above: a fake that takes window 1
-fails the fixture even if window 2 shows the real error. Missing ground truth =
+**Pass (final, Tech Lead):** per fixture, the real first error line is inside
+window 1 **and**, when `groundTruthLastLine` ≠ `groundTruthLine`, the real
+last error line is inside window 2. 10/10 required. Missing ground truth =
+FAIL. A FAIL means no retune and no remeasure (new spec). Note this is
+stricter than the design bound above: a fake that takes window 1 fails the
+fixture even if window 2 shows the real error. Missing ground truth =
 FAIL. Whole-passthrough hits are reported separately. holdout1 (10), holdout2
 (10) and the 12 original fixtures are **regression only**. No relaxation, no
 retuning after measurement; a miss means a new spec.
@@ -121,7 +125,7 @@ retuning after measurement; a miss means a new spec.
 
 | ID | Test | Pass |
 |---|---|---|
-| E1 | holdout3 | 10/10 real first error line in window 1 (window 2 only = FAIL); proposed, pending Tech Lead |
+| E1 | holdout3 | 10/10: first error in window 1 and (if different) last error in window 2 |
 | E2 | caps, all 32 fixtures + 1 MiB generated | ≤ 1,536 B, ≤ 40 lines; each window within its share |
 | E3 | R1–R4 unit tests | each rule rejects its positive, accepts its negative |
 | E4 | fake-first fixture (unit) | real last error in window 2 |
@@ -159,4 +163,4 @@ lookup, changes to verdict/gate/completion.
 
 ## Open questions
 
-1. Tech Lead to confirm the window-1-only pass criterion (E1).
+None open; Tech Lead decisions recorded above.
