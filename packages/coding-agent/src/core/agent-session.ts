@@ -202,6 +202,7 @@ import type { CustomMessage } from "./messages.ts";
 import { selectContextFilesForModel } from "./model-prompt-policy.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { findExactModelReferenceMatch } from "./model-resolver.ts";
+import { type PinnedQuotaFailoverEvent, PinnedQuotaFailoverNotice } from "./pinned-quota-failover-notice.ts";
 import { classifyPromptCacheTransition } from "./prompt-cache.ts";
 import type { PromptOptions } from "./prompt-options.ts";
 import * as promptSettlement from "./prompt-settlement.ts";
@@ -371,6 +372,7 @@ export type AgentSessionEvent =
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
 	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	| PinnedQuotaFailoverEvent
 	| { type: "bash_execution_update"; id?: string; delta: string }
 	| {
 			type: "summarization_retry_scheduled";
@@ -656,6 +658,10 @@ export class AgentSession {
 	// v10.3-Ω: models that already refused/failed this turn — failover must advance,
 	// not re-pick the same candidate (claude-opus-5 → grok → grok → grok loop fix).
 	private _refusedModels = new Set<string>();
+	private readonly _pinNotice = new PinnedQuotaFailoverNotice(
+		(e) => this._emit(e),
+		() => this._modelPinned,
+	);
 	/** True when `--model` / `--provider` pinned this process to one model. */
 	private readonly _modelPinned: boolean;
 
@@ -2111,6 +2117,7 @@ export class AgentSession {
 		// continuations inside this call share it, as does the resource lease.
 		const promptRunId = `prompt-run-${randomUUID()}`;
 		this._overflowRecoveryAttempts = 0; // spec 061: fresh overflow-recovery budget per user prompt
+		this._pinNotice.resetTurn(); // spec 089: re-arm the once-per-turn pinned quota notice
 		const ownedRun = this._promptLifecycle.begin(promptRunId);
 		// Roadmap M2: the lease spans the whole run including internal retries
 		// and continuations, so they share one admission decision (§8.3).
@@ -4965,7 +4972,7 @@ export class AgentSession {
 		if (!next) return undefined;
 		try {
 			await this.setModel(next);
-			return `${next.provider}/${next.id}`;
+			return this._pinNotice.afterFailover(quotaExhausted, current, next);
 		} catch {
 			// setModel failed (auth/guard) — blacklist so next retry advances further.
 			this._refusedModels.add(failoverModelKey(pick.provider, pick.id));
