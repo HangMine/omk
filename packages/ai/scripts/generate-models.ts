@@ -25,6 +25,7 @@ import { devinModels } from "./catalog-devin.ts";
 import { workbuddyModels } from "./catalog-workbuddy.ts";
 import { fetchOpenCodeGoModels } from "./catalog-opencode-go.ts";
 import { catalogPricePerMillion } from "./catalog-pricing.ts";
+import { applyCatalogPins, experientialModelsOrCommitted, isNonTextOutputModel, NON_TEXT_OUTPUT_IDS } from "./catalog-pins.ts";
 import { applyCurrentThinkingMetadata, applyGpt6AstraUltraAlias, openRouterThinkingMap } from "./catalog-thinking.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -910,6 +911,14 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			string,
 			{ models?: Record<string, ModelsDevModel> } | undefined
 		>;
+
+		// Record models whose output includes a non-text modality (realtime voice, image, video);
+		// applyCatalogPins drops them unless already in the catalog. Example: xai grok-voice-3.0.
+		for (const providerData of Object.values(data)) {
+			for (const [modelId, model] of Object.entries(providerData?.models ?? {})) {
+				if (isNonTextOutputModel(model)) NON_TEXT_OUTPUT_IDS.add(modelId);
+			}
+		}
 
 		// Record upstream-declared xhigh effort support before the per-provider passes run, so
 		// thinking metadata can consult real catalog data rather than hardcoded model versions.
@@ -1807,7 +1816,7 @@ async function generateModels() {
 	const aiGatewayModels = await fetchAiGatewayModels();
 	const zylooModels = await fetchZylooModels();
 	const openCodeGoModels = await fetchOpenCodeGoModels();
-	const experientialModels = await fetchExperientialModels();
+	const experientialModels = await experientialModelsOrCommitted(fetchExperientialModels, MODELS);
 
 	// Combine models (models.dev has priority)
 	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...zylooModels].filter(
@@ -2736,7 +2745,7 @@ async function generateModels() {
 		...experientialModels,
 	);
 
-	writeModelCatalog(allModels);
+	writeModelCatalog(applyCatalogPins(allModels, MODELS));
 }
 
 function writeModelCatalog(allModels: Model<Api>[]) {
