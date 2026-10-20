@@ -14,6 +14,7 @@ import { createAttachmentStrip } from "./components/attachment-strip.ts";
 import { ChatContainer } from "./components/chat-container.ts";
 import { createSessionMetadataLoaders } from "./components/session-selector-loaders.ts";
 import { planFirstRun } from "./first-run.ts";
+import { installInteractiveNextSuggestions } from "./next-suggestion-controller.ts";
 import { PromptAttachmentDraft } from "./prompt-attachment-draft.ts";
 import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
 
@@ -3109,6 +3110,9 @@ export class InteractiveMode {
 	}
 
 	private subscribeToAgent(): void {
+		installInteractiveNextSuggestions(this.session, this.defaultEditor, EDITOR_PLACEHOLDER, () =>
+			this.ui.requestRender(),
+		);
 		this.unsubscribe = this.session.subscribe(async (event) => {
 			await this.handleEvent(event);
 			this.chatContainer.handleAgentEvent(event);

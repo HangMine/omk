@@ -47,7 +47,12 @@ import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { createHttpProxyAgentsForTarget } from "../utils/node-http-proxy.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
-import { getModelMatchCandidates, mapThinkingLevelToEffort, supportsAdaptiveThinking } from "./bedrock-thinking.ts";
+import {
+	getModelMatchCandidates,
+	isAnthropicClaudeModel,
+	mapThinkingLevelToEffort,
+	supportsAdaptiveThinking,
+} from "./bedrock-thinking.ts";
 import { adjustMaxTokensForThinking, buildBaseOptions, clampReasoning } from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
 
@@ -522,23 +527,6 @@ function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention 
 		return "long";
 	}
 	return "short";
-}
-
-/**
- * Check if the model is an Anthropic Claude model on Bedrock.
- * Checks both model ID and model name to support application inference profiles
- * whose ARNs don't contain the model name.
- */
-function isAnthropicClaudeModel(model: Model<"bedrock-converse-stream">): boolean {
-	const id = model.id.toLowerCase();
-	const name = model.name?.toLowerCase() ?? "";
-	return (
-		id.includes("anthropic.claude") ||
-		id.includes("anthropic/claude") ||
-		name.includes("anthropic.claude") ||
-		name.includes("anthropic/claude") ||
-		name.includes("claude")
-	);
 }
 
 /**
