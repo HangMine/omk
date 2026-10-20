@@ -177,6 +177,27 @@ Lead decision (not taken here).
   plus the generated 1 MiB case): **22/22** first error kept (holdout set was
   6/10 with the plain split).
 
+### Holdout2 result (fixtures + ground truth committed d3da973d9e before measurement; no retune)
+
+| fixture | groundTruthLine | mode (anchor line) | excerpt | real line in window |
+|---|---|---|---|---|
+| playwright-40-pass | 43 | error-word (@45) | cut | yes |
+| mocha-30-pass | 35 | fallback | cut | **no** |
+| phpunit-deceptive | 35 | fallback | cut | yes |
+| terraform-fake-error | 51 | error-colon (@2, planted fake) | cut | **no** |
+| mypy | 3 | error-colon (@3) | cut | yes |
+| dotnet-warnings-first | 35 | fallback | cut | yes |
+| xcodebuild-keywordless | 30 | fallback | cut | yes |
+| bazel | 12 | error-word (@12) | whole | yes |
+| kotlin-deceptive | 5 | fail-marker (@15) | whole | yes |
+| ava-korean-28-pass | 29 | fallback | cut | yes |
+
+**8/10 → below the 10/10 bar.** Fallback 5/10. Misses: a keyword-less
+summary line (`1 failing`) lost in the fallback middle, and a planted fake
+`Error:` 49 lines above the real error. Pinned in
+`test/goal-acceptance-diagnostic-holdout2.test.ts`. Next step needs a Tech
+Lead decision.
+
 ## Acceptance criteria (numeric pass/fail)
 
 | ID | Test | Pass |
