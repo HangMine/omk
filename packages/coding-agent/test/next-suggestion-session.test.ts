@@ -15,6 +15,7 @@ import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
 import {
+	followActiveEditor,
 	installNextSuggestions,
 	type NextSuggestionController,
 	type SuggestionEditorPort,
@@ -466,5 +467,43 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 		editor.setText("");
 		editor.handleInput("\t");
 		expect(editor.getText()).toBe("");
+	});
+
+	it("follows an extension's custom editor installed after setup: the suggestion renders and Tab inserts there", async () => {
+		initTheme("dark");
+		const ui = new TUI(new VirtualTerminal(80, 30));
+		const keybindings = new KeybindingsManager();
+		const defaultEditor = new CustomEditor(ui, getEditorTheme(), keybindings);
+		defaultEditor.setPlaceholder("base");
+		let active = defaultEditor;
+		const h = harness(tempCwd());
+		const controller = install(
+			h.session,
+			followActiveEditor(() => active, "base"),
+		);
+		// pi-powerline-footer swaps in its own editor at session start, after the controller exists.
+		const custom = new CustomEditor(ui, getEditorTheme(), keybindings);
+		active = custom;
+		await h.session.prompt("first");
+		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		expect(custom.render(80).join("\n")).toContain(SUGGESTION);
+		expect(defaultEditor.render(80).join("\n")).not.toContain(SUGGESTION);
+		custom.handleInput("\t");
+		expect(custom.getText()).toBe(SUGGESTION);
+		expect(defaultEditor.getText()).toBe("");
+		expect(h.main).toHaveLength(1);
+
+		// The extension removes its editor while a suggestion is visible: the shown one is cleared too.
+		custom.setText("");
+		await h.session.prompt("second");
+		await vi.waitFor(() => expect(controller.suggestion).toBe(SUGGESTION));
+		active = defaultEditor;
+		controller.cancel();
+		expect(custom.render(80).join("\n")).not.toContain(SUGGESTION);
+		expect(defaultEditor.render(80).join("\n")).not.toContain(SUGGESTION);
+
+		controller.dispose();
+		expect(custom.onBeforeInput).toBeUndefined();
+		expect(defaultEditor.onBeforeInput).toBeUndefined();
 	});
 });

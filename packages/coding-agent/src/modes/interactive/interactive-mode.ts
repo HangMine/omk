@@ -272,6 +272,8 @@ export class InteractiveMode {
 	private statusContainer: Container;
 	private defaultEditor: CustomEditor;
 	private editor: EditorComponent;
+	/** The editor on screen now; an extension may swap it in (setCustomEditorComponent). */
+	private readonly activeEditor = () => this.editor;
 	private editorComponentFactory: EditorFactory | undefined;
 	private autocompleteProvider: AutocompleteProvider | undefined;
 	private autocompleteProviderWrappers: AutocompleteProviderFactory[] = [];
@@ -3119,7 +3121,7 @@ export class InteractiveMode {
 	}
 
 	private subscribeToAgent(): void {
-		installInteractiveNextSuggestions(this.session, this.defaultEditor, EDITOR_PLACEHOLDER, () =>
+		installInteractiveNextSuggestions(this.session, this.activeEditor, EDITOR_PLACEHOLDER, () =>
 			this.ui.requestRender(),
 		);
 		this.unsubscribe = this.session.subscribe(async (event) => {
