@@ -14,6 +14,7 @@ import { formatPinnedQuotaFailoverNotice } from "../core/pinned-quota-failover-n
 import type { PromptSettlementOutcome } from "../core/prompt-settlement.ts";
 import { startRunBudgetClock } from "../core/remaining-budget.ts";
 import { formatSessionTermination, type SessionTermination } from "../core/session-termination.ts";
+import { formatTaskResultLine } from "../core/task-result.ts";
 import { killTrackedDetachedChildren } from "../utils/shell.ts";
 
 /**
@@ -159,6 +160,9 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		unsubscribe?.();
 		unsubscribe = session.subscribe((event) => {
 			if (event.type === "prompt_settled") latestOutcome = event.outcome;
+			// Spec 096 (flag on only): stdout and the exit code stay unchanged; json mode gets the raw event below.
+			if (event.type === "task_result" && mode === "text")
+				process.stderr.write(`${formatTaskResultLine(event.projection)}\n`);
 			if (event.type === "pinned_quota_failover")
 				process.stderr.write(`${formatPinnedQuotaFailoverNotice(event)}\n`);
 			if (

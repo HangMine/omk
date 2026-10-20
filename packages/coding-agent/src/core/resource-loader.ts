@@ -48,6 +48,8 @@ export interface ResourceLoader {
 	getAppendSystemPrompt(): string[];
 	extendResources(paths: ResourceExtensionPaths): void;
 	reload(): Promise<void>;
+	/** The extension event bus, when the loader owns one (spec 096 task-result collector). */
+	getEventBus?(): EventBus;
 }
 
 function resolvePromptInput(input: string | undefined, description: string): string | undefined {
@@ -314,6 +316,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.extensionThemeSourceInfos = new Map();
 		this.lastPromptPaths = [];
 		this.lastThemePaths = [];
+	}
+
+	getEventBus(): EventBus {
+		return this.eventBus;
 	}
 
 	getExtensions(): LoadExtensionsResult {
