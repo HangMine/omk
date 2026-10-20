@@ -125,6 +125,29 @@ compile steps) before the first error reach ~20 lines; byte offsets ≤ 661 B.
 **Fixed: head 768 B / 24 lines; tail gets the rest (≤ 15 lines).** Total caps
 unchanged (1536 B, 40 lines). Per-fixture table is in the PR body.
 
+### Holdout result (Tech Lead criteria, 2026-10-20)
+
+10 new fixtures in `packages/coding-agent/test/fixtures/goal-diagnostics-holdout/`,
+committed (3233033072) before measurement; split unchanged (768 B / 24 lines).
+Pass = first-error line in the head window, 10/10 required.
+
+| fixture | lines before first error | in head | in tail (report only) |
+|---|---|---|---|
+| vitest-60-pass | 62 | no | no |
+| jest-55-pass | 55 | no | no |
+| tsc-multi | 0 | yes | no |
+| eslint-warn-flood | 91 | no | yes |
+| pytest-short | 5 | yes | no |
+| make-gcc | 7 | yes | no |
+| gradle | 11 | yes | no |
+| ruby-rspec | 5 | yes | no |
+| deno-ansi | 9 | yes | no |
+| korean-30-pass | 30 | no | no |
+
+**Head 6/10 → FAIL.** Tail 1/10. A fixed head/tail split loses the first
+error whenever more than 24 lines precede it. Next design step needs a Tech
+Lead decision (not taken here).
+
 ## Acceptance criteria (numeric pass/fail)
 
 | ID | Test | Pass |
