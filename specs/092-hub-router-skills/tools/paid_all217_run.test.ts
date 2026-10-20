@@ -70,6 +70,10 @@ test("parsing → hit / miss / no-attach / false attach", () => {
 	assert.equal(outcome(attachOf(ok("a", 0.6), 0.6), "a"), "hit");
 	assert.equal(outcome(attachOf(ok("b", 0.9), 0.6), "a"), "miss");
 	assert.equal(outcome(attachOf(ok("a", 0.59), 0.6), "a"), "miss");
+	assert.equal(attachOf(ok("a", 0.6), 0.6), "a"); // exactly 0.6 attaches (>= 0.6)
+	assert.equal(attachOf(ok("a", 0.5999), 0.6), null); // just below does not
+	assert.equal(outcome(attachOf(ok("a", 0.5999), 0.6), "a"), "miss");
+	assert.equal(outcome(attachOf(ok("a", 0.6), 0.6), null), "false_attach");
 	assert.equal(outcome(attachOf(ok("none", 0.99), 0.6), "a"), "miss");
 	assert.equal(outcome(attachOf(parseAnswer(500, null, "skill"), 0.6), "a"), "miss");
 	assert.equal(outcome(attachOf(parseAnswer(200, { answers: {} }, "skill"), 0.6), "a"), "miss");
