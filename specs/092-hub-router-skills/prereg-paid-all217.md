@@ -20,7 +20,7 @@ Context: the 092 free gate is FAIL at G2 before measuring (hubs over 25 skills).
 | temperature | none: the `/v1/systemone` request body has no temperature or sampling field (https://docs.typesafe.ai/api: `state`, `model`, `questions` only). The 091 design sets none either. Nothing is sent. |
 | prompt template | `specs/092-hub-router-skills/tools/paid-all217-template.json` sha256 `fdce5368063ce81f78133d827483dc45edc4afab2db8f7c943a80f32e3f5ec41` |
 | runner | `specs/092-hub-router-skills/tools/paid_all217_run.ts` sha256 `fd652a0a1019b25e55d22fed7c29a3b9a45f311bdb09e47d4815434f90ee9952`; tests `paid_all217_run.test.ts` sha256 `3b12d9c25bd85a12e9ce0bbb53098beaab408fde09f1561f7b1a922aad7050c3` |
-| harness commit | `88a167bcaee751617a63edc82021c141e5240b83` (branch `spec/092-paid-prereg`; template, runner, tests) |
+| harness commit | `66239d62af513f7f60ca7dce383558750bbe43e8` (branch `spec/092-paid-prereg`; template, runner, tests, diff scan) |
 | attach threshold | probability of the chosen option ≥ **0.6** (091 spec stage 3 PREREG value), used for both G1 and G4 |
 | cost cap | **TBD — set by 인호 in 1:1 before any run** (env `OMK_COST_CAP_USD`; runner refuses to start without it) |
 
@@ -67,6 +67,10 @@ Context: the 092 free gate is FAIL at G2 before measuring (hubs over 25 skills).
 - The TypeSafe key previously exposed in the room is never used for this run.
 - Only the replacement key that 인호 entered via masked input in OMK's 1:1 chat is used, read at run time from env `TYPESAFE_API_KEY`.
 - The key value never appears in this PREREG, in logs, in result files, or in commits.
+- 키는 박스 로컬 env에만 두고 저장소에는 넣지 않는다.
+- Diff scan: `tools/scan_key_in_diff.py` (sha256 `56420df7260ea77aa54a7e279e8279b9a2a47e133fef8ab86070347b58bb9023`) reads the key from env at run time and counts occurrences of
+  the full key and of the literal key marker in `git diff a4d150974c..HEAD` and commit messages. It prints counts only and
+  stores no key, prefix or hash. Must report 0/0 before any push.
 - No new dependencies: plain `fetch` only.
 
 ## Risks
