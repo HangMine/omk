@@ -92,12 +92,6 @@ export function assertSafeApiUrl(baseUrl: string): void {
 	throw new Error(`AdaptOrch base URL must use https (or http on loopback): ${baseUrl}`);
 }
 
-/** Remove a credential from any text that is about to become an error message. */
-function redact(text: string, apiKey: string): string {
-	const key = apiKey.trim();
-	return key === "" ? text : text.split(key).join("[REDACTED]");
-}
-
 function readErrorFields(body: unknown): { code?: string; message?: string } {
 	if (typeof body !== "object" || body === null) return {};
 	const record = body as Record<string, unknown>;
@@ -159,7 +153,7 @@ export class AdaptOrchApiClient {
 			response = await this.fetch(`${this.baseUrl}${path}`, init);
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
-			throw new Error(`AdaptOrch request failed: ${redact(detail, this.apiKey)}`);
+			throw new Error(`AdaptOrch request failed: ${detail}`);
 		}
 
 		let payload: unknown;
@@ -175,7 +169,7 @@ export class AdaptOrchApiClient {
 			throw new AdaptOrchApiError(
 				response.status,
 				code,
-				redact(message ?? `AdaptOrch request failed with status ${response.status}`, this.apiKey),
+				message ?? `AdaptOrch request failed with status ${response.status}`,
 			);
 		}
 		return payload as T;

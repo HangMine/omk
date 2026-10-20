@@ -10,7 +10,6 @@ import {
 	type AdvisoryJudgeInput,
 	type AdvisoryJudgeRequest,
 } from "./advisory-judge-types.ts";
-import { redactSensitiveTextForced } from "./redaction.ts";
 
 export type {
 	AdvisoryJudge,
@@ -157,7 +156,7 @@ function validateInput(input: AdvisoryJudgeInput): {
 	if (taskId === undefined) throw new AdvisoryJudgeInputError("candidate taskId is missing");
 	return {
 		taskId,
-		taskGoal: boundedRedactedText(input.taskGoal, MAX_GOAL_CHARS, "taskGoal"),
+		taskGoal: boundedNormalizedText(input.taskGoal, MAX_GOAL_CHARS, "taskGoal"),
 		judgeId: identifier(input.judgeId, "judgeId"),
 		rubric: validateRubric(input.rubric),
 		candidates: candidates.sort(
@@ -188,7 +187,7 @@ function validateRubric(rubric: readonly AdvisoryJudgeCriterion[]): readonly Adv
 		}
 		return {
 			id,
-			description: boundedRedactedText(criterion.description, MAX_DESCRIPTION_CHARS, "criterion description"),
+			description: boundedNormalizedText(criterion.description, MAX_DESCRIPTION_CHARS, "criterion description"),
 			weight: criterion.weight,
 		};
 	});
@@ -206,7 +205,7 @@ function buildRequest(
 		taskGoal,
 		rubric,
 		candidates: candidates.map((candidate) => {
-			const material = boundedRedactedText(candidate.material, MAX_MATERIAL_CHARS, "candidate material");
+			const material = boundedNormalizedText(candidate.material, MAX_MATERIAL_CHARS, "candidate material");
 			return {
 				id: candidate.id,
 				material,
@@ -237,15 +236,15 @@ function fallback(
 	};
 }
 
-function boundedRedactedText(value: string, maxChars: number, label: string): string {
+function boundedNormalizedText(value: string, maxChars: number, label: string): string {
 	if (typeof value !== "string") throw new AdvisoryJudgeInputError(`${label} must be a string`);
-	const redacted = redactSensitiveTextForced(value).trim();
-	if (redacted.length === 0) throw new AdvisoryJudgeInputError(`${label} must not be empty`);
-	return redacted.length <= maxChars ? redacted : `${redacted.slice(0, maxChars - 12)}[TRUNCATED]`;
+	const normalized = value.trim();
+	if (normalized.length === 0) throw new AdvisoryJudgeInputError(`${label} must not be empty`);
+	return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars - 12)}[TRUNCATED]`;
 }
 
 function identifier(value: string, label: string): string {
-	if (typeof value !== "string" || !IDENTIFIER_PATTERN.test(value) || redactSensitiveTextForced(value) !== value) {
+	if (typeof value !== "string" || !IDENTIFIER_PATTERN.test(value)) {
 		throw new AdvisoryJudgeInputError(`${label} is invalid`);
 	}
 	return value;

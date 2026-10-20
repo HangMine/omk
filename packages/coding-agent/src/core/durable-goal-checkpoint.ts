@@ -8,7 +8,6 @@ import {
 	type DurableGoalSnapshot,
 	freshDurableGoalEvidence,
 } from "./durable-goal.ts";
-import { redactSensitiveTextForced } from "./redaction.ts";
 import { isExactRecord } from "./strict-record.ts";
 
 const MAX_LIST_ITEMS = 12;
@@ -145,17 +144,14 @@ function textList(value: readonly string[], label: string, code: "invalid-input"
 
 function evidenceIds(value: readonly string[], code: "invalid-input" | "invalid-store"): readonly string[] {
 	const ids = textList(value, "checkpoint verified evidence", code);
-	if (ids.some((id) => redactSensitiveTextForced(id) !== id)) {
-		throw goalError(code, "checkpoint evidence id contains credential-shaped text");
-	}
 	return ids;
 }
 
 function text(value: string, maxChars: number, label: string, code: "invalid-input" | "invalid-store"): string {
 	if (typeof value !== "string") throw goalError(code, `${label} must be text`);
-	const redacted = redactSensitiveTextForced(value).trim();
-	if (redacted.length === 0 || redacted.length > maxChars) throw goalError(code, `${label} is invalid`);
-	return redacted;
+	const normalized = value.trim();
+	if (normalized.length === 0 || normalized.length > maxChars) throw goalError(code, `${label} is invalid`);
+	return normalized;
 }
 
 function timestamp(value: string, label: string): string {

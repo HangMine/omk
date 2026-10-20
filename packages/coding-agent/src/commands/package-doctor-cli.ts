@@ -3,7 +3,6 @@ import { applyCommandProjectTrustGate } from "../cli/project-trust-gate.ts";
 import { APP_NAME, getAgentDir } from "../config.ts";
 import { inspectPackageCompatibility, type PackageDoctorResult } from "../core/package-doctor.ts";
 import { DefaultPackageManager, type PackageInspection, type ResolvedResource } from "../core/package-manager.ts";
-import { redactSensitiveTextForced } from "../core/redaction.ts";
 import { SettingsManager } from "../core/settings-manager.ts";
 
 export interface PackageDoctorCliOutcome {
@@ -24,13 +23,6 @@ function usage(): string {
 
 function writeJson(writeLine: (line: string) => void, value: unknown): void {
 	writeLine(JSON.stringify(value, null, 2));
-}
-
-function sanitizeFailureMessage(message: string): string {
-	return redactSensitiveTextForced(message).replace(
-		/\b([a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/giu,
-		(_match, protocol: string) => `${protocol}[REDACTED]@`,
-	);
 }
 
 function usageError(writeLine: (line: string) => void): PackageDoctorCliOutcome {
@@ -101,7 +93,7 @@ export async function runPackageDoctorCli(
 		const message = error instanceof Error ? error.message : "Package inspection failed";
 		writeJson(writeLine, {
 			schemaVersion: 1,
-			error: { code: "package-doctor-failed", message: sanitizeFailureMessage(message) },
+			error: { code: "package-doctor-failed", message },
 		});
 		return { handled: true, exitCode: 1 };
 	} finally {

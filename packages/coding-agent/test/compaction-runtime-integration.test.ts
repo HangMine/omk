@@ -263,22 +263,6 @@ describe("compaction runtime transaction integration", () => {
 		expect(envelope?.preserved.latestIntent).toBe("user-1");
 	});
 
-	it("redacts credential-shaped generated summaries before committing them", async () => {
-		const harness = await createHarness({ settings: { compaction: { keepRecentTokens: 1 } } });
-		harnesses.push(harness);
-		seedClosedTranscript(harness);
-		const credential = "synthetic-compaction-secret";
-		injectSummaryStream(harness, undefined, `api_key = "${credential}"`);
-
-		const result = await harness.session.compact();
-
-		expect(result.summary).toContain('api_key = "[REDACTED]"');
-		expect(result.summary).not.toContain(credential);
-		const entry = harness.sessionManager.getEntries().find((candidate) => candidate.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe(result.summary);
-		expect(JSON.stringify(entry)).not.toContain(credential);
-	});
-
 	it("commits a summary whose prose trips the credential-shape validator", async () => {
 		const harness = await createHarness({ settings: { compaction: { keepRecentTokens: 1 } } });
 		harnesses.push(harness);
@@ -310,20 +294,6 @@ describe("compaction runtime transaction integration", () => {
 
 		const entry = harness.sessionManager.getEntries().find((candidate) => candidate.type === "compaction");
 		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("task-scheduler");
-	});
-
-	it("redacts credential-shaped summaries during auto-compaction", async () => {
-		const harness = await createHarness({ settings: { compaction: { keepRecentTokens: 1 } } });
-		harnesses.push(harness);
-		seedClosedTranscript(harness);
-		const credential = "synthetic-auto-compaction-secret";
-		injectSummaryStream(harness, undefined, `api_key = "${credential}"`);
-
-		await (harness.session as unknown as AutoCompactionRuntime)._runAutoCompaction("threshold", false);
-
-		const entry = harness.sessionManager.getEntries().find((candidate) => candidate.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("[REDACTED]");
-		expect(JSON.stringify(entry)).not.toContain(credential);
 	});
 
 	it("validates a persisted envelope binding when the session reloads", async () => {

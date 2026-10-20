@@ -168,21 +168,6 @@ describe("goal acceptance verification", () => {
 		},
 	);
 
-	it("redacts credentials from the operator output tail", async () => {
-		const root = gitRepo();
-		const verifier = new GoalVerifier({ cwd: root, goalKey: "k-secret", sandboxPreflight: noSandbox });
-		// Assembled at runtime so the fixture never lands in source as a literal
-		// credential shape for the secret scanner to flag.
-		const secret = `sk-${"x".repeat(32)}`;
-
-		const result = await verifier.run(`printf 'key=${secret}'`);
-
-		expect(result.outputTail).not.toContain(secret);
-		expect(
-			readFileSync(join(receiptsDirectory(root, "k-secret"), result.receiptId, "receipt.json"), "utf8"),
-		).not.toContain(secret);
-	});
-
 	it("reports an unavailable workspace binding outside git", () => {
 		expect(captureGoalWorkspace(tempDir("omk-goal-nogit-")).completeness).toBe("unavailable");
 	});

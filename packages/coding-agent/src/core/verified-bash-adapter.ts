@@ -6,7 +6,6 @@ import type {
 } from "../guardrails/verified-executor.ts";
 import type { WorkspaceScope } from "../types/evidence.ts";
 import { getShellConfig } from "../utils/shell.ts";
-import { redactSensitiveText } from "./redaction.ts";
 import { type BashOperations, type BashSandboxPreflight, createLocalBashOperations } from "./tools/bash.ts";
 
 export const VERIFIED_BASH_REDACTION_POLICY_ID =
@@ -52,7 +51,7 @@ export class VerifiedBashAdapterError extends Error {
  * Bind a caller-trusted BashOperations execution to a receipt.
  * Default session/CLI paths enable this adapter unless `OMK_VERIFIED_BASH=0`.
  * BashOperations exposes a combined output stream, so the policy records the
- * redacted bounded stream as stdout and leaves stderr empty by construction.
+ * bounded combined stream as stdout and leaves stderr empty by construction.
  */
 export async function executeVerifiedBash(
 	request: VerifiedBashExecutionRequest,
@@ -67,11 +66,11 @@ export async function executeVerifiedBash(
 	};
 
 	const alreadyRedactedOutput = () => {
-		const redacted = Buffer.from(redactSensitiveText(combined.toString("utf8")));
+		const outputBytes = Buffer.from(combined.toString("utf8"));
 		const bounded =
-			redacted.byteLength > MAX_EVIDENCE_RECEIPT_OUTPUT_BYTES
-				? redacted.subarray(-MAX_EVIDENCE_RECEIPT_OUTPUT_BYTES)
-				: redacted;
+			outputBytes.byteLength > MAX_EVIDENCE_RECEIPT_OUTPUT_BYTES
+				? outputBytes.subarray(-MAX_EVIDENCE_RECEIPT_OUTPUT_BYTES)
+				: outputBytes;
 		return {
 			redactionPolicyId: VERIFIED_BASH_REDACTION_POLICY_ID,
 			stdout: bounded,

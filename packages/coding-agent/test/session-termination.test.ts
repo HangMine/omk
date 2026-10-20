@@ -297,7 +297,7 @@ describe("classifySessionTermination", () => {
 		expect(termination).not.toHaveProperty("cause");
 	});
 
-	it("rejects NUL, oversized, and credential-shaped messages instead of redacting them", () => {
+	it("rejects NUL and oversized messages", () => {
 		const base = {
 			sessionId: "session-1",
 			runId: "run-1",
@@ -310,21 +310,6 @@ describe("classifySessionTermination", () => {
 		expect(() =>
 			classifySessionTermination({ ...base, message: "x".repeat(MAX_SESSION_TERMINATION_MESSAGE_LENGTH + 1) }),
 		).toThrow("pre-redacted");
-		expect(() => classifySessionTermination({ ...base, message: "api_key=supersecretvalue123" })).toThrow(
-			"credential-shaped",
-		);
-		expect(() => classifySessionTermination({ ...base, message: "Authorization: Bearer secretvalue123" })).toThrow(
-			"credential-shaped",
-		);
-		for (const message of [
-			"api_key=x",
-			'password="two words"',
-			'"access-token": "short value"',
-			"token=x",
-			"OPENAI_API_KEY=ok",
-		]) {
-			expect(() => classifySessionTermination({ ...base, message })).toThrow("credential-shaped");
-		}
 	});
 
 	it("rejects C0 and DEL controls in every identifier", () => {

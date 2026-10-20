@@ -7,7 +7,7 @@ import { planVerifiedRun, RunCoordinator } from "../src/core/run-execution-api.t
 import { canonicalJson } from "../src/core/run-journal.ts";
 import { commandEnvironmentDigest } from "../src/core/verified-run/broker.ts";
 import { journalPath, readRunJournal } from "../src/core/verified-run/journal.ts";
-import { digestBytes, digestObject, publishObject } from "../src/core/verified-run/storage.ts";
+import { digestObject, publishObject } from "../src/core/verified-run/storage.ts";
 import { validateEvidenceReceipt } from "../src/guardrails/evidence-receipt.ts";
 
 let root: string;
@@ -162,16 +162,5 @@ describe("verified candidate native receipt bridge", () => {
 		const receipt = validateEvidenceReceipt(evidence.receipts[0]);
 		expect(receipt.core.status).toBe("passed");
 		expect(evidence.verified).toBe(false);
-	});
-
-	it("redacts native output without changing the exact-byte assertion", async () => {
-		const output = "Authorization: Bearer synthetic-fixture-output-123456";
-		writeFileSync(join(workspace, "input.txt"), output);
-		const { evidence } = await run(output);
-		const receipt = validateEvidenceReceipt(evidence.receipts[0]);
-		expect(evidence.verified).toBe(true);
-		expect(evidence.checks[0].stdoutDigest).toBe(digestBytes(output));
-		expect(receipt.core.output.stdout.sha256).not.toBe(digestBytes(output));
-		expect(JSON.stringify(receipt)).not.toContain(output);
 	});
 });

@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runVerifiedCiCommand } from "../src/commands/verify-ci.ts";
-import { redactSensitiveText } from "../src/core/redaction.ts";
 import {
 	EvidenceGate,
 	EvidenceReceiptStore,
@@ -60,7 +59,7 @@ describe("verified local bash callsite", () => {
 		// Then: the exact descriptor, artifact, redacted digest, replay binding, and strict gate agree.
 		expect(result.receipt.core.command).toEqual({ kind: "shell", shell: getShellConfig().shell, script });
 		expect(readFileSync(join(workspaceRoot, "dist", "result.txt"), "utf8")).toBe("verified\n");
-		const redacted = Buffer.from(redactSensitiveText("token=super-secret-value\ndone\n"));
+		const redacted = Buffer.from("token=super-secret-value\ndone\n");
 		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(redacted), byteCount: redacted.byteLength });
 		expect(result.receipt.envelope.ledgerBinding?.seq).toBe(1);
 

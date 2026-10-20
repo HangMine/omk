@@ -17,11 +17,9 @@
 
 import type { Model } from "omk-ai";
 import { isQuotaExhaustionMessage } from "../provider-resilience.ts";
-import { redactSensitiveTextForced } from "../redaction.ts";
 import { requestAdmissionFailure } from "../request-admission-policy.ts";
 import type { CompactionDetails, CompactionPreparation, CompactionResult } from "./compaction.ts";
 import { applyCompactionKnowledgeTriage } from "./knowledge-triage.ts";
-import { redactCredentialShapedContent } from "./transaction.ts";
 import { computeFileLists, formatFileOperations } from "./utils.ts";
 
 /** Upper bound on the reason text persisted into the compaction entry. */
@@ -43,9 +41,7 @@ export interface DeterministicCompactionDetails extends CompactionDetails {
 }
 
 function boundedSanitizedText(value: string, maxChars: number): string {
-	const sanitized = redactCredentialShapedContent(redactSensitiveTextForced(value))
-		.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
-		.trim();
+	const sanitized = value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "").trim();
 	return sanitized.length <= maxChars ? sanitized : `${sanitized.slice(0, maxChars - 1)}\u2026`;
 }
 

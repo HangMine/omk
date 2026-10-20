@@ -8,10 +8,9 @@
 import type { AgentMessage } from "omk-agent-core";
 import type { Message } from "omk-ai";
 import { sanitizeBinaryOutput } from "../../utils/shell.ts";
-import { redactSensitiveTextForced } from "../redaction.ts";
 import type { SessionEntry } from "../session-manager.ts";
 import { type CompactionControlState, controlStateProvenance } from "./control-state.ts";
-import { type CompactionPreservedProvenanceInput, redactCredentialShapedContent } from "./transaction.ts";
+import type { CompactionPreservedProvenanceInput } from "./transaction.ts";
 
 /** Custom entry types whose ids feed `CompactionPreservedProvenance`. */
 export const PROVENANCE_CUSTOM_TYPES = Object.freeze({
@@ -39,11 +38,9 @@ export function buildPreservedProvenance(
 	for (let index = capture.report.activeMessages.length - 1; index >= 0; index -= 1) {
 		const message = capture.report.activeMessages[index];
 		if (message?.role !== "user") continue;
-		const candidate = redactCredentialShapedContent(
-			sanitizeBinaryOutput(redactSensitiveTextForced(getUserMessageText(message)).trim())
-				.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
-				.slice(0, 16_384),
-		);
+		const candidate = sanitizeBinaryOutput(getUserMessageText(message).trim())
+			.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
+			.slice(0, 16_384);
 		if (candidate.length > 0) latestIntent = candidate;
 		break;
 	}
@@ -77,6 +74,6 @@ export function buildPreservedProvenance(
 		branch: control.branch,
 		worktree,
 		modelHistory,
-		nextAction: redactCredentialShapedContent(latestIntent.slice(0, 4096)) || "Continue the current session",
+		nextAction: latestIntent.slice(0, 4096) || "Continue the current session",
 	};
 }

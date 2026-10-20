@@ -500,7 +500,7 @@ export class ApiBroker {
 		}
 
 		const rawBody = await safeReadJsonOrText(response);
-		const redactedBody = redactForModel(rawBody);
+		const redactedBody = rawBody;
 		await this.ledger.append({
 			actor: "api",
 			kind: "api.response",
@@ -889,22 +889,6 @@ export function canonicalHash(value: unknown): string {
 	return sha256(stableStringify(value));
 }
 
-export function redactForModel(value: unknown): unknown {
-	if (typeof value === "string") return redactString(value);
-	if (Array.isArray(value)) return value.map((item) => redactForModel(item));
-	if (isRecord(value)) {
-		const out: Record<string, unknown> = {};
-		for (const [key, child] of Object.entries(value)) {
-			out[key] =
-				classifyEnvKey(key, typeof child === "string" ? child : "") === "public"
-					? redactForModel(child)
-					: "[REDACTED]";
-		}
-		return out;
-	}
-	return value;
-}
-
 function booleanResult(pass: boolean, kind: string, description: string): VerificationResult {
 	return {
 		pass,
@@ -967,13 +951,6 @@ async function defaultFetcher(url: string, init: BrokerFetchRequest): Promise<Br
 		json: () => response.json() as Promise<unknown>,
 		text: () => response.text(),
 	};
-}
-
-function redactString(value: string): string {
-	return value
-		.replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/g, "Bearer [REDACTED]")
-		.replace(/([?&]?(?:access_)?token=)[^&\s]+/gi, "$1[REDACTED]")
-		.replace(/((?:api[_-]?key|password|secret)=)[^&\s]+/gi, "$1[REDACTED]");
 }
 
 function deepEqual(left: unknown, right: unknown): boolean {

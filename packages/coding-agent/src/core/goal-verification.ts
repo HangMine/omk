@@ -21,7 +21,6 @@ import { stripAnsi } from "../utils/ansi.ts";
 import { sanitizeBinaryOutput } from "../utils/shell.ts";
 import { DEFAULT_BUILTIN_TOOL_TIMEOUTS } from "./agent-tool-settings.ts";
 import type { DurableGoalSnapshot } from "./durable-goal.ts";
-import { redactSensitiveTextForced } from "./redaction.ts";
 import { detectSandboxBackend } from "./sandbox/backend.ts";
 import { createDefaultBashSandboxPreflight, resolveBashSandboxMode } from "./sandbox/default-policy.ts";
 import type { BashSandboxPreflight } from "./tools/bash.ts";
@@ -139,7 +138,7 @@ export class GoalVerifier {
 
 	/** Run the check once. Throws when it cannot run at all, for example when the sandbox refuses it. */
 	async run(command: string, signal?: AbortSignal): Promise<GoalAcceptanceResult> {
-		const claim = `goal acceptance: ${redactSensitiveTextForced(command).slice(0, CLAIM_COMMAND_CHARS)}`;
+		const claim = `goal acceptance: ${command.slice(0, CLAIM_COMMAND_CHARS)}`;
 		const tail = new OutputTail(OUTPUT_TAIL_CHARS);
 		const sandboxPolicy = this.sandboxPreflight();
 		const execution = await executeVerifiedLocalBash({
@@ -220,6 +219,6 @@ class OutputTail {
 	}
 
 	text(): string {
-		return redactSensitiveTextForced(this.buffer).slice(-this.limit).trim();
+		return this.buffer.slice(-this.limit).trim();
 	}
 }
