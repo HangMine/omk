@@ -2968,7 +2968,9 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
-			if (parseJevCommand(text)) {
+			const jevSubcommand = parseJevCommand(text);
+			// Unknown subcommands may be catalog queries handled by an extension's /jev.
+			if (jevSubcommand && (jevSubcommand !== "unknown" || !this.isExtensionCommand(text))) {
 				this.editor.setText("");
 				await runJevCommand(text, this.session.modelRegistry.authStorage, this.ui, this.dialogHost);
 				return;
