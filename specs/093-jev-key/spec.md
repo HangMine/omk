@@ -59,7 +59,8 @@ Provider id in auth.json: `typesafe`.
 - **Errors**: never include the key or headers; error names only.
 - Zero new dependencies.
 - Exposed-key revocation is done in the TypeSafe dashboard; the spec stores no real key, prefix or hash.
-- **Operational note**: when 인호 rotates the key, the box env `TYPESAFE_API_KEY` should be cleared too, otherwise an old env value remains as fallback.
+- **Operational note (rotation)**: rotating the key requires BOTH clearing the box env `TYPESAFE_API_KEY` AND running `/jev clear`. Because the stored key wins, an old key left in auth.json would otherwise persist.
+- **092 paid runner**: `tools/paid_all217_run.ts` reads ONLY env `TYPESAFE_API_KEY`, never auth.json. Mandatory precondition for any paid run: the new key is in env, replacing the old exposed env value.
 
 ## Implementation split
 
