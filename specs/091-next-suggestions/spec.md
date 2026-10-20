@@ -346,3 +346,13 @@ PREREG gate above; no non-installed skill is ever suggested.
 
 Leave or set `OMK_NEXT_SUGGESTIONS` off (default). Code removal is a revert of
 the implementation commits; this spec has no runtime effect.
+
+## Result (2026-10-20 KST): gate FAIL, spec closed
+
+- EN gate set `adadd76d7d543ded09cf8e93472966c36483886bf4b094b13242671a3e0361dd`, k=25, existing `rankSkills("bm25")` at 984d4bc77e, 217 invocable skills, 0 paid calls.
+- k=25: miss 39/100, recall 0.61 (Clopper-Pearson 95% [0.507, 0.706]). Report-only: k=10 miss 45, k=50 miss 35, k=255 miss 33.
+- Cause: bm25 returns only skills with score > 0, capped at 64, so 33 gold skills never enter the candidate list at any k. The assumption "k=255 means 100% recall" was wrong.
+- Flagged misses (counted in the gate): 13 site-playbooks misses (all 6 named items included). Overlapping pairs with judgement gold labels: food-ordering; flight-booking / site-playbooks-google-flights; code-review / review-and-ship / requesting-code-review; slides-executor / office-pptx; vercel-plugin-eval / plugin-audit; get-pr-comments / autofix.
+- No re-measurement: the boost formula was not pre-registered. Jev stage not built; implementation 984d4bc77e not opened as a PR; 091 is not in 1.5.5.
+- Raw result `gate-en-v1.json` stays on the box; sha256 `3767de14c5f3326b29109ee174d5faffdb16b22300a345d6eee1559f36a00a88`.
+- Any retry is a new spec 092 with its method (e.g. all 217 skills to Jev, ~11.9k tokens, or a boost formula) pre-registered and a fresh EN set.
