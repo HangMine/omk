@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Breaking
+
+- `redactForModel` is no longer exported from the package root. It was removed together with secret redaction on text, log and session paths (d58ed90719); v1.5.4 still exported it. There is no replacement stub.
+- `VERIFIED_BASH_REDACTION_POLICY_ID` is now `omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k`. The old id claimed `omk-sensitive-text-v1` redaction that no longer runs. Receipts already written with the old id are unchanged; code that compares against the old string must update.
+
 ### Fixed
 
 - Next-task suggestions follow the editor on screen. An extension that swaps in its own editor at session start (for example `pi-powerline-footer`) left the gray suggestion on the hidden default editor, so it never appeared and Tab never inserted it.
