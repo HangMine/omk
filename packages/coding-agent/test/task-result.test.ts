@@ -209,4 +209,42 @@ describe("task-result projection", () => {
 			"task result: execution completed, check passed (host_receipt), checks 1/1",
 		);
 	});
+
+	it("zero-count failure phrases with a pass phrase read as passed, not failed", () => {
+		for (const text of [
+			"12 passed, 0 failed",
+			"tests passed: 0 errors",
+			"all tests passed, no failures",
+			"5 passing, 0 failing; tests passed",
+		]) {
+			expect(claimFromModelText(text)?.says, text).toBe("passed");
+		}
+	});
+
+	it("zero-count failure phrases alone or mixed signals -> unknown", () => {
+		for (const text of [
+			"0 failed",
+			"0 errors",
+			"no failures",
+			"0 failing",
+			"3 passed, 1 failed",
+			"0 errors but 2 tests failed",
+		]) {
+			expect(claimFromModelText(text)?.says, text).toBe("unknown");
+		}
+	});
+
+	it("a real failure phrase still reads as failed", () => {
+		expect(claimFromModelText("2 tests failed")?.says).toBe("failed");
+		expect(claimFromModelText("FAIL src/a.test.ts")?.says).toBe("failed");
+	});
+
+	it("B10 still holds: model says passed, host failed -> required_failed, claim from model_text", () => {
+		const claim = claimFromModelText("12 passed, 0 failed");
+		expect(claim).toEqual({ source: "model_text", says: "passed", text: "12 passed, 0 failed" });
+		const failedFact: TaskCheckFact = { id: "c", source: "host_receipt", status: "failed", required: true };
+		const p = projectTaskResult({ settled, facts: [failedFact], modelClaims: claim ? [claim] : [] });
+		expect(p.check).toBe("required_failed");
+		expect(p.modelClaims[0]?.source).toBe("model_text");
+	});
 });

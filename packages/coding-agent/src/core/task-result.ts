@@ -66,7 +66,7 @@ export interface TaskCheckFact {
 /** What the model said about the result. Never promoted to a host fact. */
 export interface TaskModelClaim {
 	readonly source: "model_text";
-	readonly says: "passed" | "failed";
+	readonly says: "passed" | "failed" | "unknown";
 	/** The claim's text, bounded, for the operator. */
 	readonly text: string;
 }
@@ -230,12 +230,25 @@ export function claimsFromFinishCheckLedger(items: readonly FinishCheckLedgerIte
 }
 
 const MODEL_PASS = /\b(?:all\s+(?:tests|checks)\s+pass(?:ed)?|tests?\s+pass(?:ed)?|passed|PASS|done|verified)\b/i;
-const MODEL_FAIL = /\b(?:failed|FAIL|failing)\b/i;
+const MODEL_FAIL = /\b(?:failed|FAIL|failing|failures?|errors?)\b/i;
+/** Zero-count phrases ("0 failed", "no failures") report the absence of a failure, not a failure. */
+const MODEL_ZERO_FAIL =
+	/\b(?:0|zero|no)\s+(?:tests?\s+|checks?\s+)?(?:failed|failing|failures?|errors?|fail)\b|\bwithout\s+(?:any\s+)?(?:failures?|errors?)\b/gi;
 
-/** A free-text model claim, if the text makes one. Kept as `model_text` whatever it quotes. */
+/**
+ * A free-text model claim, if the text makes one. Kept as `model_text` whatever it quotes.
+ * Zero-count failure phrases are not failures. Mixed or zero-count-only text is `unknown`:
+ * `passed` needs an explicit pass phrase and no remaining failure phrase.
+ */
 export function claimFromModelText(text: string): TaskModelClaim | undefined {
-	if (MODEL_FAIL.test(text)) return { source: "model_text", says: "failed", text: boundClaim(text) };
-	if (MODEL_PASS.test(text)) return { source: "model_text", says: "passed", text: boundClaim(text) };
+	const hasZeroFail = new RegExp(MODEL_ZERO_FAIL.source, "i").test(text);
+	const rest = text.replace(MODEL_ZERO_FAIL, " ");
+	const fail = MODEL_FAIL.test(rest);
+	const pass = MODEL_PASS.test(rest);
+	if (fail && (pass || hasZeroFail)) return { source: "model_text", says: "unknown", text: boundClaim(text) };
+	if (fail) return { source: "model_text", says: "failed", text: boundClaim(text) };
+	if (pass) return { source: "model_text", says: "passed", text: boundClaim(text) };
+	if (hasZeroFail) return { source: "model_text", says: "unknown", text: boundClaim(text) };
 	return undefined;
 }
 
