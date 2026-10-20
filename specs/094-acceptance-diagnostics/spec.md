@@ -145,36 +145,68 @@ touched; add `test/suite/agent-session-retry-events.test.ts` if it is.
 
 ## A/B measurement plan and PREREG (Bench Analyst)
 
-Fixed before any measurement; nothing below changes after results.
+Fixed before any measurement; nothing below changes after results. The A/B
+only decides default-on; the flag ships default off regardless.
 
 - **Arms**: off (`OMK_GOAL_DIAGNOSTICS` unset) vs on (`=1`); same tasks,
-  model, effort, day; task-level pairing.
-- **Primary (merge condition 1)**: per task, d = reruns_on − reruns_off,
-  reruns = count of same-command calls (Definitions) after a failed
-  acceptance check. One-sided: PASS iff 95% CI upper bound of d < 0, judged by
-  `/workspace/omk-bench-analyst/paired_verdict.py --target` (bootstrap,
-  fixed seed 20261011, 10000 iters).
+  model, effort, day; task-level pairing; m = 3 reps per task per arm.
+- **Primary (default-on condition 1)**: per task, d = mean reruns_on −
+  mean reruns_off, reruns = same-command calls (Definitions) after a failed
+  acceptance check. One-sided: PASS iff 95% CI upper bound of mean d < 0.
+- **Success non-inferiority (default-on condition 2, not secondary)**: per
+  task success-rate diff (on − off); PASS iff 95% CI lower bound ≥ −5 pp.
 - **Secondary**: reruns per failed check, rounds to pass, input tokens per
   repair turn, wall time.
-- **Success non-inferiority (merge condition 2, not secondary)**: paired
-  per-task success diff (on − off), 95% CI lower bound ≥ −3 pp.
-- **Required N** (paired binary, true diff 0, one-sided α=0.025, power 80%):
-  N = (1.960 + 0.842)² · p_d / Δ².
-  - Data source: `/workspace/tb-bench/jobs/r8/final/r8_summary.json`
-    (R8, omk vs mini-SWE-agent, task-level paired: wins 22, losses 14,
-    ties 52 over 88 tasks).
-  - Discordant rate p_d = 36/88 = **40.9%** (task level; tasks scored as
-    trial-mean pass rate, so "discordant" = unequal means; this is a
-    between-harness rate and likely overstates flag-on/off discordance).
-  - Δ = 3 pp → **N ≈ 3,568**; Δ = 5 pp → **N ≈ 1,284**.
-  - Rule (Tech Lead): N > 264, so the criterion is **paired success diff
-    95% CI lower bound ≥ −5 pp**. Fixed now.
-  - Note: at N = 264 and p_d = 40.9%, half-width ≈ 1.96·√(0.409/264) ≈
-    7.7 pp, so −5 pp is also likely underpowered. Flagged for Tech Lead;
-    the rule is not changed here.
-  - N for this run: **264 task pairs** (cap), unless 인호 sets a lower cost cap.
-- Paid run only after 인호's OK and cost cap, and after the strict
-  measurement on the box ends.
+- **CI method (both CIs)**: task-level cluster bootstrap. Resample tasks with
+  replacement; each drawn task brings all its reps from both arms; statistic =
+  mean over drawn tasks of (task mean on − task mean off). 10000 iters, seed
+  20261011, percentile 95% CI. Reps are never resampled independently.
+  `/workspace/omk-bench-analyst/paired_verdict.py` is fed one row per task
+  (task-mean diff), which makes its bootstrap the cluster bootstrap.
+  Because reps are correlated, the half-width may exceed the 7.7 pp
+  independent-pairs estimate.
+
+### ICC ρ (fixed now from R8)
+
+- Data: `/workspace/tb-bench/jobs/r8/r8-both3/units.csv`, sha256
+  `093d4f6585b7fc8a3ba43231417a7cec2cd3bf339c98452e3fbf217ceda05831`.
+  Final reward per (arm, task, rep) and the GENUINE→0 correction exactly as
+  in `/workspace/tb-bench/jobs/r8/final/r8_report.py` (lines 11-26); rewards
+  are binary {0,1}; tasks with all 3 reps.
+- Estimator: one-way ANOVA ICC, ρ = (MSB − MSW) / (MSB + (m−1)·MSW), m = 3,
+  per-trial success, task as cluster.
+- Results: omk ρ = 0.4858 (89 tasks), mini-SWE-agent ρ = 0.3552 (89 tasks),
+  pooled (task×harness clusters, 178) ρ = 0.4168.
+- **Used: ρ = 0.4858 (omk)**. Both A/B arms run the omk harness, and it is
+  the largest of the three (conservative N).
+- Design effect: DE = 1 + (m − 1)·ρ = 1 + 2·0.4858 = **1.9716**.
+
+### No pilot (removed, Tech Lead decision)
+
+A pilot of 40 pairs cannot ever permit a main run: even at 0/40 discordant,
+the Wilson 95% upper bound is ≈ 8.8% (0.0876), above the 4.27% threshold at
+which 264 trials per arm would suffice. The pilot is therefore dropped.
+
+### Main N (fixed from R8)
+
+- **A 264-pair budget cannot decide the −5 pp success criterion.** 094 merges
+  with the flag **default off**; this A/B only decides default-on.
+- Inputs: p_disc = 0.409 (R8 cross-harness task-level discordance, 36/88,
+  `/workspace/tb-bench/jobs/r8/final/r8_summary.json`; likely conservative
+  for on/off of one harness), Δ = 0.05, ρ = 0.4858, DE = 1.9716, m = 3.
+- N_main = ⌈(1.96 + 0.84)² · p_disc / Δ²⌉ = ⌈7.84 · 0.409 / 0.0025⌉ =
+  **1,283** pairs.
+- Trials per arm = ⌈1,283 · 1.9716⌉ = **2,530**; over 88 tasks ≈ **29 reps
+  per task** (⌈2,530 / 88⌉ = 29; DE was computed at m = 3, so DE at m = 29
+  would be larger — this N is a lower bound, noted, not re-derived).
+- **Cost estimate** (estimate, not a quote): $0.581 per omk attempt
+  (`cost_per_trial.omk` in `/workspace/tb-bench/jobs/r8/final/r8_summary.json`,
+  sha256 `88d1586504599081bf9b483c888006bc14b740f1752324cbdcc80787bba53eab`)
+  × 2,530 × 2 arms ≈ **$2,940**. Needs 인호 OK.
+- Rule: no OK → no run, flag stays default off. The −5 pp criterion is not
+  relaxed and nothing changes after results.
+- Paid run only after 인호's OK and after the strict measurement on the box
+  ends.
 
 ## Risks
 
@@ -197,4 +229,5 @@ promotion, any masking/redaction work.
 ## Open questions
 
 1. Head/tail split pending fixture measurement (see step above).
-2. −5 pp non-inferiority likely underpowered at N=264 (half-width ≈ 7.7 pp); Tech Lead to confirm it stands as-is.
+2. Default-on A/B needs ≈ $2,940 (2,530 trials/arm); 인호 to decide. Without OK, 094 stays default off permanently.
+3. DE at m = 29 reps exceeds 1.9716; Tech Lead to accept N = 1,283/2,530 as a lower bound or ask for re-derivation.
