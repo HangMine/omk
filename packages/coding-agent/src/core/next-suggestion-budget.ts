@@ -3,8 +3,8 @@
  *
  * Everything here is used only with `OMK_NEXT_SUGGESTIONS_CAPS` on (default
  * off). With the flag off the suggestion request and its skip decisions are
- * byte-identical to the spec 091 "reuse" arm. No default cap values are
- * invented: a missing or invalid budget skips the suggestion (fail closed).
+ * byte-identical to the spec 091 "reuse" arm. Defaults are fixed in the spec and
+ * overridden by env; an explicit 0 cap skips the suggestion (`budget_unset`).
  */
 import type { Api, Context, Model, SimpleStreamOptions, ThinkingLevel } from "omk-ai";
 import { promptCacheCapability } from "omk-ai";
@@ -26,20 +26,41 @@ export function isSuggestionCapsEnabled(env: NodeJS.ProcessEnv = process.env): b
 	return /^(?:1|on|true|yes)$/i.test(env[NEXT_SUGGESTIONS_CAPS_ENV]?.trim() ?? "");
 }
 
-function positive(raw: string | undefined): number | undefined {
+/**
+ * Spec 103 §2.1 defaults (Tech Lead ruling 2026-10-21). Env only overrides.
+ * - deadline 30 s: `DEFAULT_TIMEOUT_MS` of the other background side-call, advisory-judge-model.ts.
+ * - max cost $0.02: automation default run budget `maxCostUsd: 10` over `maxToolCalls: 500`
+ *   (automation/index.ts), i.e. the per-action share of the default run budget.
+ * - max reasoning `inherit`: today's bytes (arm B, §5); a lower level is an arm, never forced.
+ */
+export const DEFAULT_SUGGESTION_BUDGET: SuggestionBudget = Object.freeze({
+	maxReasoning: "inherit",
+	deadlineMs: 30_000,
+	maxCostUsd: 0.02,
+});
+
+type Override = number | "zero" | undefined;
+
+/** A positive number overrides; an explicit 0 disables; anything else keeps the default. */
+function override(raw: string | undefined): Override {
 	if (raw === undefined || raw.trim() === "") return undefined;
 	const value = Number(raw);
+	if (value === 0) return "zero";
 	return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
-/** Budget from env; `undefined` when any required value is missing or invalid. */
+/** Defaults plus env overrides; `undefined` (skip `budget_unset`) only when a cap is explicitly set to 0. */
 export function suggestionBudgetFromEnv(env: NodeJS.ProcessEnv = process.env): SuggestionBudget | undefined {
-	const deadlineMs = positive(env[SUGGESTION_DEADLINE_ENV]);
-	const maxCostUsd = positive(env[SUGGESTION_MAX_COST_ENV]);
-	const rawLevel = env[SUGGESTION_MAX_REASONING_ENV]?.trim() || "inherit";
-	const maxReasoning = rawLevel === "inherit" ? "inherit" : LEVELS.find((level) => level === rawLevel);
-	if (deadlineMs === undefined || maxCostUsd === undefined || maxReasoning === undefined) return undefined;
-	return { maxReasoning, deadlineMs: Math.floor(deadlineMs), maxCostUsd };
+	const deadline = override(env[SUGGESTION_DEADLINE_ENV]);
+	const cost = override(env[SUGGESTION_MAX_COST_ENV]);
+	if (deadline === "zero" || cost === "zero") return undefined;
+	const rawLevel = env[SUGGESTION_MAX_REASONING_ENV]?.trim();
+	const level = LEVELS.find((candidate) => candidate === rawLevel);
+	return {
+		maxReasoning: level ?? DEFAULT_SUGGESTION_BUDGET.maxReasoning,
+		deadlineMs: deadline === undefined ? DEFAULT_SUGGESTION_BUDGET.deadlineMs : Math.floor(deadline),
+		maxCostUsd: cost ?? DEFAULT_SUGGESTION_BUDGET.maxCostUsd,
+	};
 }
 
 /** `inherit` keeps the recorded options object; a lower cap only lowers reasoning, never raises it. */
