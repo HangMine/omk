@@ -118,6 +118,7 @@ export class GoalAcceptance {
 		goal: DurableGoalSnapshot,
 		cwd: string,
 		signal?: AbortSignal,
+		onOutput?: (data: Buffer) => void,
 	): Promise<GoalCheckOutcome> {
 		const key = goalKeyOf(goal);
 		const contract = this.contracts.get(key);
@@ -130,7 +131,7 @@ export class GoalAcceptance {
 		this.running = controller;
 		try {
 			const stop = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
-			const result = await this.verifierFor(cwd, key).run(command, stop);
+			const result = await this.verifierFor(cwd, key).run(command, stop, onOutput);
 			if (result.status !== "aborted" && this.contracts.get(key) === contract) {
 				this.contracts.set(key, { ...contract, latestPassed: result.passed });
 			}

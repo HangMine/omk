@@ -144,7 +144,7 @@ export class GoalVerifier {
 	}
 
 	/** Run the check once. Throws when it cannot run at all, for example when the sandbox refuses it. */
-	async run(command: string, signal?: AbortSignal): Promise<GoalAcceptanceResult> {
+	async run(command: string, signal?: AbortSignal, onOutput?: (data: Buffer) => void): Promise<GoalAcceptanceResult> {
 		const claim = `goal acceptance: ${command.slice(0, CLAIM_COMMAND_CHARS)}`;
 		const tail = new OutputTail(OUTPUT_TAIL_CHARS);
 		const countTail = new OutputTail(COUNT_TAIL_CHARS);
@@ -164,6 +164,7 @@ export class GoalVerifier {
 			onData: (data) => {
 				tail.push(data);
 				countTail.push(data);
+				onOutput?.(data);
 			},
 		});
 		const { gate, passed } = checkReceiptWithStrictGate({
