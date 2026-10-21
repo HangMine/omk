@@ -283,7 +283,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 		const c = installNextSuggestions(session as unknown as SuggestionSessionPort, editor(), "base", {
 			env: { OMK_NEXT_SUGGESTIONS: "1" },
 			quotaUsage: async () => "no_quota",
-			settle: (s) => settled.push(s),
+			settle: (s) => settled.push(s as SuggestionSettlement),
 		})!;
 		await mainTurn(session, emit);
 		await c.onSettled("completed");
@@ -442,7 +442,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 		const c = installNextSuggestions(session as unknown as SuggestionSessionPort, ed, "base", {
 			env: { OMK_NEXT_SUGGESTIONS: "1" },
 			quotaUsage: async () => "no_quota",
-			settle: (s) => settled.push(s),
+			settle: (s) => settled.push(s as SuggestionSettlement),
 		})!;
 		await mainTurn(session, emit);
 		const pending = c.onSettled("completed");
@@ -491,7 +491,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 			env: { OMK_NEXT_SUGGESTIONS: "1", OMK_NEXT_SUGGESTIONS_CAPS: "1" },
 			budget: BUDGET,
 			quotaUsage: async () => "no_quota",
-			settle: (s) => settled.push(s),
+			settle: (s) => settled.push(s as SuggestionSettlement),
 		})!;
 		await mainTurn(session, emit);
 		const pending = c.onSettled("completed");

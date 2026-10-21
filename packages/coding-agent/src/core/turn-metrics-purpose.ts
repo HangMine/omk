@@ -12,6 +12,17 @@ export interface PurposeUsageTotals {
 	readonly costUsd: number;
 	/** Suggestion records only: cost of outcomes `aborted` and `timeout`. */
 	readonly cancelledCostUsd: number;
+	/** Spec 103b, suggestion bucket only, present only when a caps-on record exists. */
+	readonly capsEligible?: number;
+	readonly capHits?: CapHits;
+}
+
+/** A record counts once in `total` even when several caps hit it. */
+export interface CapHits {
+	readonly deadline: number;
+	readonly cost: number;
+	readonly reasoning: number;
+	readonly total: number;
 }
 
 export function summarizeByPurpose(
@@ -27,8 +38,25 @@ export function summarizeByPurpose(
 		costUsd: 0,
 		cancelledCostUsd: 0,
 	});
-	const result = { main: empty(), suggestion: empty() };
+	const result: Record<TurnMetricPurpose, PurposeUsageTotals & ReturnType<typeof empty>> = {
+		main: empty(),
+		suggestion: empty(),
+	};
+	const hits = { deadline: 0, cost: 0, reasoning: 0, total: 0 };
+	let capsEligible = 0;
 	for (const record of records) {
+		if (record.purpose === "suggestion" && record.capsApplied) {
+			capsEligible++;
+			const deadline = record.suggestionOutcome === "timeout";
+			const cost = record.suggestionSkip === "over_cost_cap";
+			const reasoning = record.reasoningCapped === true;
+			if (deadline) hits.deadline++;
+			if (cost) hits.cost++;
+			if (reasoning) hits.reasoning++;
+			if (deadline || cost || reasoning) hits.total++;
+		}
+		// Skip records made no request: not a record with missing usage.
+		if (record.suggestionSkip !== undefined) continue;
 		const bucket = result[record.purpose ?? "main"];
 		bucket.records++;
 		const usage = record.usage;
@@ -45,7 +73,8 @@ export function summarizeByPurpose(
 			bucket.cancelledCostUsd += usage.costUsd;
 		}
 	}
-	return result;
+	if (capsEligible === 0) return result;
+	return { main: result.main, suggestion: { ...result.suggestion, capsEligible, capHits: hits } };
 }
 
 type MutableTotals = { input: number; output: number; cacheRead: number; cacheWrite: number; costUsd: number };

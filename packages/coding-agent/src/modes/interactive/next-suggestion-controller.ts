@@ -25,7 +25,7 @@ import {
 	type SuggestionBudget,
 	suggestionBudgetFromEnv,
 } from "../../core/next-suggestion-budget.ts";
-import { type SuggestionSettlement, suggestionMetricsSettler } from "../../core/next-suggestion-settlement.ts";
+import * as settlement from "../../core/next-suggestion-settlement.ts";
 import { loadSubscriptionUsage } from "../../core/provider-usage.ts";
 
 export interface SuggestionSessionPort {
@@ -52,7 +52,7 @@ export interface NextSuggestionOptions {
 	readonly requestRender?: () => void;
 	readonly onPlan?: (plan: SuggestionPlan) => void;
 	/** Spec 103: settle every suggestion request's usage, including discarded and cancelled ones. */
-	readonly settle?: (settlement: SuggestionSettlement) => void;
+	readonly settle?: (s: settlement.AnySuggestionSettlement) => void;
 	/** Spec 103 caps budget (caps flag only); defaults to the env budget. */
 	readonly budget?: SuggestionBudget;
 	readonly timeoutSignal?: (ms: number) => AbortSignal;
@@ -164,6 +164,7 @@ export class NextSuggestionController {
 		const now = this.options.now ?? Date.now;
 		const usage = await this.checkUsage();
 		if (generation !== this.generation) return;
+		const capsOn = isSuggestionCapsEnabled(this.options.env);
 		const plan = planSuggestion({
 			record: this.recorder.lastRequest,
 			outcome: outcome === "completed" || outcome === "aborted" ? outcome : "failed",
@@ -171,15 +172,17 @@ export class NextSuggestionController {
 			currentModel: this.session.model,
 			nowMs: now(),
 			usage,
-			...(isSuggestionCapsEnabled(this.options.env)
-				? { caps: { budget: this.options.budget ?? suggestionBudgetFromEnv(this.options.env) } }
-				: {}),
+			...(capsOn ? { caps: { budget: this.options.budget ?? suggestionBudgetFromEnv(this.options.env) } } : {}),
 		});
 		this.options.onPlan?.(plan);
-		if (plan.kind !== "request") return;
+		const parentTurnIndex = Math.max(0, this.turnsInRun - 1);
+		if (plan.kind !== "request") {
+			// Spec 103b: skip records only with the caps flag on; flag off writes nothing (bytes as main).
+			if (capsOn) this.options.settle?.(settlement.skipSettlement(plan, this.session.model, parentTurnIndex));
+			return;
+		}
 		const controller = new AbortController();
 		this.pending = controller;
-		const parentTurnIndex = Math.max(0, this.turnsInRun - 1);
 		const startedAtEpochMs = Date.now();
 		const result = await requestNextSuggestion(this.inner, plan.record, plan.finalAssistant, controller.signal, {
 			caps: plan.caps,
@@ -187,7 +190,8 @@ export class NextSuggestionController {
 			timeoutSignal: this.options.timeoutSignal,
 		});
 		const { provider, id } = plan.record.model;
-		this.options.settle?.({ result, provider, model: id, parentTurnIndex, startedAtEpochMs });
+		const caps = plan.caps ? { caps: { reasoningCapped: plan.caps.reasoningCapped } } : {};
+		this.options.settle?.({ result, provider, model: id, parentTurnIndex, startedAtEpochMs, ...caps });
 		// Late result: the user typed, sent the next turn, or a newer turn settled.
 		if (generation !== this.generation || controller.signal.aborted) return;
 		this.pending = undefined;
@@ -293,6 +297,6 @@ export function installInteractiveNextSuggestions(
 	installNextSuggestions(session as unknown as SuggestionSessionPort, editor, basePlaceholder, {
 		requestRender,
 		quotaUsage: () => activeQuotaUsage(session),
-		settle: suggestionMetricsSettler(() => session.sessionId, session.sessionManager.getCwd()),
+		settle: settlement.suggestionMetricsSettler(() => session.sessionId, session.sessionManager.getCwd()),
 	});
 }
