@@ -56,7 +56,9 @@ export type TaskCheckInsufficientReason =
 	/** Spec 100: a test runner's counts could not be read from its output (parser, not environment). */
 	| "unverified_counts"
 	/** Spec 100: the check passed, then the host refused to complete the goal on it. */
-	| "completion_refused";
+	| "completion_refused"
+	/** Spec 104: a required tool was absent or could not fit the input ceiling; never `complete`. */
+	| "required_capability_missing";
 
 /** A count the runner printed, or `unknown` when it printed none we can read. Never a guessed 0. */
 export type TaskTestCount = number | "unknown";
