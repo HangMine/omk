@@ -138,10 +138,18 @@ export interface SuggestionCapsPlan {
 	readonly options: SimpleStreamOptions | undefined;
 	readonly deadlineMs: number;
 	readonly estimatedCostUsd: number;
+	/** Spec 103b: `cappedSuggestionOptions` lowered the recorded reasoning level. */
+	readonly reasoningCapped: boolean;
+}
+
+/** Spec 103b: numbers attached to an `over_cost_cap` skip (caps flag on only). */
+export interface SuggestionCostCapHit {
+	readonly estimatedCostUsd: number;
+	readonly maxCostUsd: number;
 }
 
 export type SuggestionPlan =
-	| { readonly kind: "skip"; readonly reason: SuggestionSkipReason }
+	| { readonly kind: "skip"; readonly reason: SuggestionSkipReason; readonly costCap?: SuggestionCostCapHit }
 	| {
 			readonly kind: "request";
 			readonly record: RecordedMainRequest;
@@ -192,12 +200,19 @@ export function planSuggestion(input: SuggestionPlanInput): SuggestionPlan {
 		context,
 		suggestionMaxTokens(record.model, options),
 	);
-	if (!(estimatedCostUsd <= budget.maxCostUsd)) return skip("over_cost_cap");
+	if (!(estimatedCostUsd <= budget.maxCostUsd)) {
+		return { kind: "skip", reason: "over_cost_cap", costCap: { estimatedCostUsd, maxCostUsd: budget.maxCostUsd } };
+	}
 	return {
 		kind: "request",
 		record,
 		finalAssistant: final,
-		caps: { options, deadlineMs: budget.deadlineMs, estimatedCostUsd },
+		caps: {
+			options,
+			deadlineMs: budget.deadlineMs,
+			estimatedCostUsd,
+			reasoningCapped: options?.reasoning !== record.options?.reasoning,
+		},
 	};
 }
 

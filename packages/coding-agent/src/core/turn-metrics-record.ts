@@ -11,6 +11,22 @@ export const TURN_METRIC_PURPOSES = ["main", "suggestion"] as const;
 export type TurnMetricPurpose = (typeof TURN_METRIC_PURPOSES)[number];
 export const SUGGESTION_OUTCOMES = ["shown", "empty", "aborted", "timeout", "error"] as const;
 export type SuggestionMetricOutcome = (typeof SUGGESTION_OUTCOMES)[number];
+/** Spec 103b: closed skip-reason enum for caps-on skip records (mirrors `SuggestionSkipReason`). */
+export const SUGGESTION_SKIP_REASONS = [
+	"no_record",
+	"not_completed",
+	"error",
+	"aborted",
+	"model_changed",
+	"no_cache_support",
+	"cache_cold",
+	"near_usage_limit",
+	"usage_unavailable",
+	"over_cost_cap",
+	"cache_capability_unknown",
+	"budget_unset",
+] as const;
+export type SuggestionMetricSkipReason = (typeof SUGGESTION_SKIP_REASONS)[number];
 
 export interface ToolCallMetric {
 	readonly name: string;
@@ -70,6 +86,12 @@ export interface TurnMetricInput {
 	readonly purpose?: TurnMetricPurpose;
 	readonly parentTurnIndex?: number;
 	readonly suggestionOutcome?: SuggestionMetricOutcome;
+	/** Spec 103b (caps flag on only): enums, booleans and numbers; never text. */
+	readonly capsApplied?: true;
+	readonly reasoningCapped?: boolean;
+	readonly suggestionSkip?: SuggestionMetricSkipReason;
+	readonly estimatedCostUsd?: number;
+	readonly maxCostUsd?: number;
 }
 export interface TurnMetricRecord extends Omit<TurnMetricInput, "toolCalls"> {
 	readonly schemaVersion: typeof TURN_METRICS_SCHEMA_VERSION;
@@ -103,6 +125,10 @@ function identifier(value: unknown): string {
 function boolean(value: unknown): boolean {
 	if (typeof value !== "boolean") throw new TypeError("Invalid metric boolean");
 	return value;
+}
+function literalTrue(value: unknown): true {
+	if (value !== true) throw new TypeError("Invalid metric flag");
+	return true;
 }
 function classifyError(value: unknown): ErrorClass {
 	if (value !== undefined && typeof value !== "string") throw new TypeError("Invalid metric error text");
@@ -195,6 +221,13 @@ function project(value: unknown, source: "input" | "v1" | "v2"): TurnMetricRecor
 		...(input.suggestionOutcome === undefined
 			? {}
 			: { suggestionOutcome: member(input.suggestionOutcome, SUGGESTION_OUTCOMES) }),
+		...(input.capsApplied === undefined ? {} : { capsApplied: literalTrue(input.capsApplied) }),
+		...(input.reasoningCapped === undefined ? {} : { reasoningCapped: boolean(input.reasoningCapped) }),
+		...(input.suggestionSkip === undefined
+			? {}
+			: { suggestionSkip: member(input.suggestionSkip, SUGGESTION_SKIP_REASONS) }),
+		...(input.estimatedCostUsd === undefined ? {} : { estimatedCostUsd: quantity(input.estimatedCostUsd) }),
+		...(input.maxCostUsd === undefined ? {} : { maxCostUsd: quantity(input.maxCostUsd) }),
 	};
 }
 
