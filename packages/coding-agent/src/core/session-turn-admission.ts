@@ -36,6 +36,8 @@ export interface SessionTurnAdmissionHost {
 	readonly notify: (message: string) => void;
 	/** Spec 104 (`OMK_REQUIRED_TOOLS` only): the trusted required-tool contract of the current task segment. */
 	readonly requiredTools?: () => RequiredToolContract | undefined;
+	/** Spec 104: told of every `RequiredCapabilityUnavailable` before it is thrown (flag on only). */
+	readonly onRequiredCapabilityUnavailable?: (error: RequiredCapabilityUnavailable) => void;
 	readonly env?: NodeJS.ProcessEnv;
 }
 
@@ -81,7 +83,8 @@ export class SessionTurnAdmission {
 				contract,
 				tools.map((tool) => tool.name),
 			);
-			if (absent.length > 0) throw new RequiredCapabilityUnavailable(contract.taskSegmentId, absent, "absent");
+			if (absent.length > 0)
+				throw this.unavailable(new RequiredCapabilityUnavailable(contract.taskSegmentId, absent, "absent"));
 		}
 		const contentKey = admissionKey({
 			provider: model.provider,
@@ -166,7 +169,12 @@ export class SessionTurnAdmission {
 		const groups = this.host.toolGroup;
 		const pinned = [...contract.tools].filter((name) => groups(name) !== undefined);
 		if (pinned.length === 0) return error;
-		return new RequiredCapabilityUnavailable(contract.taskSegmentId, pinned, "over_ceiling");
+		return this.unavailable(new RequiredCapabilityUnavailable(contract.taskSegmentId, pinned, "over_ceiling"));
+	}
+
+	private unavailable(error: RequiredCapabilityUnavailable): RequiredCapabilityUnavailable {
+		this.host.onRequiredCapabilityUnavailable?.(error);
+		return error;
 	}
 
 	private stableWithheld(
