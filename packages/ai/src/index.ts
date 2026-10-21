@@ -40,6 +40,7 @@ export {
 export * from "./session-resources.ts";
 export * from "./stream.ts";
 export * from "./types.ts";
+export * from "./usage-share.ts";
 export * from "./utils/claude-code-identity.ts";
 export * from "./utils/diagnostics.ts";
 export * from "./utils/event-stream.ts";
