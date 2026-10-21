@@ -2,12 +2,20 @@ import { DurableGoalError, type DurableGoalSnapshot, nextDurableGoalTimestamp } 
 import type { DurableGoalStore } from "../../durable-goal-store.ts";
 import type { GoalAcceptance, GoalCheckOutcome } from "../../goal-acceptance.ts";
 import type { GoalContinuationDecision } from "../../goal-continuation.ts";
+import {
+	goalOutputRecallEnabled,
+	type OutputArtifact,
+	OutputArtifactWriter,
+	outputRecallFollowUp,
+	summarizeArtifact,
+} from "../../goal-output-recall.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
 import { type GoalAcceptanceTestHooks, GoalTaskFacts } from "./goal-acceptance-task-facts.ts";
 import { displayCommand, displayError, failureText, receiptLabel, renderGoal } from "./goal-controller-text.ts";
 
 type ContinueGoal = (advanced: DurableGoalSnapshot, detail: string) => void;
+type RunOutcome = GoalCheckOutcome & { readonly artifact?: OutputArtifact };
 
 export type { GoalAcceptanceTestHooks } from "./goal-acceptance-task-facts.ts";
 
@@ -104,7 +112,7 @@ export class GoalAcceptanceFlow {
 		decision: GoalContinuationDecision,
 		ctx: ExtensionContext,
 	): Promise<void> {
-		let outcome: GoalCheckOutcome;
+		let outcome: RunOutcome;
 		const taskRunId = this.taskFacts.runId();
 		const identity = taskRunId === undefined ? undefined : this.acceptance.checkIdentity(current);
 		try {
@@ -162,9 +170,12 @@ export class GoalAcceptanceFlow {
 			{ kind: "advance-round", ref: outcome.goal.ref },
 			nextDurableGoalTimestamp(outcome.goal),
 		);
+		const head = `Acceptance check \`${displayCommand(outcome.command)}\` ${failureText(result)} (${receiptLabel(result)})`;
 		this.continueGoal(
 			advanced,
-			`\n\nAcceptance check \`${displayCommand(outcome.command)}\` ${failureText(result)} (${receiptLabel(result)}). Run it to see the output, fix the cause, and end your turn when it passes.`,
+			outcome.artifact === undefined
+				? `\n\n${head}. Run it to see the output, fix the cause, and end your turn when it passes.`
+				: `\n\n${outputRecallFollowUp(head, result.outputTail, outcome.artifact)}`,
 		);
 	}
 
@@ -173,7 +184,7 @@ export class GoalAcceptanceFlow {
 		goal: DurableGoalSnapshot,
 		ctx: ExtensionContext,
 		trigger: "command" | "turn",
-	): Promise<GoalCheckOutcome> {
+	): Promise<RunOutcome> {
 		const command = this.acceptance.approvedCommand(goal) ?? "";
 		ctx.ui.notify(`goal: running acceptance check \`${displayCommand(command)}\``, "info");
 		// Spec 096: the run this check starts in; a receipt that lands after it settled is dropped.
@@ -181,8 +192,27 @@ export class GoalAcceptanceFlow {
 		const identity = taskRunId === undefined ? undefined : this.acceptance.checkIdentity(goal);
 		this.taskFacts.forgetPublished();
 		// At a settled turn the run still owns the session, so its abort (Esc) stops the check too.
-		const outcome = await this.acceptance.check(store, goal, ctx.cwd, ctx.signal);
+		// Spec 098 (flag on): the same output stream also goes to a raw artifact the model can read.
+		const writer = goalOutputRecallEnabled() ? this.openArtifact(goal, ctx) : undefined;
+		let outcome: GoalCheckOutcome;
+		try {
+			outcome = await this.acceptance.check(
+				store,
+				goal,
+				ctx.cwd,
+				ctx.signal,
+				writer && ((data) => writer.write(data)),
+			);
+		} catch (error) {
+			writer?.discard();
+			throw error;
+		}
 		const { result } = outcome;
+		let artifact: OutputArtifact | undefined;
+		if (writer !== undefined) {
+			if (result.status === "aborted" || result.passed) writer.discard();
+			else artifact = writer.finish();
+		}
 		this.omk.appendEntry("goal_verification", {
 			goalId: outcome.goal.ref.id,
 			goalRevision: outcome.goal.ref.revision,
@@ -192,6 +222,7 @@ export class GoalAcceptanceFlow {
 			exitCode: result.exitCode,
 			passed: result.passed,
 			trigger,
+			...(artifact !== undefined ? { outputArtifact: summarizeArtifact(artifact) } : {}),
 		});
 		// Spec 096/100: hand the host receipt to the task-result projection (flag on only), with the
 		// workspace state at publish, the runner's counts and the check identity.
@@ -207,7 +238,17 @@ export class GoalAcceptanceFlow {
 			const tail = result.outputTail ? `\n${result.outputTail}` : "";
 			ctx.ui.notify(`goal: acceptance check ${failureText(result)} (${receiptLabel(result)})${tail}`, "warning");
 		}
-		return outcome;
+		return artifact === undefined ? outcome : { ...outcome, artifact };
+	}
+
+	private openArtifact(goal: DurableGoalSnapshot, ctx: ExtensionContext): OutputArtifactWriter | undefined {
+		return OutputArtifactWriter.open({
+			sessionFile: ctx.sessionManager?.getSessionFile?.(),
+			cwd: ctx.cwd,
+			goalId: goal.ref.id,
+			round: goal.completedRounds,
+			revision: this.acceptance.checkIdentity(goal)?.revision ?? 0,
+		});
 	}
 
 	private async block(store: DurableGoalStore, reason: string, ctx: ExtensionContext): Promise<void> {
