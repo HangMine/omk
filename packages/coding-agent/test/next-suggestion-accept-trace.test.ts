@@ -1,5 +1,5 @@
 /** Next-suggestion accept trace (`OMK_NEXT_SUGGESTIONS_ACCEPT_TRACE`, default off). */
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,8 @@ import {
 	editDistance,
 	editRatioBucket,
 	isAcceptTraceEnabled,
+	MAX_FILE_BYTES,
+	resetSaltInvalidReportForTests,
 	SESSION_SALT_FILE,
 	type ShownSuggestionMeta,
 	SuggestionAcceptTracker,
@@ -34,6 +36,7 @@ const ALLOWED_KEYS = new Set([
 	"decidedAtEpochMs",
 	"msToAccept",
 	"sentAs",
+	"sentVia",
 	"editRatioBucket",
 	"dismissReason",
 ]);
@@ -98,11 +101,19 @@ describe("accept trace: tracker state machine", () => {
 		t.sent("run tests", 130); // a later send is not double counted
 		t.flush(140);
 		expect(records).toEqual([
-			{ ...meta, outcome: "accepted", msToAccept: 60, sentAs: "exact", editRatioBucket: "0", decidedAtEpochMs: 120 },
+			{
+				...meta,
+				outcome: "accepted",
+				msToAccept: 60,
+				sentAs: "exact",
+				editRatioBucket: "0",
+				sentVia: "prompt",
+				decidedAtEpochMs: 120,
+			},
 		]);
 	});
 
-	it("edited send carries a bucket; emptied editor is cleared; each accept yields exactly one record", () => {
+	it("edited send carries a bucket; emptied editor is cleared; never-sent accept is abandoned; one record each", () => {
 		const { t, records } = tracker();
 		t.shown(meta, "run the parser tests");
 		t.accepted(50);
@@ -114,10 +125,98 @@ describe("accept trace: tracker state machine", () => {
 		t.shown(meta, "unsent");
 		t.accepted(95);
 		t.flush(99);
-		expect(records.map((r) => [r.outcome, r.sentAs, r.editRatioBucket])).toEqual([
-			["accepted", "edited", "le_0.3"],
-			["accepted", "cleared", undefined],
-			["accepted", "cleared", undefined],
+		expect(records.map((r) => [r.outcome, r.sentAs, r.editRatioBucket, r.sentVia])).toEqual([
+			["accepted", "edited", "le_0.3", "prompt"],
+			["accepted", "cleared", undefined, undefined],
+			["accepted", "abandoned", undefined, undefined],
+		]);
+	});
+
+	it("cleared only when the editor is emptied; replaced or never-sent suggestions are abandoned", () => {
+		const { t, records } = tracker();
+		t.shown(meta, "a"); // shown, no input, replaced by the next suggestion
+		t.shown(meta, "b");
+		t.accepted(1); // accepted, then replaced by another suggestion before sending
+		t.observeEditor("b", 2);
+		t.shown(meta, "c");
+		t.flush(3); // shown, session ended with no input
+		expect(records.map((r) => [r.outcome, r.sentAs ?? r.dismissReason])).toEqual([
+			["dismissed", "abandoned"],
+			["accepted", "abandoned"],
+			["dismissed", "abandoned"],
+		]);
+		expect(records.some((r) => r.sentAs === "cleared")).toBe(false);
+	});
+
+	it("sentVia: prompt vs steer on sent outcomes only", () => {
+		const { t, records } = tracker();
+		t.shown(meta, "run tests");
+		t.accepted(1);
+		t.sent("run tests", 2, "steer");
+		t.shown(meta, "fix it");
+		t.accepted(3);
+		t.sent("fix it please", 4, "prompt");
+		t.shown(meta, "x");
+		t.accepted(5);
+		t.observeEditor("", 6);
+		expect(records.map((r) => [r.sentAs, r.sentVia])).toEqual([
+			["exact", "steer"],
+			["edited", "prompt"],
+			["cleared", undefined],
+		]);
+	});
+
+	it("10 MB cap: exactly one cap_reached record, then nothing more (also after a restart)", () => {
+		const dir = join(home, "agent");
+		const metricsDir = join(home, "m");
+		mkdirSync(metricsDir, { recursive: true });
+		const file = join(metricsDir, "suggestion-outcomes.jsonl");
+		writeFileSync(file, Buffer.alloc(MAX_FILE_BYTES - 10, 0x20));
+		const make = () =>
+			suggestionAcceptTracker(() => "s", "/nonexistent", { ...TRACE_ON, OMK_TURN_METRICS_DIR: metricsDir }, dir)!;
+		for (const t of [make(), make()]) {
+			for (let i = 0; i < 3; i++) {
+				t.shown(meta, "x");
+				t.flush(7);
+			}
+		}
+		const tail = readFileSync(file)
+			.subarray(MAX_FILE_BYTES - 10)
+			.toString("utf8");
+		const records = parse(tail);
+		expect(records).toEqual([
+			{ schemaVersion: "omk-suggestion-outcome-1", outcome: "cap_reached", decidedAtEpochMs: 7 },
+		]);
+	});
+
+	it("salt not 32 bytes: one salt_invalid marker per process, no records, no salt or raw id", () => {
+		resetSaltInvalidReportForTests();
+		const dir = join(home, "agent");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, SESSION_SALT_FILE), "short-salt-SECRET");
+		const make = () =>
+			suggestionAcceptTracker(() => SESSION_ID, "/nonexistent", { ...TRACE_ON, OMK_TURN_METRICS_DIR: home }, dir)!;
+		for (const t of [make(), make()]) {
+			t.shown(meta, "x");
+			t.flush(9);
+			t.shown(meta, "y");
+			t.flush(10);
+		}
+		const raw = readFileSync(join(home, "suggestion-outcomes.jsonl"), "utf8");
+		expect(parse(raw)).toEqual([
+			{ schemaVersion: "omk-suggestion-outcome-1", outcome: "salt_invalid", decidedAtEpochMs: 9 },
+		]);
+		expect(raw).not.toContain("SECRET");
+		expect(raw).not.toContain(SESSION_ID);
+		// A 33-byte salt is also rejected (no silent truncation).
+		resetSaltInvalidReportForTests();
+		writeFileSync(join(dir, SESSION_SALT_FILE), Buffer.alloc(33, 1));
+		const t = make();
+		t.shown(meta, "z");
+		t.flush(11);
+		expect(parse(readFileSync(join(home, "suggestion-outcomes.jsonl"), "utf8")).map((r) => r.outcome)).toEqual([
+			"salt_invalid",
+			"salt_invalid",
 		]);
 	});
 

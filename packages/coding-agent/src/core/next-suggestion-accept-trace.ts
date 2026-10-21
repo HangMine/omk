@@ -2,8 +2,12 @@
  * Accept-trace for next-task suggestions (default off: `OMK_NEXT_SUGGESTIONS_ACCEPT_TRACE`).
  *
  * One outcome record per shown suggestion, written once its fate is known:
- * `accepted` (Tab) with how it was sent (`exact` / `edited` / `cleared`) and an
- * edit-distance-ratio bucket, or `dismissed` with a reason. Records go to their
+ * `accepted` (Tab) with how it ended (`exact` / `edited` sent via `prompt` or
+ * `steer`, `cleared` when the editor was emptied, `abandoned` when it was never
+ * sent) and an edit-distance-ratio bucket, or `dismissed` with a reason. Two
+ * one-off marker records exist: `cap_reached` (written once when the 10 MB cap
+ * is hit; nothing is written after it) and `salt_invalid` (the salt file is not
+ * 32 bytes; one marker per process, no outcome records, no salt or session id). Records go to their
  * own file (`suggestion-outcomes.jsonl`) next to `turns.jsonl`, so the turn
  * stream is untouched. Metadata only: the suggestion and prompt text are held in
  * memory for the comparison and never written.
@@ -18,12 +22,14 @@ export const SUGGESTION_OUTCOME_SCHEMA_VERSION = "omk-suggestion-outcome-1" as c
 export const SUGGESTION_OUTCOMES_FILE = "suggestion-outcomes.jsonl";
 /** Longest prompt prefix compared; keeps the edit-distance work bounded (200 x 2000 cells). */
 export const MAX_COMPARED_CHARS = 2000;
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 /** Per-install salt for `sessionHash` (0600, under the agent dir; never logged). */
 export const SESSION_SALT_FILE = "suggestion-trace-salt";
 
-export type SentAs = "exact" | "edited" | "cleared";
-export type DismissReason = "typed_over" | "new_turn" | "other";
+export type SentAs = "exact" | "edited" | "cleared" | "abandoned";
+export type SentVia = "prompt" | "steer";
+/** `abandoned`: shown, then replaced by another suggestion or the session ended, with no input. */
+export type DismissReason = "typed_over" | "new_turn" | "other" | "abandoned";
 export const EDIT_RATIO_BUCKETS = ["0", "le_0.1", "le_0.3", "le_0.6", "gt_0.6"] as const;
 export type EditRatioBucket = (typeof EDIT_RATIO_BUCKETS)[number];
 
@@ -52,6 +58,8 @@ export interface SuggestionOutcomeRecord extends ShownSuggestionMeta {
 	readonly decidedAtEpochMs: number;
 	readonly msToAccept?: number;
 	readonly sentAs?: SentAs;
+	/** Only on `exact` / `edited`. */
+	readonly sentVia?: SentVia;
 	readonly editRatioBucket?: EditRatioBucket;
 	readonly dismissReason?: DismissReason;
 }
@@ -129,8 +137,8 @@ export class SuggestionAcceptTracker {
 		if (this.awaitingSend && text.length === 0) this.settleAccepted("cleared", undefined, atEpochMs);
 	}
 
-	/** The next prompt was sent; `text` is its user text. */
-	sent(text: string, atEpochMs: number): void {
+	/** The next user message was sent (`via`: new prompt or steer into a running turn); `text` is its user text. */
+	sent(text: string, atEpochMs: number, via: SentVia = "prompt"): void {
 		const p = this.pending;
 		if (!p) return;
 		if (p.acceptedAtEpochMs === undefined) {
@@ -138,16 +146,16 @@ export class SuggestionAcceptTracker {
 			return;
 		}
 		const bucket = editRatioBucket(p.text, text);
-		this.settleAccepted(bucket === "0" ? "exact" : "edited", bucket, atEpochMs);
+		this.settleAccepted(bucket === "0" ? "exact" : "edited", bucket, atEpochMs, via);
 	}
 
-	/** Close whatever is open (dispose, or a new suggestion replacing an unsent accept). */
+	/** Close whatever is open (dispose, or a new suggestion replacing it): never sent ⇒ `abandoned`. */
 	flush(atEpochMs: number): void {
-		if (this.awaitingSend) this.settleAccepted("cleared", undefined, atEpochMs);
-		else this.dismissed("other", atEpochMs);
+		if (this.awaitingSend) this.settleAccepted("abandoned", undefined, atEpochMs);
+		else this.dismissed("abandoned", atEpochMs);
 	}
 
-	private settleAccepted(sentAs: SentAs, bucket: EditRatioBucket | undefined, atEpochMs: number): void {
+	private settleAccepted(sentAs: SentAs, bucket: EditRatioBucket | undefined, atEpochMs: number, via?: SentVia): void {
 		const p = this.pending;
 		if (!p || p.acceptedAtEpochMs === undefined) return;
 		this.pending = undefined;
@@ -157,16 +165,15 @@ export class SuggestionAcceptTracker {
 			msToAccept: Math.max(0, p.acceptedAtEpochMs - p.meta.shownAtEpochMs),
 			sentAs,
 			...(bucket ? { editRatioBucket: bucket } : {}),
+			...(via && (sentAs === "exact" || sentAs === "edited") ? { sentVia: via } : {}),
 			decidedAtEpochMs: atEpochMs,
 		});
 	}
 }
 
-/** Read the install's 32-byte salt, creating it once (0600) when missing. */
+/** Read the install's salt as stored (callers must check it is exactly 32 bytes). */
 export function sessionHashSalt(agentDir: string = getAgentDir()): Buffer {
-	const file = join(agentDir, SESSION_SALT_FILE);
-	const existing = fs.readFileSync(file, { flag: "r" }).subarray(0, 32);
-	return existing;
+	return fs.readFileSync(join(agentDir, SESSION_SALT_FILE), { flag: "r" });
 }
 
 function readOrCreateSalt(agentDir: string): Buffer {
@@ -187,6 +194,26 @@ export function sessionHash(salt: Buffer, sessionId: string): string {
 	return createHash("sha256").update(salt).update(sessionId, "utf8").digest("hex").slice(0, 16);
 }
 
+let saltInvalidReported = false;
+/** Test hook: forget that this process already reported an invalid salt. */
+export function resetSaltInvalidReportForTests(): void {
+	saltInvalidReported = false;
+}
+
+/** True when the file's last record is the `cap_reached` marker (survives restarts, so no repeats). */
+function endsWithCapMarker(file: string, size: number): boolean {
+	const fd = fs.openSync(file, "r");
+	try {
+		const len = Math.min(size, 512);
+		const buf = Buffer.alloc(len);
+		fs.readSync(fd, buf, 0, len, size - len);
+		const last = buf.toString("utf8").trimEnd().split("\n").pop() ?? "";
+		return last.includes('"outcome":"cap_reached"');
+	} finally {
+		fs.closeSync(fd);
+	}
+}
+
 const DISABLED = new Set(["0", "false", "off", "disable", "disabled"]);
 
 /** Tracker writing to `<metrics dir>/suggestion-outcomes.jsonl`; `undefined` when flag off or metrics opted out. */
@@ -201,14 +228,32 @@ export function suggestionAcceptTracker(
 	if (metrics !== undefined && DISABLED.has(metrics.trim().toLowerCase())) return undefined;
 	const file = join(env.OMK_TURN_METRICS_DIR ?? join(cwd, ".omk", "metrics"), SUGGESTION_OUTCOMES_FILE);
 	let salt: Buffer | undefined;
+	let capped = false;
+	const marker = (outcome: "cap_reached" | "salt_invalid", at: number) =>
+		`${JSON.stringify({ schemaVersion: SUGGESTION_OUTCOME_SCHEMA_VERSION, outcome, decidedAtEpochMs: at })}\n`;
 	return new SuggestionAcceptTracker((record) => {
 		try {
+			if (capped) return;
 			salt ??= readOrCreateSalt(agentDir ?? getAgentDir());
-			if (salt.length !== 32) return;
+			fs.mkdirSync(join(file, ".."), { recursive: true });
+			if (salt.length !== 32) {
+				// Not silent, but never the salt or the raw id: one marker per process, then no records.
+				if (!saltInvalidReported) {
+					saltInvalidReported = true;
+					fs.appendFileSync(file, marker("salt_invalid", record.decidedAtEpochMs), "utf8");
+				}
+				return;
+			}
 			const hash = sessionHash(salt, sessionId());
 			const line = `${JSON.stringify({ schemaVersion: SUGGESTION_OUTCOME_SCHEMA_VERSION, sessionHash: hash, ...record })}\n`;
-			fs.mkdirSync(join(file, ".."), { recursive: true });
-			if ((fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0) + line.length > MAX_FILE_BYTES) return;
+			const size = fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0;
+			if (size + Buffer.byteLength(line) > MAX_FILE_BYTES) {
+				capped = true;
+				// The marker may run a few bytes past the cap; written once, even across restarts.
+				if (!endsWithCapMarker(file, size))
+					fs.appendFileSync(file, marker("cap_reached", record.decidedAtEpochMs), "utf8");
+				return;
+			}
 			fs.appendFileSync(file, line, "utf8");
 		} catch {
 			// Advisory only.
