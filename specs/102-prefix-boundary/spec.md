@@ -104,6 +104,8 @@ OpenAI Completions (where `prompt_cache_key` is emitted).
 - Minimum sample, fixed before any measurement: at least 30 `suffix_changed`
   requests per arm. Below that in either arm the result is `inconclusive`
   and the flag stays off; the bar is never relaxed.
+- The boundary change cause is recorded as new values on #183's existing
+  `boundaryChangeReason`, not a new field.
 - No default-on decision until 101 lands. Default-on bar (A/B, flag on vs off,
   same tasks/models), all three required: 95% CI upper bound of
   Δ(cost per verified completion) `< 0`, AND success-rate drop `<= 5pp`,
