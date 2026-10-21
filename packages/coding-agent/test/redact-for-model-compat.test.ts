@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { redactForModel } from "../src/index.js";
+import { redactForModel } from "../src/index.ts";
 
 describe("redactForModel 1.5.x compat export", () => {
 	it("is exported from the package root", () => {
