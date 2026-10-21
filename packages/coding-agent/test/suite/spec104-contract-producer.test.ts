@@ -9,8 +9,15 @@ import { fileURLToPath } from "node:url";
 import { fauxAssistantMessage } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DurableGoalStore } from "../../src/core/durable-goal-store.ts";
-import goalController from "../../src/core/extensions/builtin/goal-controller.ts";
+import goalController, { type GoalControllerOptions } from "../../src/core/extensions/builtin/goal-controller.ts";
+import type { ExtensionAPI } from "../../src/core/extensions/types.ts";
+import { GoalVerifier } from "../../src/core/goal-verification.ts";
 import { RequiredCapabilityUnavailable } from "../../src/core/required-tools.ts";
+import {
+	REQUIRED_CAPABILITY_CHANNEL,
+	REQUIRED_TOOLS_CONTRACT_CHANNEL,
+	reportRequiredCapability,
+} from "../../src/core/required-tools-channel.ts";
 import type { TaskResultEvent } from "../../src/core/task-result.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
@@ -35,8 +42,17 @@ afterEach(() => {
 	for (const h of harnesses.splice(0)) h.cleanup();
 });
 
-async function newHarness(servers: string[]): Promise<Harness> {
-	const harness = await createHarness({ extensionFactories: [(omk) => goalController(omk)] });
+let bus: ExtensionAPI["events"] | undefined;
+
+async function newHarness(servers: string[], options: GoalControllerOptions = {}): Promise<Harness> {
+	const harness = await createHarness({
+		extensionFactories: [
+			(omk) => goalController(omk, options),
+			(omk) => {
+				bus = omk.events;
+			},
+		],
+	});
 	harnesses.push(harness);
 	writeFileSync(join(harness.tempDir, "done.txt"), "done\n");
 	const git = (...args: string[]) => execFileSync("git", args, { cwd: harness.tempDir, stdio: "ignore" });
@@ -201,5 +217,108 @@ describe("spec 104 phase 3: goal-controller contract producer", () => {
 		writeFileSync(join(h.tempDir, "done2.txt"), "done\n");
 		await h.session.prompt("/goal complete");
 		expect(await goalStatus(h)).not.toBe("completed");
+	});
+
+	it("flag off: --requires text is the approved command, byte-for-byte as on main; no records, no channel traffic", async () => {
+		const h = await newHarness(["slim"]);
+		const seen: unknown[] = [];
+		bus?.on(REQUIRED_TOOLS_CONTRACT_CHANNEL, (data) => seen.push(data));
+		bus?.on(REQUIRED_CAPABILITY_CHANNEL, (data) => seen.push(data));
+		const notify = vi.spyOn(h.session.extensionRunner.getUIContext(), "notify");
+		await h.session.prompt("/goal Ship it");
+		await h.session.prompt("/goal verify --requires browser__verify test -f done.txt");
+		notify.mockClear();
+		await h.session.prompt("/goal");
+
+		expect(notify).toHaveBeenCalledWith(
+			expect.stringContaining(
+				"acceptance: `--requires browser__verify test -f done.txt` (approved in this session)",
+			),
+			"info",
+		);
+		expect(seen).toEqual([]);
+		expect(capabilityEntries(h)).toEqual([]);
+	});
+
+	it("flag on: a --requires name not in server__tool form is rejected with a clear error and approves nothing", async () => {
+		vi.stubEnv("OMK_REQUIRED_TOOLS", "1");
+		const h = await newHarness(["slim"]);
+		const notify = vi.spyOn(h.session.extensionRunner.getUIContext(), "notify");
+		await h.session.prompt("/goal Ship it");
+		await h.session.prompt("/goal verify --requires slim__echo,read test -f done.txt");
+
+		expect(notify).toHaveBeenCalledWith(
+			expect.stringMatching(/--requires names must be MCP tools in server__tool form; invalid: read\b/),
+			"error",
+		);
+		notify.mockClear();
+		await h.session.prompt("/goal");
+		expect(notify).toHaveBeenCalledWith(expect.stringContaining("acceptance: none"), "info");
+		expect(capabilityEntries(h)).toEqual([]);
+	});
+
+	it("flag on: untagged contracts/reports and reports for another segment are ignored by host and producer", async () => {
+		vi.stubEnv("OMK_REQUIRED_TOOLS", "1");
+		const h = await newHarness(["slim"]);
+		h.setResponses([fauxAssistantMessage("done")]);
+		await h.session.prompt("/goal Ship it");
+		await h.session.prompt("/goal verify --requires slim__echo test -f done.txt");
+		// Untagged contract on the host channel: would make an absent tool required if trusted.
+		bus?.emit(REQUIRED_TOOLS_CONTRACT_CHANNEL, {
+			contract: { taskSegmentId: "forged", tools: new Set(["browser__verify"]), source: "acceptance" },
+		});
+		// Untagged and other-segment reports on the producer channel: would record a gap if trusted.
+		bus?.emit(REQUIRED_CAPABILITY_CHANNEL, {
+			state: "missing",
+			taskSegmentId: "x",
+			missing: ["slim__echo"],
+			kind: "absent",
+		});
+		if (bus) {
+			reportRequiredCapability(bus, {
+				state: "missing",
+				taskSegmentId: "other",
+				missing: ["slim__echo"],
+				kind: "absent",
+			});
+		}
+
+		await h.session.prompt("go");
+		await waitIdle(h);
+
+		expect(h.faux.state.callCount).toBe(1);
+		expect(capabilityEntries(h)).toEqual([]);
+		expect(requiredFacts(h)).toEqual([]);
+		expect(await goalStatus(h)).toBe("completed");
+	});
+
+	/** The first check run is real; every later one is aborted, so it attaches no receipt. */
+	const firstRunOnly: GoalControllerOptions = {
+		createVerifier: (options) => {
+			const verifier = new GoalVerifier(options);
+			const run = verifier.run.bind(verifier);
+			let calls = 0;
+			verifier.run = (command, signal, onOutput) =>
+				run(command, ++calls === 1 ? signal : AbortSignal.abort(), onOutput);
+			return verifier;
+		},
+	};
+
+	async function completeAfterPass(redeclare: string | undefined): Promise<string | undefined> {
+		vi.stubEnv("OMK_REQUIRED_TOOLS", "1");
+		const h = await newHarness(["slim", "mid"], firstRunOnly);
+		await h.session.prompt("/goal Ship it");
+		await h.session.prompt("/goal verify --requires slim__echo test -f done.txt");
+		if (redeclare) await h.session.prompt(`/goal verify --requires ${redeclare} test -f done.txt`);
+		await h.session.prompt("/goal complete");
+		return goalStatus(h);
+	}
+
+	it("control: a pass of the current revision allows /goal complete", async () => {
+		expect(await completeAfterPass(undefined)).toBe("completed");
+	});
+
+	it("after --requires changes (new revision), the previous revision's pass does not allow /goal complete", async () => {
+		expect(await completeAfterPass("slim__echo,mid__echo")).toBe("active");
 	});
 });
