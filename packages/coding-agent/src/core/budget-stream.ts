@@ -6,6 +6,7 @@ import { createRequestAdmissionGuard, type RequestAdmissionGuard } from "./reque
 import { requestTraceFromEnv } from "./request-trace.ts";
 import { dispatchFingerprints } from "./request-trace-metadata.ts";
 import type { RunBudget } from "./run-budget.ts";
+import { prefixBoundaryCauseFor } from "./system-prompt-cache-boundary.ts";
 export function wrapBudgetStream(
 	source: StreamFn,
 	budget: RunBudget,
@@ -29,6 +30,7 @@ export function wrapBudgetStream(
 			traceId = trace?.begin(model.provider, model.id, {
 				cacheScope: options?.cacheRetention,
 				...(trace?.salt ? { fingerprints: dispatchFingerprints(trace.salt, context) } : {}),
+				prefixCause: prefixBoundaryCauseFor(context.systemPrompt),
 			});
 			timingEnd("enter", "request.sent");
 			const stream = await source(model, context, {
