@@ -6,8 +6,8 @@
  * contract comes only from the approved acceptance contract; nothing is
  * inferred from prompt text.
  *
- * Phase 1 has no effect on real sessions: nothing supplies `requiredTools` to
- * `SessionTurnAdmission` yet (agent-session.ts wiring is a later PR).
+ * Real sessions read the contract through `setRequiredToolSource`
+ * (agent-session-turn-admission-host.ts); no producer sets one yet.
  */
 import type { TaskCheckFact } from "./task-result.ts";
 
