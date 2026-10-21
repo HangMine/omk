@@ -130,7 +130,20 @@ export function compactionHysteresisConfigFor(
 /**
  * Check if compaction should trigger based on context usage.
  */
-export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
+export function shouldCompact(
+	contextTokens: number,
+	contextWindow: number,
+	settings: CompactionSettings,
+	/** Spec 104 §2.4: called only by callers with `OMK_COMPACTION_COST_OBSERVE` on; never changes the result. */
+	observe?: (decision: boolean, triggerTokens: number | undefined) => void,
+): boolean {
 	const threshold = getCompactionHeadroomThreshold(contextWindow, settings);
-	return threshold !== undefined && Number.isFinite(contextTokens) && contextTokens >= threshold.triggerTokens;
+	const decision =
+		threshold !== undefined && Number.isFinite(contextTokens) && contextTokens >= threshold.triggerTokens;
+	try {
+		observe?.(decision, threshold?.triggerTokens);
+	} catch {
+		// Observation is advisory.
+	}
+	return decision;
 }
