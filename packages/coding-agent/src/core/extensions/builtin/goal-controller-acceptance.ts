@@ -13,6 +13,7 @@ import { RecallAccessTracker } from "../../goal-output-recall-access.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
 import { type GoalAcceptanceTestHooks, GoalTaskFacts } from "./goal-acceptance-task-facts.ts";
+import { parseRequiredToolsDeclaration } from "./goal-controller-required-tools.ts";
 import { displayCommand, displayError, failureText, receiptLabel, renderGoal } from "./goal-controller-text.ts";
 
 type ContinueGoal = (advanced: DurableGoalSnapshot, detail: string) => void;
@@ -66,8 +67,10 @@ export class GoalAcceptanceFlow {
 				"wait for the agent to finish before running the acceptance check",
 			);
 		}
-		const command = text.slice("verify".length).trim();
+		// Spec 104 (flag on only): an explicit `--requires` declaration; nothing is inferred.
+		const { command, tools } = parseRequiredToolsDeclaration(text.slice("verify".length).trim());
 		const previous = this.acceptance.approvedCommand(existing);
+		const previousTools = this.acceptance.requiredTools(existing);
 		if (command.length > 0) {
 			const denial = await evaluateCommandGate(command, {
 				hasUI: ctx.hasUI,
@@ -80,7 +83,7 @@ export class GoalAcceptanceFlow {
 					`command safety blocked the acceptance check: ${denial.reason}`,
 				);
 			}
-			this.acceptance.approve(existing, command);
+			this.acceptance.approve(existing, command, tools);
 		} else if (this.acceptance.approvedCommand(existing) === undefined) {
 			throw new DurableGoalError(
 				"invalid-input",
@@ -93,7 +96,7 @@ export class GoalAcceptanceFlow {
 		} catch (error) {
 			if (error instanceof DurableGoalError) throw error;
 			// An approval must name a check that can run; keep the one that could.
-			this.acceptance.approve(existing, previous);
+			this.acceptance.approve(existing, previous, previousTools);
 			const approval = command.length > 0 ? ", so it was not approved" : "";
 			throw new DurableGoalError(
 				"invalid-input",

@@ -14,6 +14,7 @@ import { deleteGoalRecallFiles, goalOutputRecallEnabled } from "../../goal-outpu
 import { goalStateDirectory } from "../../goal-verification.ts";
 import type { ExtensionAPI } from "../types.ts";
 import { GoalAcceptanceFlow, type GoalAcceptanceTestHooks } from "./goal-controller-acceptance.ts";
+import { GoalRequiredTools } from "./goal-controller-required-tools.ts";
 import { checkpointPayload, continuationSeam, renderGoal, unavailableWorkspaceCode } from "./goal-controller-text.ts";
 
 export interface GoalControllerOptions {
@@ -31,6 +32,8 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 	const trustedCheckpointDigests = new Set<string>();
 	const acceptance = new GoalAcceptance(options.createVerifier);
 	const flow = new GoalAcceptanceFlow(omk, acceptance, continueGoal, options.testHooks);
+	// Spec 104 (`OMK_REQUIRED_TOOLS` only): publishes the active goal's declared required tools.
+	const requiredTools = new GoalRequiredTools(omk, acceptance);
 
 	// Spec 098: registered only with the flag on, so the off arm adds no handler.
 	if (goalOutputRecallEnabled()) {
@@ -138,6 +141,8 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 			} catch (error) {
 				const message = error instanceof DurableGoalError ? error.message : "goal command failed";
 				ctx.ui.notify(message, "error");
+			} finally {
+				if (requiredTools.enabled) requiredTools.sync(await store.current().catch(() => null));
 			}
 		},
 	});
@@ -154,6 +159,7 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 			omk.appendEntry("goal_workspace_unavailable", { code });
 			return;
 		}
+		if (requiredTools.enabled) requiredTools.sync(current);
 		if (!current) return;
 		const decision = decideGoalContinuation({
 			status: current.status,

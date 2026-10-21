@@ -46,6 +46,8 @@ interface CheckContract {
 	readonly command: string | undefined;
 	readonly revision: number;
 	readonly digest: string;
+	/** Spec 104: tools this check explicitly declared it needs (never inferred); empty when none. */
+	readonly requiredTools: readonly string[];
 	/** Whether the latest completed (non-aborted) run of this revision passed. */
 	readonly latestPassed?: boolean;
 }
@@ -68,16 +70,24 @@ export class GoalAcceptance {
 	}
 
 	/** Approve `command` for `goal`, or withdraw the approval with `undefined`. */
-	approve(goal: DurableGoalSnapshot, command: string | undefined): void {
+	approve(goal: DurableGoalSnapshot, command: string | undefined, requiredTools: readonly string[] = []): void {
 		const key = goalKeyOf(goal);
 		const previous = this.contracts.get(key);
-		if (previous?.command === command) return;
+		const tools = command === undefined ? [] : [...new Set(requiredTools)].sort();
+		if (previous?.command === command && (previous?.requiredTools ?? []).join("\0") === tools.join("\0")) return;
 		if (previous === undefined && command === undefined) return;
 		this.contracts.set(key, {
 			command,
 			revision: (previous?.revision ?? 0) + 1,
 			digest: command === undefined ? "" : contractDigestOf(command),
+			requiredTools: tools,
 		});
+	}
+
+	/** Spec 104: the tools the approved check explicitly declared; nothing is inferred from the command. */
+	requiredTools(goal: DurableGoalSnapshot): readonly string[] {
+		const contract = this.contracts.get(goalKeyOf(goal));
+		return contract?.command === undefined ? [] : contract.requiredTools;
 	}
 
 	approvedCommand(goal: DurableGoalSnapshot): string | undefined {
