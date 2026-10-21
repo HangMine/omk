@@ -49,3 +49,23 @@ Primary metric for these: exact-send rate (`accepted` with `sentAs: exact`, over
 2. Abstain when unsure: the model also emits a confidence score, and suggestions below a PREREG threshold are hidden. Passes only if the exact-send rate rises and the show rate does not fall below a PREREG floor.
 For non-accepted suggestions, the edit-distance bucket between the suggestion and the prompt actually sent may be recorded (no text), to separate "right intent, different wording" from "wrong intent".
 Each candidate adds model calls or tokens, so a paid A/B needs 인호's cost cap first.
+
+### 7.1 Evidence (added for the post-freeze candidates; does not change §7)
+Sources were opened and checked on 2026-10-21. Numbers are quoted as each source states them.
+**Candidate 1: metacon (work-state context)**
+- Sordoni et al. 2015, HRED query suggestion (https://arxiv.org/abs/1507.02221): a model that uses the sequence of previous queries "outperforms existing context-aware approaches in a next query prediction setting". The abstract gives no headline numbers. This is search, not agent work.
+- Google Research 2022, ML-enhanced code completion (https://research.google/blog/ml-enhanced-code-completion-improves-developer-productivity/): adding semantic context to ML completion gave a "user acceptance rate of 25-34%" for 10k+ developers, "3% of new code (measured in characters)" came from accepted suggestions, and iteration time fell 6%. This is code completion, not prompt prediction.
+- Weak or negative: internal spec 058 found metacon vs bm25 at noise level. No source we found tests work-state features for predicting an agent's next user prompt.
+- Implication: richer context helps where users' next input follows from visible state. That is plausible for "fix the failing test"-type prompts and unproven elsewhere.
+- Testable prediction: METACON raises exact-send rate over the §4 baseline. Show rate is the guard. The gain should be largest on turns that end with failing checks or open todos (descriptive slice, not a pass criterion).
+**Candidate 2: abstain when unsure**
+- Ziegler et al. 2022, Copilot productivity (https://arxiv.org/abs/2205.06537): "the rate with which shown suggestions are accepted ... drives developers' perception of productivity". This supports exact-send rate over shown as the primary metric.
+- Geifman & El-Yaniv 2017, selective classification (https://arxiv.org/abs/1705.08500): rejecting low-confidence inputs trades coverage for risk, e.g. "2% error in top-5 ImageNet ... with probability 99.9%, and almost 60% test coverage". Here, coverage = show rate.
+- Kadavath et al. 2022 (https://arxiv.org/abs/2207.05221): larger models are "well-calibrated" on multiple-choice formats and self-evaluate via P(True). But P(IK) "struggle[s] with calibration ... on new tasks". So a self-reported confidence for next-prompt prediction needs its own calibration check before the threshold is trusted.
+- Implication: abstaining should raise exact-send/shown roughly by construction. The real question is how much show rate it costs.
+- Testable prediction: at the PREREG threshold, exact-send rate rises and show rate stays at or above the PREREG floor.
+**Measurement (Bench Analyst, existing accept-trace, metrics as fixed in §3/§7)**
+- Per arm: exact-send rate (accepted with `sentAs: exact` / shown) and show rate (shown / settled turns), with session-clustered bootstrap 95% CIs. Settled→shown latency p50/p95 is reported only.
+- Minimum per arm: ≥50 shown suggestions from ≥5 sessions. Below that, report "insufficient", not a verdict.
+- For candidate 2, also report exact-send rate by confidence decile on the shown set (reliability check, descriptive).
+**Transfer caveat:** every external number comes from code completion, search, or QA. None measures predicting a coding agent's next user prompt, where the targets are longer and the base rates are unknown. Treat these as priors for direction, not effect sizes. Only the omk A/B decides.
