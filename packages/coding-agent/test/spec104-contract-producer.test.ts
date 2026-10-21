@@ -62,6 +62,10 @@ describe("spec 104 phase 3: --requires declaration", () => {
 		vi.stubEnv("OMK_REQUIRED_TOOLS", "1");
 		expect(() => parseRequiredToolsDeclaration("--requires a__b")).toThrow(/usage/);
 		expect(() => parseRequiredToolsDeclaration("--requires a;b npm test")).toThrow(/usage/);
+		expect(() => parseRequiredToolsDeclaration("--requires read npm test")).toThrow(
+			/server__tool form; invalid: read\b/,
+		);
+		expect(() => parseRequiredToolsDeclaration("--requires a__b,__x npm test")).toThrow(/invalid: __x/);
 	});
 });
 

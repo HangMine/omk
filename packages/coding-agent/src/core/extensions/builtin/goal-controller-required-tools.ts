@@ -28,8 +28,9 @@ import { currentTaskRunId, publishHostTaskFact } from "../../task-result-collect
 import type { ExtensionAPI } from "../types.ts";
 
 const REQUIRES = /^--requires(?:=|\s+)(\S+)(?:\s+|$)/;
-/** An MCP tool name as the session lists it (`server__tool`) or a built-in tool name. */
-const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/;
+/** An MCP tool name as the session lists it: `server__tool`. */
+const TOOL_NAME = /^[A-Za-z0-9.-][A-Za-z0-9_.-]{0,62}__[A-Za-z0-9_.-]{1,63}$/;
+const USAGE = "usage: /goal verify --requires <server__tool>[,<server__tool>] <command>";
 
 export interface RequiredToolsDeclaration {
 	readonly command: string;
@@ -43,8 +44,14 @@ export function parseRequiredToolsDeclaration(command: string): RequiredToolsDec
 	if (!match) return { command, tools: [] };
 	const tools = (match[1] ?? "").split(",").filter((name) => name.length > 0);
 	const rest = command.slice(match[0].length).trim();
-	if (tools.length === 0 || rest.length === 0 || !tools.every((name) => TOOL_NAME.test(name))) {
-		throw new DurableGoalError("invalid-input", "usage: /goal verify --requires <tool>[,<tool>] <command>");
+	if (tools.length === 0 || rest.length === 0) throw new DurableGoalError("invalid-input", USAGE);
+	const invalid = tools.filter((name) => !TOOL_NAME.test(name));
+	if (invalid.length > 0) {
+		// Refused, never silently dropped: a declaration that names nothing usable must not approve the check.
+		throw new DurableGoalError(
+			"invalid-input",
+			`--requires names must be MCP tools in server__tool form; invalid: ${invalid.join(", ").slice(0, 200)}. ${USAGE}`,
+		);
 	}
 	return { command: rest, tools };
 }
