@@ -214,9 +214,74 @@ describe("spec 098 controller wiring", () => {
 		h.toolCall("read", { path: join(cwd, path) });
 		h.toolCall("bash", { command: `cat ${path}` });
 		await h.settle();
-		expect(h.entries.at(-1)?.data.priorRecall).toEqual({ readAfterFollowUp: true, readCalls: 2 });
+		expect(h.entries.at(-1)?.data.priorRecall).toEqual({
+			readAfterFollowUp: true,
+			readCalls: 2,
+			otherAccessCalls: 1,
+		});
 		await h.settle();
-		expect(h.entries.at(-1)?.data.priorRecall).toEqual({ readAfterFollowUp: false, readCalls: 0 });
+		expect(h.entries.at(-1)?.data.priorRecall).toEqual({
+			readAfterFollowUp: false,
+			readCalls: 0,
+			otherAccessCalls: 0,
+		});
+	});
+
+	it("flag on: grep/rg/cat/sed access is counted apart and never moves the read metric", async () => {
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
+		const { cwd, h } = await failingRound();
+		const path = recallPath(h.messages[0] ?? "");
+		h.toolCall("grep", { pattern: "F821", path });
+		h.toolCall("bash", { command: `rg -n Error ${join(cwd, path)}` });
+		h.toolCall("bash", { command: `sed -n '1,40p' '${path}'` });
+		h.toolCall("bash", { command: `grep -n F821 ${path} | head` });
+		// Not counted: other files, other commands on the path, grep tool on the directory.
+		h.toolCall("bash", { command: "cat app.txt" });
+		h.toolCall("bash", { command: `wc -l ${path}` });
+		h.toolCall("grep", { pattern: "F821", path: ".omk/goals/recall" });
+		await h.settle();
+		expect(h.entries.at(-1)?.data.priorRecall).toEqual({
+			readAfterFollowUp: false,
+			readCalls: 0,
+			otherAccessCalls: 4,
+		});
+		for (const entry of h.entries) expect(JSON.stringify(entry)).not.toContain("F821");
+	});
+
+	it("deleting the goal (clear, then a new goal) removes all its recall files", async () => {
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
+		const { cwd, h } = await failingRound();
+		await h.goal("verify");
+		const logs = () => readdirSync(outputRecallDir(cwd)).filter((name) => name.startsWith("acceptance-session-"));
+		expect(logs().length).toBeGreaterThan(0);
+		await h.goal("clear");
+		expect(logs()).toEqual([]);
+
+		await h.goal("Ship it again");
+		await h.goal(COMMAND);
+		expect(logs()).toHaveLength(1);
+		await h.goal("clear");
+		await h.goal("A replacement goal");
+		expect(logs()).toEqual([]);
+	});
+
+	it("flag on: recall files leave `git status --porcelain` empty", async () => {
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
+		const cwd = gitRepo();
+		// Ignore only the goal state main already writes; recall/ must be hidden by its own .gitignore.
+		writeFileSync(join(cwd, ".gitignore"), ".omk/goals/current.json\n.omk/goals/evidence/\n");
+		execFileSync("git", ["add", ".gitignore"], { cwd });
+		execFileSync("git", ["commit", "-qm", "ignore goal state"], { cwd });
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(COMMAND);
+		await h.goal("verify");
+		expect(readdirSync(outputRecallDir(cwd)).filter((name) => name.endsWith(".log"))).toHaveLength(2);
+		const status = execFileSync("git", ["status", "--porcelain", "--untracked-files=all", "--ignored=no"], {
+			cwd,
+			encoding: "utf8",
+		});
+		expect(status).toBe("");
 	});
 
 	it("flag on: a passing check leaves no artifact", async () => {
