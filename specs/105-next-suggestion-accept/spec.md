@@ -42,3 +42,10 @@ One record per suggestion actually shown, in `.omk/metrics/suggestion-outcomes.j
 ## 6. Open questions
 1. Whether the `steer` sends should be excluded from the primary metric (currently included, reported separately).
 2. The salt storage location (proposed `.omk/` with mode 0600).
+
+## 7. Improvement candidates (after the freeze, one A/B each against the section 4 baseline)
+Primary metric for these: exact-send rate (`accepted` with `sentAs: exact`, over shown). Guard metric: show rate (shown / settled turns). Latency p50/p95 from `settled` to `shown` is reported for each arm.
+1. Metacognitive next-prompt prediction (`OMK_NEXT_SUGGESTIONS_METACON`): the input adds work state (last tool results, failing checks/tests, remaining goal or todos), compared with the current generator. Note: in 058, metacon versus bm25 differed only at noise level, so this stays default off unless the A/B passes.
+2. Abstain when unsure: the model also emits a confidence score, and suggestions below a PREREG threshold are hidden. Passes only if the exact-send rate rises and the show rate does not fall below a PREREG floor.
+For non-accepted suggestions, the edit-distance bucket between the suggestion and the prompt actually sent may be recorded (no text), to separate "right intent, different wording" from "wrong intent".
+Each candidate adds model calls or tokens, so a paid A/B needs 인호's cost cap first.
