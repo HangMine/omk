@@ -5,8 +5,10 @@
  */
 import type { Agent, AgentMessage } from "omk-agent-core";
 import type { Api, Model } from "omk-ai";
+import type { EventBus } from "./event-bus.ts";
 import type { ExtensionRunner } from "./extensions/runner.ts";
-import type { RequiredToolContract } from "./required-tools.ts";
+import { isRequiredToolsEnabled, type RequiredToolContract } from "./required-tools.ts";
+import { onRequiredToolContract, reportRequiredCapability } from "./required-tools-channel.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { getLatestCompactionEntry } from "./session-manager.ts";
 import type { SessionRunBudget } from "./session-run-budget.ts";
@@ -23,6 +25,7 @@ export interface TurnAdmissionSession {
 	readonly _mcpToolNames: ReadonlySet<string>;
 	readonly _runBudget: SessionRunBudget;
 	readonly _extensionRunner: ExtensionRunner;
+	readonly _resourceLoader: { getEventBus?(): EventBus };
 	_effectiveTurnContextWindow(pendingMessages: AgentMessage[], sessionWindow: number): number;
 	_runThresholdCompaction(emergency: boolean): Promise<boolean>;
 }
@@ -48,6 +51,8 @@ export function setRequiredToolSource(session: object, source: RequiredToolSourc
 export function installTurnAdmission(session: TurnAdmissionSession): SessionTurnAdmission {
 	// One tool selection serves admission and the admitted run: MCP servers the model's input
 	// budget cannot carry are withheld per request, never removed from the active tool set.
+	// Spec 104 phase 3: with the flag off no bus listener exists and requests are unchanged.
+	const bus = isRequiredToolsEnabled() ? session._resourceLoader.getEventBus?.() : undefined;
 	const turnAdmission = new SessionTurnAdmission({
 		model: () => session.model,
 		state: () => session.agent.state,
@@ -62,7 +67,36 @@ export function installTurnAdmission(session: TurnAdmissionSession): SessionTurn
 		notify: (message) => session._extensionRunner.getUIContext().notify(message, "warning"),
 		// Spec 104: ignored unless OMK_REQUIRED_TOOLS is on (SessionTurnAdmission checks the flag first).
 		requiredTools: () => requiredToolSources.get(session)?.(),
+		onRequiredCapabilityUnavailable: (error) =>
+			bus &&
+			reportRequiredCapability(bus, {
+				state: "missing",
+				taskSegmentId: error.taskSegmentId,
+				missing: error.missing,
+				kind: error.kind,
+			}),
 	});
-	session.agent.prepareTools = (tools, pending) => turnAdmission.fitTools(tools, pending);
+	if (!bus) {
+		session.agent.prepareTools = (tools, pending) => turnAdmission.fitTools(tools, pending);
+		return turnAdmission;
+	}
+	// The bus may outlive the session; a WeakRef keeps the listener from retaining it.
+	const ref = new WeakRef(session);
+	onRequiredToolContract(bus, (contract) => {
+		const target = ref.deref();
+		if (target) setRequiredToolSource(target, contract && (() => contract));
+	});
+	session.agent.prepareTools = (tools, pending) => {
+		const fitted = turnAdmission.fitTools(tools, pending);
+		const contract = requiredToolSources.get(session)?.();
+		if (contract && contract.tools.size > 0 && isRequiredToolsEnabled()) {
+			reportRequiredCapability(bus, {
+				state: "present",
+				taskSegmentId: contract.taskSegmentId,
+				requiredCount: contract.tools.size,
+			});
+		}
+		return fitted;
+	};
 	return turnAdmission;
 }

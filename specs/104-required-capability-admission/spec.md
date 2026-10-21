@@ -32,6 +32,8 @@ Flag: `OMK_REQUIRED_TOOLS=1` (default off). Off ⇒ byte-identical requests and 
 
 ### 2.2 Outcome
 - `RequiredCapabilityUnavailable` is published as task_result `insufficient/required_capability_missing` (reuses spec 100 projection; new reason) and blocks `acceptance.complete()` for that segment. It can **never** produce `complete`.
+- **No run, no fact (Tech Lead, 2026-10-21 KST):** the task_result fact is published only inside an active task-result run. A rejection in prompt preflight (before any run begins) produces no task_result fact and is never attached to a later run; it leaves only the count record (`goal_required_capability`, counts only) and the completion block.
+- **A/B accounting:** the denominator for required-capability misses is the number of `recordRequiredCapabilityMissing` records; preflight rejections are also counted separately (they have no task_result fact).
 
 ### 2.3 Stability within a task segment
 - Within one `taskSegmentId`, the sent tool list keeps its order and schemas (already canonical via `serializePromptToolSchemas`, `session-turn-admission.ts:74`); optional groups withheld at segment start stay withheld for the segment unless the budget frees (avoids churn).
@@ -59,4 +61,4 @@ Behind `OMK_COMPACTION_COST_OBSERVE=1` (default off; logging only, no model-beha
 - Default-on for `OMK_REQUIRED_TOOLS` (decided by Tech Lead after tests pass, on paired tasks): (a) zero false completions; (b) success-rate drop ≤ 5 pp; (c) the 95% CI upper bound of the per-task median-token ratio (on/off) is ≤ +10%, the same token rule as 098, because keeping required tools enlarges the prompt. No cost-reduction condition, since this is a correctness guard. Paid runs only after 인호 posts a cost cap.
 
 ## 5. Open questions
-1. Which acceptance contracts declare required tools first (browser verification only, or any MCP-backed check)? Proposal: only those whose approved command names an MCP tool.
+1. ~~Which acceptance contracts declare required tools first?~~ **Closed (Tech Lead, 2026-10-21 KST):** only tools an approved check explicitly declares count as required (`AcceptanceRequiredToolsField.requiredTools`). Nothing is inferred: not from the command text, the prompt, the MCP server a command mentions, or the tools a check happened to use. A check that declares nothing has no required tools.
