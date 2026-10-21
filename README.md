@@ -548,9 +548,12 @@ On hold:
 
 ## Release v1.5.5
 
+### Behavior change (security)
+
+- Secret redaction no longer runs on text, log, session, run-journal and bash-output paths (d58ed90719). Secrets that appear in those values (for example API responses recorded by `ApiBroker`, compaction input, journal entries, verified-bash output) are now written to disk as-is. If you relied on omk to mask them, keep secrets out of tool output or clean those files yourself.
+
 ### Changed
 
-- Secret redaction no longer runs on text, log and session paths (d58ed90719). Values such as API responses recorded by `ApiBroker`, compaction input and run-journal entries are now stored as-is.
 - `VERIFIED_BASH_REDACTION_POLICY_ID` is now `omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k`. The old id claimed `omk-sensitive-text-v1` redaction that no longer runs. Receipts already written with the old id are unchanged; code that compares against the old string must update.
 
 ### Deprecated
