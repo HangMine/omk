@@ -15,7 +15,7 @@ One record per suggestion actually shown, in `.omk/metrics/suggestion-outcomes.j
 - `sentAs`: `exact | edited | cleared | abandoned`
   - `cleared`: accepted, then the editor was emptied.
   - `abandoned`: accepted, never sent (session ended or replaced by the next suggestion).
-- `sentVia`: `prompt | steer`
+- `sentVia`: `prompt | steer | followUp`, taken from the actual dispatch branch (`_queueSteer`, `_queueFollowUp`, `deferPrompt`), not from message order. A message deferred during preflight is recorded once, at the moment it is deferred, with the requested value (`steer` or `followUp`), and is not recorded again when it later runs. A command handled by an extension or input hook is not a send and writes no record.
 - Edit-distance ratio bucket: `0, <=0.1, <=0.3, <=0.6, >0.6`
 - Dismiss reason when not accepted: `typed_over | new_turn | other`
 - Timestamps: `settled, quotaChecked, shown, decided`
@@ -40,7 +40,7 @@ One record per suggestion actually shown, in `.omk/metrics/suggestion-outcomes.j
 - Each later change (partial accept, pre-generation, repo state) is a separate A/B against this baseline. It passes only if the session-clustered 95% CI of the adoption difference excludes 0 in the favorable direction, and the revert rate does not rise beyond the PREREG margin.
 
 ## 6. Open questions
-1. Whether the `steer` sends should be excluded from the primary metric (currently included, reported separately).
+1. All three `sentVia` paths count as sent in the primary metric; adoption is also reported per path, because sends while the agent is running (`steer`, `followUp`) differ from idle `prompt` sends.
 2. The salt storage location (proposed `.omk/` with mode 0600).
 
 ## 7. Improvement candidates (after the freeze, one A/B each against the section 4 baseline)
