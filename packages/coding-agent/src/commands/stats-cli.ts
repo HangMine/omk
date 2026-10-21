@@ -81,8 +81,9 @@ export function renderStatsReport(summary: TurnMetricsSummary, filePath: string)
 	}
 	lines.push(
 		`  input ${formatCount(summary.totals.input)} · output ${formatCount(summary.totals.output)} · cacheRead ${formatCount(summary.totals.cacheRead)} · cacheWrite ${formatCount(summary.totals.cacheWrite)}`,
-		`  cache read share ${formatPercent(summary.cacheReadShare)} of prompt-side usage`,
-		`  cost          $${summary.totalCostUsd.toFixed(4)}`,
+		`  cache read share ${formatPercent(summary.cacheReadShare)} of prompt-side usage (input + cacheRead + cacheWrite)`,
+		`  cost          estimated $${summary.totalCostUsd.toFixed(4)} (price table) · billed ${summary.billedTurns > 0 ? `$${summary.billedCostUsd.toFixed(4)} (provider-reported, ${formatCount(summary.billedTurns)} turn(s))` : "n/a"}`,
+		`  usage coverage ${formatCount(summary.usageCoverage.turnsWithUsage)}/${formatCount(summary.turns)} turns${summary.usageCoverage.turnsMissingUsage > 0 ? ` · ${formatCount(summary.usageCoverage.turnsMissingUsage)} missing usage` : ""}${summary.usageCoverage.unverifiedProviders.length > 0 ? ` · 미검증 (unverified input semantics): ${summary.usageCoverage.unverifiedProviders.join(", ")}` : ""}`,
 		`  compactions ${formatCount(summary.compactions)} · failovers ${formatCount(summary.failovers)} · ctx plan hit ${formatPercent(summary.contextCachePlanHitRate)}`,
 	);
 
