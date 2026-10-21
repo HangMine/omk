@@ -4,7 +4,7 @@
  * `requiredTools` callback here.
  */
 import type { Agent, AgentMessage } from "omk-agent-core";
-import type { Api, Model } from "omk-ai";
+import { type Api, type Model, registerSessionResourceCleanup } from "omk-ai";
 import type { EventBus } from "./event-bus.ts";
 import type { ExtensionRunner } from "./extensions/runner.ts";
 import { isRequiredToolsEnabled, type RequiredToolContract } from "./required-tools.ts";
@@ -18,6 +18,7 @@ import { mcpToolGroup } from "./tool-schema-budget.ts";
 
 /** The `AgentSession` members the admission host reads, all read lazily at call time. */
 export interface TurnAdmissionSession {
+	readonly sessionId: string;
 	readonly model: Model<Api> | undefined;
 	readonly agent: Agent;
 	readonly sessionManager: SessionManager;
@@ -41,6 +42,8 @@ export type RequiredToolSource = () => RequiredToolContract | undefined;
  * Keyed by `object`, not `AgentSession`: even a type import of agent-session.ts is an import cycle.
  */
 const requiredToolSources = new WeakMap<object, RequiredToolSource>();
+/** Spec 104: the contract-listener release of each installed session (one listener per session). */
+const contractListeners = new WeakMap<object, () => void>();
 
 /** Set (or clear with `undefined`) the required-tool source of `session`; read at every fit. */
 export function setRequiredToolSource(session: object, source: RequiredToolSource | undefined): void {
@@ -53,6 +56,7 @@ export function installTurnAdmission(session: TurnAdmissionSession): SessionTurn
 	// budget cannot carry are withheld per request, never removed from the active tool set.
 	// Spec 104 phase 3: with the flag off no bus listener exists and requests are unchanged.
 	const bus = isRequiredToolsEnabled() ? session._resourceLoader.getEventBus?.() : undefined;
+	contractListeners.get(session)?.();
 	const turnAdmission = new SessionTurnAdmission({
 		model: () => session.model,
 		state: () => session.agent.state,
@@ -82,10 +86,25 @@ export function installTurnAdmission(session: TurnAdmissionSession): SessionTurn
 	}
 	// The bus may outlive the session; a WeakRef keeps the listener from retaining it.
 	const ref = new WeakRef(session);
-	onRequiredToolContract(bus, (contract) => {
+	const unsubscribe = onRequiredToolContract(bus, (contract) => {
 		const target = ref.deref();
 		if (target) setRequiredToolSource(target, contract && (() => contract));
+		else release();
 	});
+	// Released on session dispose (`cleanupSessionResources` runs after the run budget closes)
+	// and on re-install, so a long-lived bus never accumulates dead listeners.
+	const unregister = registerSessionResourceCleanup((sessionId) => {
+		const target = ref.deref();
+		if (!target || (target._runBudget.closed && sessionId === target.sessionId)) release();
+	});
+	// Reads the session only through `ref`: the global cleanup set must not retain it.
+	function release(): void {
+		unsubscribe();
+		unregister();
+		const target = ref.deref();
+		if (target && contractListeners.get(target) === release) contractListeners.delete(target);
+	}
+	contractListeners.set(session, release);
 	session.agent.prepareTools = (tools, pending) => {
 		const fitted = turnAdmission.fitTools(tools, pending);
 		const contract = requiredToolSources.get(session)?.();
