@@ -4,6 +4,14 @@ Status: draft (spec only, no implementation)
 Base: `origin/main` @ `e898c19e44`. All `file:line` refs are `e898c19e44`, under `packages/coding-agent/`.
 Source: 인호's review, priority F / section 6.
 
+## 0. Tech Lead rulings (2026-10-21 KST) — phase 1 scope
+
+- **Phase 1 has no effect on real sessions.** `SessionTurnAdmission` accepts an optional `requiredTools` host accessor, but nothing supplies it: `agent-session.ts` is not wired in this PR (a separate behavior-neutral `agent-session.ts` split PR comes first).
+- **v1 required tools come only from the approved acceptance contract** (`source: "acceptance"`). User/skill declarations are out of scope. The contract field is defined as a type only (`AcceptanceRequiredToolsField.requiredTools`); no producer reads or writes it yet.
+- **§2.4 (compaction cost observe, `OMK_COMPACTION_COST_OBSERVE`) is removed from this PR** and deferred.
+- **Completion block release:** after `required_capability_missing`, `complete()` stays refused until a later turn carries every required tool *and* the approved check then passes; `forget()` (goal cleared/replaced) also clears it.
+- **Segment stability:** within one `taskSegmentId`, groups withheld earlier stay withheld (unioned into the new fit) until a fit withholds nothing; a withheld group never flips back and forth within a segment.
+
 ## 1. Problem (verified in code)
 
 1. **MCP servers are withheld whole, largest first, with no notion of "required".** `SessionTurnAdmission.fitTools` computes a schema budget and calls `fitToolSchemas` (`src/core/session-turn-admission.ts:52-90`), which withholds whole groups largest-first until schemas fit (`src/core/tool-schema-budget.ts:42-56`). Group = MCP server (`src/core/agent-session.ts:902`); ungrouped (built-in) tools are always sent (`tool-schema-budget.ts:45-46`). `SessionTurnAdmissionHost` (`session-turn-admission.ts:17-29`) has no required-capability input.
@@ -29,7 +37,7 @@ Flag: `OMK_REQUIRED_TOOLS=1` (default off). Off ⇒ byte-identical requests and 
 - Within one `taskSegmentId`, the sent tool list keeps its order and schemas (already canonical via `serializePromptToolSchemas`, `session-turn-admission.ts:74`); optional groups withheld at segment start stay withheld for the segment unless the budget frees (avoids churn).
 - **Additions** of a required tool and **permission revocations** apply on the very next request: revocation removes the tool from `state.tools` ⇒ new key ⇒ re-fit (§1.3). If the revoked tool is required ⇒ `required_capability_missing` immediately. Cache preservation never keeps a revoked tool or a stale schema.
 
-### 2.4 Compaction: observe-only
+### 2.4 Compaction: observe-only (deferred — not in phase 1, see §0)
 Behind `OMK_COMPACTION_COST_OBSERVE=1` (default off; logging only, no model-behavior change). At each `shouldCompact` evaluation in the safe band (below trigger, above a reserve), record one trace line:
 - `continueCost` = estimated remaining input cost of the next request at current size with current cache read/write split (normalized usage, see 103 §2.3);
 - `compactCost` = summary-call estimate + one cache rewrite of the post-summary prefix + next-request cost after summary;
