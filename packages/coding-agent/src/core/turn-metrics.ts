@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { cumulativeCacheReadShare, isUsageInputSemanticsVerified } from "omk-ai";
+import { type PurposeUsageTotals, summarizeByPurpose } from "./turn-metrics-purpose.ts";
 import {
 	buildTurnMetricRecord,
 	parseTurnMetricRecord,
@@ -155,6 +156,8 @@ export interface TurnMetricsSummary {
 	readonly tools: readonly ToolAggregate[];
 	/** Lines that could not be parsed as a metric record. */
 	readonly malformedLines: number;
+	/** Spec 103: only when suggestion records exist; `totals` above is the sum of both. */
+	readonly byPurpose?: Readonly<Record<"main" | "suggestion", PurposeUsageTotals>>;
 }
 
 function percentile(sorted: readonly number[], fraction: number): number {
@@ -298,6 +301,7 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		provenanceMismatchTurns,
 		tools,
 		malformedLines,
+		...(records.some((r) => r.purpose === "suggestion") ? { byPurpose: summarizeByPurpose(records) } : {}),
 	};
 }
 

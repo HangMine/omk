@@ -6,6 +6,11 @@ export const MAX_ERROR_CHARS = 200;
 const ERROR_CLASSES = ["timeout", "aborted", "permission", "not_found", "invalid_input", "unknown"] as const;
 type ErrorClass = (typeof ERROR_CLASSES)[number];
 const STOP_REASONS = ["stop", "length", "toolUse", "error", "aborted"];
+/** Spec 103: a record without `purpose` is a main turn (legacy readers ignore the field). */
+export const TURN_METRIC_PURPOSES = ["main", "suggestion"] as const;
+export type TurnMetricPurpose = (typeof TURN_METRIC_PURPOSES)[number];
+export const SUGGESTION_OUTCOMES = ["shown", "empty", "aborted", "timeout", "error"] as const;
+export type SuggestionMetricOutcome = (typeof SUGGESTION_OUTCOMES)[number];
 
 export interface ToolCallMetric {
 	readonly name: string;
@@ -61,6 +66,10 @@ export interface TurnMetricInput {
 	readonly failovers?: number;
 	readonly contextCache?: { readonly planHit: boolean; readonly hits: number; readonly misses: number };
 	readonly runtimeProvenance?: RuntimeProvenance;
+	/** Spec 103: `suggestion` records are separate requests, never folded into the parent turn. */
+	readonly purpose?: TurnMetricPurpose;
+	readonly parentTurnIndex?: number;
+	readonly suggestionOutcome?: SuggestionMetricOutcome;
 }
 export interface TurnMetricRecord extends Omit<TurnMetricInput, "toolCalls"> {
 	readonly schemaVersion: typeof TURN_METRICS_SCHEMA_VERSION;
@@ -104,6 +113,10 @@ function classifyError(value: unknown): ErrorClass {
 	if (/not found|enoent/iu.test(text)) return "not_found";
 	if (/invalid|validation/iu.test(text)) return "invalid_input";
 	return "unknown";
+}
+function member<T extends string>(value: unknown, allowed: readonly T[]): T {
+	for (const item of allowed) if (value === item) return item;
+	throw new TypeError("Invalid metric enum");
 }
 function parseErrorClass(value: unknown): ErrorClass | undefined {
 	if (value === undefined) return undefined;
@@ -177,6 +190,11 @@ function project(value: unknown, source: "input" | "v1" | "v2"): TurnMetricRecor
 					},
 				}),
 		...(runtimeProvenance ? { runtimeProvenance } : {}),
+		...(input.purpose === undefined ? {} : { purpose: member(input.purpose, TURN_METRIC_PURPOSES) }),
+		...(input.parentTurnIndex === undefined ? {} : { parentTurnIndex: quantity(input.parentTurnIndex, true) }),
+		...(input.suggestionOutcome === undefined
+			? {}
+			: { suggestionOutcome: member(input.suggestionOutcome, SUGGESTION_OUTCOMES) }),
 	};
 }
 
