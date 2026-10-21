@@ -24,9 +24,13 @@ import {
 	OUTPUT_RECALL_PER_DIR,
 	OUTPUT_RECALL_TAIL_BYTES,
 	OutputArtifactWriter,
+	outputRecallDir,
 } from "../src/core/goal-output-recall.ts";
+import { createLoadoutAccessPolicy, decideLoadoutAccess } from "../src/core/loadout-access-policy.ts";
+import { createReadToolDefinition } from "../src/core/tools/read.ts";
 
 const roots: string[] = [];
+const COMMAND = "verify printf 'line one\\nF821 undefined name x\\n'; exit 4";
 
 function tempRoot(prefix: string): string {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
@@ -47,7 +51,7 @@ function gitRepo(): string {
 	return root;
 }
 
-function harness(cwd: string, sessionFile: string | undefined) {
+function harness(cwd: string) {
 	const commands = new Map<string, RegisteredCommand>();
 	const handlers = new Map<string, (event: never, context: never) => unknown>();
 	const entries: Array<{ readonly type: string; readonly data: Record<string, unknown> }> = [];
@@ -66,26 +70,32 @@ function harness(cwd: string, sessionFile: string | undefined) {
 		ui: { notify: () => {}, confirm: async () => false },
 		isIdle: () => true,
 		hasPendingMessages: () => false,
-		sessionManager: { getSessionFile: () => sessionFile },
 	} as unknown as ExtensionCommandContext;
 	return {
 		entries,
 		messages,
+		handlers,
 		goal: async (args: string) => commands.get("goal")?.handler(args, ctx),
 		settle: async () =>
 			handlers.get("agent_settled")?.({ type: "agent_settled", messages: [] } as never, ctx as never),
+		toolCall: (toolName: string, input: Record<string, unknown>) =>
+			handlers.get("tool_call")?.({ type: "tool_call", toolCallId: "t", toolName, input } as never, ctx as never),
 	};
 }
 
-async function failingRound(sessionFile: string | undefined) {
+async function failingRound() {
 	const cwd = gitRepo();
 	await new DurableGoalStore(join(cwd, ".omk", "goals", "current.json")).create(
 		createDurableGoal({ id: "session", objective: "Ship the app", maxRounds: 3, now: new Date().toISOString() }),
 	);
-	const h = harness(cwd, sessionFile);
-	await h.goal("verify printf 'line one\\nF821 undefined name x\\n'; exit 4");
+	const h = harness(cwd);
+	await h.goal(COMMAND);
 	await h.settle();
 	return { cwd, h };
+}
+
+function recallPath(message: string): string {
+	return /Full output: (\S+) \(/u.exec(message)?.[1] ?? "";
 }
 
 beforeEach(() => {
@@ -108,9 +118,8 @@ describe("spec 098 flag", () => {
 });
 
 describe("spec 098 controller wiring", () => {
-	it("flag off: the follow-up request text and the trace entry are byte-identical to main, no file written", async () => {
-		const session = join(tempRoot("omk-098-sess-"), "s.jsonl");
-		const { h } = await failingRound(session);
+	it("flag off: the follow-up request text and the trace entry are byte-identical to main, no file, no handler", async () => {
+		const { cwd, h } = await failingRound();
 
 		expect(h.messages).toHaveLength(1);
 		const receipt = /\(receipt ([0-9a-f]{8})\)/u.exec(h.messages[0] ?? "")?.[1];
@@ -126,71 +135,107 @@ describe("spec 098 controller wiring", () => {
 				["digest", "exitCode", "goalId", "goalRevision", "passed", "receiptId", "status", "trigger"].sort(),
 			);
 		}
-		expect(existsSync(`${session.replace(/\.jsonl$/u, "")}.artifacts`)).toBe(false);
+		expect(existsSync(outputRecallDir(cwd))).toBe(false);
+		expect(h.handlers.has("tool_call")).toBe(false);
 	});
 
 	it("flag on: points the model at the raw artifact and the trace keeps only a digest and counts", async () => {
 		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
-		const session = join(tempRoot("omk-098-sess-"), "s.jsonl");
-		const { cwd, h } = await failingRound(session);
+		const { cwd, h } = await failingRound();
 
 		const message = h.messages[0] ?? "";
 		expect(message).not.toContain("Run it to see the output");
 		expect(message).toContain("Diagnostic hint (may be incomplete):\nline one\nF821 undefined name x");
-		const path = /Full output: (\S+) \(2 lines, 31B; complete\)/u.exec(message)?.[1];
-		expect(path).toBeDefined();
-		expect(path?.startsWith("/")).toBe(false);
-		const file = join(cwd, path ?? "");
+		expect(message).toContain(
+			// attempt 1 is the `/goal verify` run, attempt 2 the settled-turn run.
+			"Full output: .omk/goals/recall/acceptance-session-0-1-2.log (2 lines, 31B; complete)",
+		);
+		expect(message).toContain("Read ranges with read(path, offset, limit) instead of re-running the check");
+		const file = join(cwd, recallPath(message));
 		expect(readFileSync(file, "utf8")).toBe("line one\nF821 undefined name x\n");
 		expect(statSync(file).mode & 0o777).toBe(0o600);
-		expect(statSync(join(file, "..")).mode & 0o777).toBe(0o700);
-		expect(message).toContain("Read ranges with read(path, offset, limit) instead of re-running the check");
+		expect(statSync(outputRecallDir(cwd)).mode & 0o777).toBe(0o700);
+		expect(readFileSync(join(outputRecallDir(cwd), ".gitignore"), "utf8")).toBe("*\n");
 
-		const traced = h.entries.map((entry) => JSON.stringify(entry));
-		for (const line of traced) expect(line).not.toContain("F821");
+		for (const entry of h.entries) expect(JSON.stringify(entry)).not.toContain("F821");
 		expect(h.entries.at(-1)?.data.outputArtifact).toEqual({
 			sha256: expect.stringMatching(/^[0-9a-f]{64}$/u),
 			bytes: 31,
 			lines: 2,
 			complete: true,
 			elidedBytes: 0,
+			elidedRatio: 0,
 		});
 	});
 
-	it("flag on without a session writes a 0600 temp file with an absolute path", async () => {
+	it("flag on: the real read tool opens the recall path, with and without a workspace-scoped loadout policy", async () => {
 		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
-		const { h } = await failingRound(undefined);
-		const path = /Full output: (\S+) \(/u.exec(h.messages[0] ?? "")?.[1] ?? "";
-		expect(path.startsWith(join(tmpdir(), "omk-accept-"))).toBe(true);
-		expect(statSync(path).mode & 0o777).toBe(0o600);
-		rmSync(path, { force: true });
+		const { cwd, h } = await failingRound();
+		const path = recallPath(h.messages[0] ?? "");
+		const policy = createLoadoutAccessPolicy({ cwd, activeTools: ["read"], readSet: [{ path: "." }] });
+		const scoped = (p: string) =>
+			decideLoadoutAccess(policy, { operation: "read", toolName: "read", path: p }).allowed;
+		for (const options of [{}, { canReadPath: scoped }]) {
+			const read = createReadToolDefinition(cwd, options);
+			const result = await read.execute(
+				"r",
+				{ path, offset: 2, limit: 1 },
+				undefined,
+				undefined,
+				undefined as never,
+			);
+			expect(result.content[0]).toMatchObject({
+				type: "text",
+				text: expect.stringMatching(/^F821 undefined name x\n/u),
+			});
+		}
+	});
+
+	it("flag on: a re-run in the same round and revision keeps both files", async () => {
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
+		const cwd = gitRepo();
+		const h = harness(cwd);
+		await h.goal("Ship the app");
+		await h.goal(COMMAND);
+		await h.goal("verify");
+		expect(readdirSync(outputRecallDir(cwd)).sort()).toEqual([
+			".gitignore",
+			"acceptance-session-0-1-1.log",
+			"acceptance-session-0-1-2.log",
+		]);
+	});
+
+	it("flag on: the next check records whether the model read the recall path (counts only)", async () => {
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
+		const { cwd, h } = await failingRound();
+		const path = recallPath(h.messages[0] ?? "");
+		h.toolCall("read", { path: "app.txt" });
+		h.toolCall("read", { path, offset: 1, limit: 40 });
+		h.toolCall("read", { path: join(cwd, path) });
+		h.toolCall("bash", { command: `cat ${path}` });
+		await h.settle();
+		expect(h.entries.at(-1)?.data.priorRecall).toEqual({ readAfterFollowUp: true, readCalls: 2 });
+		await h.settle();
+		expect(h.entries.at(-1)?.data.priorRecall).toEqual({ readAfterFollowUp: false, readCalls: 0 });
 	});
 
 	it("flag on: a passing check leaves no artifact", async () => {
 		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
 		const cwd = gitRepo();
-		const session = join(tempRoot("omk-098-sess-"), "s.jsonl");
-		const h = harness(cwd, session);
+		const h = harness(cwd);
 		await h.goal("Ship the app");
 		await h.goal("verify grep -q v1 app.txt");
-		const dir = `${session.replace(/\.jsonl$/u, "")}.artifacts`;
-		expect(existsSync(dir) ? readdirSync(dir) : []).toEqual([]);
+		expect(readdirSync(outputRecallDir(cwd)).filter((name) => name.endsWith(".log"))).toEqual([]);
 		expect(h.entries.at(-1)?.data.outputArtifact).toBeUndefined();
 	});
 });
 
 describe("spec 098 artifact writer", () => {
-	const target = (sessionFile: string, goalId = "g", round = 0) => ({
-		sessionFile,
-		cwd: join(sessionFile, ".."),
-		goalId,
-		round,
-		revision: 1,
-	});
+	const target = (cwd: string, goalId = "g", round = 0) => ({ cwd, goalId, round, revision: 1 });
 
 	it("keeps the first 1 MiB and the last 3 MiB around one elision line past 4 MiB", () => {
-		const session = join(tempRoot("omk-098-w-"), "s.jsonl");
-		const writer = OutputArtifactWriter.open(target(session));
+		const cwd = tempRoot("omk-098-w-");
+		const writer = OutputArtifactWriter.open(target(cwd));
 		const chunk = 256 * 1024;
 		const total = OUTPUT_RECALL_MAX_BYTES + 3 * chunk + 5;
 		const all = Buffer.alloc(total);
@@ -198,61 +243,43 @@ describe("spec 098 artifact writer", () => {
 		for (let at = 0; at < total; at += chunk) writer?.write(all.subarray(at, at + chunk));
 		const artifact = writer?.finish();
 		const elided = total - OUTPUT_RECALL_MAX_BYTES;
-		expect(artifact).toMatchObject({ complete: false, elidedBytes: elided });
-		const content = readFileSync(join(target(session).cwd, artifact?.displayPath ?? ""));
+		expect(artifact).toMatchObject({
+			complete: false,
+			elidedBytes: elided,
+			elidedRatio: Math.round((elided / total) * 10_000) / 10_000,
+		});
+		const content = readFileSync(artifact?.absolutePath ?? "");
 		const marker = Buffer.from(`\n[omk: ${elided} bytes elided]\n`);
-		expect(content.subarray(0, OUTPUT_RECALL_HEAD_BYTES).equals(all.subarray(0, OUTPUT_RECALL_HEAD_BYTES))).toBe(
-			true,
-		);
-		expect(
-			content.subarray(OUTPUT_RECALL_HEAD_BYTES, OUTPUT_RECALL_HEAD_BYTES + marker.byteLength).equals(marker),
-		).toBe(true);
-		expect(
-			content.subarray(OUTPUT_RECALL_HEAD_BYTES + marker.byteLength).equals(all.subarray(-OUTPUT_RECALL_TAIL_BYTES)),
-		).toBe(true);
+		const head = OUTPUT_RECALL_HEAD_BYTES;
+		expect(content.subarray(0, head).equals(all.subarray(0, head))).toBe(true);
+		expect(content.subarray(head, head + marker.byteLength).equals(marker)).toBe(true);
+		expect(content.subarray(head + marker.byteLength).equals(all.subarray(-OUTPUT_RECALL_TAIL_BYTES))).toBe(true);
 		expect(artifact?.bytes).toBe(content.byteLength);
 	});
 
 	it("discard deletes the partial file", () => {
-		const session = join(tempRoot("omk-098-w-"), "s.jsonl");
-		const writer = OutputArtifactWriter.open(target(session));
+		const cwd = tempRoot("omk-098-w-");
+		const writer = OutputArtifactWriter.open(target(cwd));
 		writer?.write(Buffer.from("partial"));
 		writer?.discard();
-		expect(readdirSync(`${session.replace(/\.jsonl$/u, "")}.artifacts`)).toEqual([]);
+		expect(readdirSync(outputRecallDir(cwd))).toEqual([".gitignore"]);
 		expect(writer?.finish()).toBeUndefined();
 	});
 
-	it("keeps the newest 3 per goal and 20 per artifact dir", () => {
-		const session = join(tempRoot("omk-098-w-"), "s.jsonl");
-		const dir = `${session.replace(/\.jsonl$/u, "")}.artifacts`;
-		const stamp = (round: number, goalId: string) => {
-			const writer = OutputArtifactWriter.open(target(session, goalId, round));
-			writer?.write(Buffer.from(`${goalId} ${round}\n`));
-			writer?.finish();
-			const file = join(dir, `acceptance-${goalId}-${round}-1.log`);
-			if (existsSync(file)) utimesSync(file, round, round);
+	it("keeps the newest 3 per goal and 20 per dir; attempt numbers are never reused", () => {
+		const cwd = tempRoot("omk-098-w-");
+		const dir = outputRecallDir(cwd);
+		let stamp = 1;
+		const run = (goalId: string, round: number) => {
+			const artifact = OutputArtifactWriter.open(target(cwd, goalId, round))?.finish();
+			if (artifact && existsSync(artifact.absolutePath)) utimesSync(artifact.absolutePath, stamp, stamp);
+			stamp += 1;
 		};
-		for (let round = 1; round <= 5; round++) stamp(round, "a");
-		expect(readdirSync(dir).sort()).toEqual(["acceptance-a-3-1.log", "acceptance-a-4-1.log", "acceptance-a-5-1.log"]);
-		for (let goal = 0; goal < 10; goal++)
-			for (let round = 10; round < 13; round++) stamp(round + goal * 3, `g${goal}`);
-		expect(readdirSync(dir)).toHaveLength(OUTPUT_RECALL_PER_DIR);
-		expect(readdirSync(dir).some((name) => name.startsWith("acceptance-a-"))).toBe(false);
-	});
-
-	it("sweeps omk-accept temp files older than 24 h", () => {
-		const stale = join(tmpdir(), "omk-accept-00000000deadbeef.log");
-		writeFileSync(stale, "old", { mode: 0o600 });
-		const old = (Date.now() - 25 * 60 * 60 * 1000) / 1000;
-		utimesSync(stale, old, old);
-		const writer = OutputArtifactWriter.open({
-			sessionFile: undefined,
-			cwd: tmpdir(),
-			goalId: "t",
-			round: 0,
-			revision: 1,
-		});
-		writer?.discard();
-		expect(existsSync(stale)).toBe(false);
+		for (let attempt = 0; attempt < 5; attempt++) run("a", 0);
+		const logs = () => readdirSync(dir).filter((name) => name.endsWith(".log"));
+		expect(logs().sort()).toEqual(["acceptance-a-0-1-3.log", "acceptance-a-0-1-4.log", "acceptance-a-0-1-5.log"]);
+		for (let goal = 0; goal < 10; goal++) for (let round = 0; round < 3; round++) run(`g${goal}`, round);
+		expect(logs()).toHaveLength(OUTPUT_RECALL_PER_DIR);
+		expect(logs().some((name) => name.startsWith("acceptance-a-"))).toBe(false);
 	});
 });
