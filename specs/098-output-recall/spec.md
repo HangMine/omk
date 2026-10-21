@@ -22,16 +22,20 @@ on disk and points the model at it, so the excerpt becomes a hint.
 ## 2. Change (flag on)
 
 1. **Artifact.** The acceptance check's combined output (the same `onData` stream
-   that feeds the receipt) is also streamed to a file:
-   - session mode: `<session>.artifacts/acceptance-<goalId>-<round>-<rev>.log`
-     (same dir as spec 066 MCP spills, dir 0700);
-   - `--no-session`: `<tmpdir>/omk-accept-<16hex>.log`.
-   - file 0600, created with `flag: "wx"`.
+   that feeds the receipt) is also streamed to
+   `<cwd>/.omk/goals/recall/acceptance-<goalId>-<round>-<rev>-<attempt>.log`
+   in every mode (dir 0700 with a `*` `.gitignore`, file 0600, `flag: "wx"`).
+   - Why not `<session>.artifacts/`: the real `read` tool opens a session-dir path
+     only without a loadout policy; a workspace-scoped loadout (`readSet: ["."]`)
+     blocks it (`Read blocked by active loadout policy`). `.omk/goals` is inside
+     the workspace and already excluded from the goal workspace fingerprint, so a
+     recall file never makes a receipt stale.
+   - `<attempt>` grows per (goal, round, revision) and is never reused, so a
+     re-run (for example `/goal verify` then the settled-turn check) keeps both.
 2. **Bytes cap 4 MiB.** Over the cap the file keeps the first 1 MiB and the last
    3 MiB with one `[omk: N bytes elided]` line in between.
-3. **Count cap.** Per goal the latest 3 artifacts, per artifact dir 20; oldest
-   first. Temp mode: files from this process are removed at exit, and
-   `omk-accept-*` older than 24 h are swept when a new one is written.
+3. **Count cap.** Per goal the latest 3 artifacts, per recall dir 20; oldest
+   first. Files are not tied to the session lifetime; the caps bound them.
 4. **Abort / runner error.** The partial file is deleted and no reference is given.
 5. **Follow-up** (replaces the `Run it to see the output` sentence):
    ```
@@ -42,12 +46,25 @@ on disk and points the model at it, so the excerpt becomes a hint.
    Read ranges with read(path, offset, limit) instead of re-running the check to see output.
    Fix the cause, then end your turn; the check re-runs automatically.
    ```
-   The path is relative to cwd in session mode (readable with `read`), absolute in temp mode.
+   The path is relative to cwd and inside the workspace, so `read` can open it.
    If the artifact could not be written, the follow-up falls back to the `main` text.
 6. **Trace.** The `goal_verification` entry gets `outputArtifact: { sha256, bytes,
-   lines, complete, elidedBytes }` — counts and a digest only, 0 bytes of raw text.
+   lines, complete, elidedBytes, elidedRatio }`, and the next check's entry gets
+   `priorRecall: { readAfterFollowUp, readCalls }` (the model's `read` calls on the
+   recall path named in the last follow-up, seen via `tool_call`; the handler is
+   registered only with the flag on). Counts, booleans and a digest only, 0 bytes of raw text.
 7. **Separation.** The artifact is diagnostic only. Completion and evidence still
    come from the receipt alone. No redaction is applied and none is claimed.
+
+## 2a. Security warning
+
+Since 1.5.5 no redaction runs on bash or log output. A recall file is the check's
+output **verbatim**, so it can contain secrets (tokens, keys, connection strings)
+that the check printed. Mitigations: the file stays inside the workspace's
+`.omk/goals/recall/` with 0700/0600 modes and a `*` `.gitignore`, it is never
+copied into the trace, and the flag is off by default. It does not stop the model
+from reading the secret (it could already see it by re-running the check), and it
+does not protect against tools that ignore `.gitignore` (archives, backups, sync).
 
 ## 3. Invariants
 
@@ -59,8 +76,10 @@ on disk and points the model at it, so the excerpt becomes a hint.
 
 ## 4. Tests
 
-- Artifact unit: complete file, 4 MiB cap with head/tail + marker, 0600/0700,
-  `wx`, abort deletes, per-goal and per-dir count caps, temp sweep.
+- Artifact unit: complete file, 4 MiB cap with head/tail + marker and ratio, 0600/0700,
+  `wx`, abort deletes, per-goal and per-dir count caps, attempt numbers never reused.
+- Real `read` tool opens the recall path with and without a workspace loadout policy.
+- Re-run in the same round/revision keeps both files; `priorRecall` counts only `read` calls on the recall path.
 - Controller: flag off follow-up byte-identical to `main`; flag on follow-up has
   the path, counts, hint, no `Run it to see the output`; the file content equals
   the command output; trace has sha256/counts and no raw text.
