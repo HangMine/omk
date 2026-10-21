@@ -75,7 +75,7 @@ describe("executeVerifiedBash", () => {
 		};
 	}
 
-	it("binds the exact shell script, redacted combined output, artifacts, and strict gate", async () => {
+	it("binds the exact shell script, raw combined output, artifacts, and strict gate", async () => {
 		// Given: a trusted runner that emits a secret-shaped value and creates the selected artifact.
 		const rawOutput = Buffer.from("token=super-secret-value\nverification passed\n");
 		let observedScript = "";
@@ -93,15 +93,14 @@ describe("executeVerifiedBash", () => {
 		// When: the default adapter executes the runner.
 		const result = await executeVerifiedBash(request(evidenceExecutor, operations));
 
-		// Then: the receipt binds exactly what reached the runner and only redacted combined bytes.
+		// Then: the receipt binds exactly what reached the runner and the raw combined bytes (no redaction).
 		expect(observedScript).toBe(SCRIPT);
 		expect(result.receipt.core.command).toEqual({ kind: "shell", shell: SHELL, script: SCRIPT });
 		expect(VERIFIED_BASH_REDACTION_POLICY_ID).toBe(
-			"omk-bash-combined-v1+omk-sensitive-text-v1+capture-tail-128k+tail-64k",
+			"omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k",
 		);
 		expect(result.receipt.core.output.redactionPolicyId).toBe(VERIFIED_BASH_REDACTION_POLICY_ID);
-		const redacted = Buffer.from(rawOutput.toString("utf8"));
-		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(redacted), byteCount: redacted.byteLength });
+		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(rawOutput), byteCount: rawOutput.byteLength });
 		expect(result.receipt.core.output.stderr.byteCount).toBe(0);
 		expect(result.receipt.core.workspaceAfter.artifacts[0].state).toBe("file");
 
@@ -299,6 +298,33 @@ describe("executeVerifiedBash", () => {
 		const redacted = Buffer.from(rawOutput.toString("utf8"));
 		const bounded = redacted.subarray(-64 * 1024);
 		expect(result.receipt.core.output.stdout).toEqual({ sha256: sha256(bounded), byteCount: bounded.byteLength });
+		expect(result.receipt.core.output.stderr.byteCount).toBe(0);
+	});
+	it("policy id matches the processing it names: no redaction, 128k capture, 64k tail", async () => {
+		// Given: output larger than the capture bound with a secret-shaped line in the receipt tail.
+		const tailMarker = "token=super-secret-value\n";
+		const big = Buffer.concat([Buffer.alloc(200 * 1024, "a"), Buffer.from(tailMarker)]);
+		const operations: BashOperations = {
+			exec: async (_script, cwd, options) => {
+				options.onData(big.subarray(0, 100 * 1024));
+				options.onData(big.subarray(100 * 1024));
+				mkdirSync(join(cwd, "dist"));
+				writeFileSync(join(cwd, "dist", "result.txt"), "verified\n");
+				return { exitCode: 0 };
+			},
+		};
+		const result = await executeVerifiedBash(request(createExecutor("verified-bash-policy"), operations));
+
+		// Then: every id segment is backed by observed behaviour.
+		const segments = VERIFIED_BASH_REDACTION_POLICY_ID.split("+");
+		expect(segments).toEqual(["omk-bash-combined-v2", "raw-unredacted", "utf8", "capture-tail-128k", "tail-64k"]);
+		expect(segments.some((s) => s.includes("sensitive") || s.includes("redact-"))).toBe(false);
+		const expectedTail = big.subarray(-64 * 1024);
+		expect(result.receipt.core.output.stdout).toEqual({
+			sha256: sha256(expectedTail),
+			byteCount: 64 * 1024,
+		});
+		expect(expectedTail.toString("utf8").endsWith(tailMarker)).toBe(true);
 		expect(result.receipt.core.output.stderr.byteCount).toBe(0);
 	});
 });
