@@ -166,6 +166,60 @@ describe("request trace metadata (spec 101)", () => {
 		]);
 	});
 
+	it("classifies a same-prompt retry identically on both arms (spec 102)", async () => {
+		const runArm = async (arm: "on" | "off") => {
+			const tracePath = path.join(dir, `trace-102-retry-${arm}.jsonl`);
+			process.env.OMK_EVAL_TRACE = tracePath;
+			const faux = registerFauxProvider();
+			const budget = new RunBudget({ maxRequests: 10 }, () => {});
+			const base = `${SECRET_PROMPT} tail base`;
+			const changed = `${SECRET_PROMPT} tail changed`;
+			const cause: PendingPrefixBoundaryCause =
+				arm === "on" ? { cause: "suffix_changed" } : { cause: "flag_off", shadowCause: "suffix_changed" };
+			// first request, tail-changed request with the session cause, then a retry of the same prompt
+			const sends: Array<[string, PendingPrefixBoundaryCause | undefined]> = [
+				[base, undefined],
+				[changed, cause],
+				[changed, undefined],
+			];
+			const streams = sends.map(() => createAssistantMessageEventStream());
+			let call = 0;
+			const source: StreamFn = () => streams[call++];
+			try {
+				const wrapped = wrapBudgetStream(source, budget);
+				for (const [i, [systemPrompt, pending]] of sends.entries()) {
+					if (pending) recordPrefixBoundaryCause(systemPrompt, pending);
+					await wrapped(faux.getModel(), { ...context(), systemPrompt }, {});
+					streams[i].end(fauxAssistantMessage("done"));
+					await flush();
+				}
+			} finally {
+				budget.close();
+				faux.unregister();
+			}
+			return fs
+				.readFileSync(tracePath, "utf8")
+				.trim()
+				.split("\n")
+				.map((line) => JSON.parse(JSON.parse(line).body))
+				.filter((body) => body.kind === "logical_dispatch");
+		};
+		const on = await runArm("on");
+		const off = await runArm("off");
+		// The tail-changed request: on by its actual reason, off by its shadow.
+		expect(on[1].boundaryChangeReason).toBe("suffix_changed");
+		expect(off[1]).toMatchObject({ boundaryChangeReason: "flag_off", shadowBoundaryChangeReason: "suffix_changed" });
+		// The retry falls back to the fingerprint reason on both arms, with no stale shadow.
+		expect(on[2].boundaryChangeReason).toBe("unchanged");
+		expect(on[2].shadowBoundaryChangeReason).toBeUndefined();
+		expect(off[2].boundaryChangeReason).toBe("unchanged");
+		expect(off[2].shadowBoundaryChangeReason).toBeUndefined();
+		// Symmetry: the measured class (actual on, shadow ?? actual off) matches for every request.
+		const measured = (body: Record<string, unknown>) => body.shadowBoundaryChangeReason ?? body.boundaryChangeReason;
+		expect(off.map(measured)).toEqual(on.map(measured));
+		expect(on.map(measured)).toEqual(["first", "suffix_changed", "unchanged"]);
+	});
+
 	it("flags missing usage", () => {
 		const trace = new RequestTrace(path.join(dir, "t2.jsonl"));
 		const id = trace.begin("p", "m");
