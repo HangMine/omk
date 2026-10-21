@@ -20,7 +20,9 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm version" src="https://img.shields.io/npm/v/open-multi-agent-kit?style=flat-square&label=npm" /></a>
   <a href="https://www.npmjs.com/package/open-multi-agent-kit"><img alt="npm downloads per month" src="https://img.shields.io/npm/dm/open-multi-agent-kit?style=flat-square" /></a><br />
-  <a href="https://github.com/dmae97/omk/releases/latest"><img alt="latest GitHub release" src="https://img.shields.io/github/v/release/dmae97/omk?style=flat-square&label=release" /></a><br />
+  <a href="https://github.com/dmae97/omk/releases/latest"><img alt="latest GitHub release" src="https://img.shields.io/github/v/release/dmae97/omk?style=flat-square&label=release" /></a>
+  <a href="https://github.com/dmae97/omk/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/dmae97/omk/ci.yml?branch=main&style=flat-square&label=CI" /></a>
+  <a href="https://github.com/dmae97/omk/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/dmae97/omk?style=flat-square" /></a><br />
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/open-multi-agent-kit?style=flat-square" /></a>
   <img alt="supported Node.js version" src="https://img.shields.io/node/v/open-multi-agent-kit?style=flat-square" />
 </p>
@@ -60,6 +62,27 @@ OMK is a standalone CLI, not a plugin for Claude Code or OpenCode. It supports
 Start with one agent that reads files, edits code, and runs commands. Add
 subagents or explicit verification workflows when you need them; neither is
 required for your first task.
+
+### At a glance
+
+- **Done means a passing check.** `/goal verify <command>` completes a goal only when your check passes on the current workspace.
+- **One session, many models.** Switch with `/model` mid-conversation; resume later with `/resume` or `omk -c`.
+- **Sandboxed by default.** Built-in bash runs under `sandbox-exec` or `bwrap`, without network, and fails closed.
+- **Opt-in power.** Subagents, MCP servers, skills and extensions load only when you configure them.
+- **Honest evidence.** Claims below link to the tests that back them, and the limits are stated next to them.
+
+```mermaid
+flowchart LR
+  U[You: prompt or /goal] --> L[Agent loop]
+  L --> M[Model via /model<br/>subscription, API key or local]
+  M --> L
+  L --> T[Tools: read, edit, sandboxed bash]
+  T --> L
+  L -->|settled turn| V{/goal verify<br/>check passes?}
+  V -- no --> L
+  V -- yes --> D[Goal complete<br/>fresh receipt]
+  X[Optional: subagents, MCP, skills, extensions] -.-> L
+```
 
 ## Quick start
 
@@ -614,6 +637,24 @@ Release notes live in [RELEASE_NOTES_v1.5.3.md](.github/RELEASE_NOTES_v1.5.3.md)
 <!-- releases:end -->
 
 </details>
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+first, run `npm run check` and `npm test` before opening a pull request, and
+report security issues as described in [SECURITY.md](SECURITY.md).
+
+## Star OMK
+
+If a check-backed “done” is useful to you, a
+[star on GitHub](https://github.com/dmae97/omk/stargazers) helps other
+developers find OMK.
+
+<p align="center">
+  <a href="https://star-history.com/#dmae97/omk&Date">
+    <img alt="Star history chart for dmae97/omk" src="https://api.star-history.com/svg?repos=dmae97/omk&type=Date" width="600" />
+  </a>
+</p>
 
 ## Acknowledgments
 
