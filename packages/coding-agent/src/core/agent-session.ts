@@ -138,7 +138,7 @@ import { type McpProjectTrustSummary, projectTrustSummary } from "./mcp/trust-su
 import { buildRuntimeProvenance } from "./runtime-provenance.ts";
 import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
 import { resolveWorkspaceWriteRoots } from "./tools/workspace-write-guard.ts";
-import { type ToolCallMetric, TurnMetricsSink } from "./turn-metrics.ts";
+import { type ToolCallMetric, TurnMetricsSink, turnUsageMetricFromUsage } from "./turn-metrics.ts";
 
 /** Values that disable a session-level feature through its environment variable. */
 const DISABLED_ENV_VALUES = new Set(["0", "false", "off", "disable", "disabled"]);
@@ -1625,15 +1625,7 @@ export class AgentSession {
 				endedAtEpochMs: Date.now(),
 				stopReason: assistant?.stopReason,
 				runtimeProvenance,
-				usage: usage
-					? {
-							input: usage.input,
-							output: usage.output,
-							cacheRead: usage.cacheRead,
-							cacheWrite: usage.cacheWrite,
-							costUsd: usage.cost.total,
-						}
-					: undefined,
+				usage: usage ? turnUsageMetricFromUsage(usage) : undefined,
 				toolCalls: state.toolCalls,
 			});
 		} catch {
