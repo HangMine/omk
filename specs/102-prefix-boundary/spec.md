@@ -46,8 +46,10 @@ systemPrompt.slice(0, boundary) === plan.prompt.slice(0, boundary)`
 - "Verified" boundary = the existing validity rule (`:25-26`: safe integer,
   `> 0`, `<= plan.prompt.length`, non-empty plan). Comparison is UTF-16 code
   units, same unit as the serializers' `slice`.
-- Additionally reject a boundary that splits a surrogate pair in either string
-  (bypass), so `sanitizeSurrogates` cannot alter the prefix bytes.
+- Additionally bypass when a surrogate pair sits at the boundary, i.e. the
+  boundary splits the pair or the code unit right before it is a low surrogate
+  (emoji abutting the boundary), so `sanitizeSurrogates` can never alter the
+  prefix bytes (test §4.4).
 - Any difference before the boundary → `{ undefined, bypass: true }` (as today).
 - Flag off → current function body, unchanged.
 
@@ -75,7 +77,16 @@ OpenAI Completions (where `prompt_cache_key` is emitted).
 3. Permission/instruction change: the concatenated system text in the payload
    equals `result.systemPrompt` byte-for-byte in both the prefix-change and
    tail-change cases (no stale text ever sent).
-4. Flag-off equivalence: for a fixed corpus (equal, appended, tail-changed,
+4. Surrogate pair at the boundary: an emoji (e.g. U+1F600, a UTF-16
+   surrogate pair) placed immediately before the boundary, in two variants:
+   (a) boundary splits the pair (between high and low surrogate) and
+   (b) boundary abuts it (directly after the low surrogate, prefix otherwise
+   identical, only the tail changes). Both must bypass: Anthropic single block
+   with no `cache_control`, OpenAI no `prompt_cache_key`; and the request body's
+   system text equals the full `result.systemPrompt` unchanged (emoji intact,
+   no `sanitizeSurrogates` replacement). Checked through the real serializer
+   payloads of all 5 adapters.
+5. Flag-off equivalence: for a fixed corpus (equal, appended, tail-changed,
    prefix-changed, replaced, empty, invalid boundary), payloads with the flag
    off deep-equal payloads produced by the `main` implementation.
 
@@ -84,9 +95,16 @@ OpenAI Completions (where `prompt_cache_key` is emitted).
 - A cache key or `cache_control` marker is not a cache hit. Hits are only
   measured from provider-reported usage (cache read tokens) via the spec 101
   trace.
+- Primary metric: difference (flag on − off) in cache-read ratio, computed
+  only over requests whose 101-trace boundary-change cause is
+  `suffix_changed`.
+- Minimum sample, fixed before any measurement: at least 30 `suffix_changed`
+  requests per arm. Below that in either arm the result is `inconclusive`
+  and the flag stays off; the bar is never relaxed.
 - No default-on decision until 101 lands. Default-on bar (A/B, flag on vs off,
-  same tasks/models): 95% CI upper bound of Δ(cost per verified completion)
-  `< 0`, and success-rate drop `<= 5pp`.
+  same tasks/models), all three required: 95% CI upper bound of
+  Δ(cost per verified completion) `< 0`, AND success-rate drop `<= 5pp`,
+  AND 0 false completions.
 
 ## 6. Success criterion (measurable)
 
