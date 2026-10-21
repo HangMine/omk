@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { DurableGoalError, type DurableGoalSnapshot, nextDurableGoalTimestamp } from "../../durable-goal.ts";
 import type { DurableGoalStore } from "../../durable-goal-store.ts";
 import type { GoalAcceptance, GoalCheckOutcome } from "../../goal-acceptance.ts";
@@ -26,6 +27,8 @@ export class GoalAcceptanceFlow {
 	private readonly continueGoal: ContinueGoal;
 	private readonly testHooks: GoalAcceptanceTestHooks | undefined;
 	private readonly taskFacts: GoalTaskFacts;
+	/** Spec 098: the recall file named in the last follow-up, and the model's `read` calls on it since. */
+	private recall: { readonly absolutePath: string; readCalls: number } | undefined;
 
 	constructor(
 		omk: Pick<ExtensionAPI, "appendEntry"> & Partial<Pick<ExtensionAPI, "events">>,
@@ -170,6 +173,7 @@ export class GoalAcceptanceFlow {
 			{ kind: "advance-round", ref: outcome.goal.ref },
 			nextDurableGoalTimestamp(outcome.goal),
 		);
+		this.recall = outcome.artifact && { absolutePath: outcome.artifact.absolutePath, readCalls: 0 };
 		const head = `Acceptance check \`${displayCommand(outcome.command)}\` ${failureText(result)} (${receiptLabel(result)})`;
 		this.continueGoal(
 			advanced,
@@ -208,6 +212,8 @@ export class GoalAcceptanceFlow {
 			throw error;
 		}
 		const { result } = outcome;
+		const recall = this.recall && { readAfterFollowUp: this.recall.readCalls > 0, readCalls: this.recall.readCalls };
+		this.recall = undefined;
 		let artifact: OutputArtifact | undefined;
 		if (writer !== undefined) {
 			if (result.status === "aborted" || result.passed) writer.discard();
@@ -223,6 +229,7 @@ export class GoalAcceptanceFlow {
 			passed: result.passed,
 			trigger,
 			...(artifact !== undefined ? { outputArtifact: summarizeArtifact(artifact) } : {}),
+			...(recall !== undefined ? { priorRecall: recall } : {}),
 		});
 		// Spec 096/100: hand the host receipt to the task-result projection (flag on only), with the
 		// workspace state at publish, the runner's counts and the check identity.
@@ -241,9 +248,14 @@ export class GoalAcceptanceFlow {
 		return artifact === undefined ? outcome : { ...outcome, artifact };
 	}
 
+	/** Spec 098 (flag on): count `read` calls on the recall path named in the last follow-up. Counts only. */
+	observeRead(path: unknown, cwd: string): void {
+		if (this.recall === undefined || typeof path !== "string") return;
+		if (resolve(cwd, path.replace(/^@/u, "")) === this.recall.absolutePath) this.recall.readCalls += 1;
+	}
+
 	private openArtifact(goal: DurableGoalSnapshot, ctx: ExtensionContext): OutputArtifactWriter | undefined {
 		return OutputArtifactWriter.open({
-			sessionFile: ctx.sessionManager?.getSessionFile?.(),
 			cwd: ctx.cwd,
 			goalId: goal.ref.id,
 			round: goal.completedRounds,
