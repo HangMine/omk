@@ -46,10 +46,11 @@ systemPrompt.slice(0, boundary) === plan.prompt.slice(0, boundary)`
 - "Verified" boundary = the existing validity rule (`:25-26`: safe integer,
   `> 0`, `<= plan.prompt.length`, non-empty plan). Comparison is UTF-16 code
   units, same unit as the serializers' `slice`.
-- Additionally bypass when a surrogate pair sits at the boundary, i.e. the
-  boundary splits the pair or the code unit right before it is a low surrogate
-  (emoji abutting the boundary), so `sanitizeSurrogates` can never alter the
-  prefix bytes (test §4.4).
+- Additionally bypass only on a real split: when the code unit before the
+  boundary is a high surrogate and the one at the boundary is a low surrogate
+  (in either string), so `sanitizeSurrogates` can never alter the prefix bytes.
+  A complete pair ending exactly at the boundary is not a split and keeps the
+  boundary (test §4.4).
 - Any difference before the boundary → `{ undefined, bypass: true }` (as today).
 - Flag off → current function body, unchanged.
 
@@ -81,10 +82,12 @@ OpenAI Completions (where `prompt_cache_key` is emitted).
    surrogate pair) placed immediately before the boundary, in two variants:
    (a) boundary splits the pair (between high and low surrogate) and
    (b) boundary abuts it (directly after the low surrogate, prefix otherwise
-   identical, only the tail changes). Both must bypass: Anthropic single block
-   with no `cache_control`, OpenAI no `prompt_cache_key`; and the request body's
-   system text equals the full `result.systemPrompt` unchanged (emoji intact,
-   no `sanitizeSurrogates` replacement). Checked through the real serializer
+   identical, only the tail changes). (a) must bypass: Anthropic single block
+   with no `cache_control`, OpenAI no `prompt_cache_key`. (b) keeps the
+   boundary: prefix identical with the emoji intact in the prefix block,
+   `cache_control` / `prompt_cache_key` present as normal. In both, the request
+   body's system text equals the full `result.systemPrompt` unchanged (emoji
+   intact, no `sanitizeSurrogates` replacement). Checked through the real serializer
    payloads of all 5 adapters.
 5. Flag-off equivalence: for a fixed corpus (equal, appended, tail-changed,
    prefix-changed, replaced, empty, invalid boundary), payloads with the flag
