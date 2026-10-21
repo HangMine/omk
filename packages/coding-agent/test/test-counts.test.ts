@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { factFromGoalAcceptance } from "../src/core/task-result.ts";
 import { classifyCheckKind, parseTestCounts } from "../src/core/test-counts.ts";
 
 /**
@@ -16,6 +17,9 @@ describe("parseTestCounts on real runner output", () => {
 		["node-test-spec-pass-skip.txt", { executed: 2, matched: 3, skipped: 1 }],
 		["node-test-tap-fail.txt", { executed: 2, matched: 2, skipped: 0 }],
 		["node-test-tap-zero.txt", { executed: 0, matched: 0, skipped: 0 }],
+		// `node --test --test-name-pattern=nomatch calc.test.mjs`: the file itself is counted as 1 passing test.
+		["node-test-tap-file-only.txt", { executed: 0, matched: 0, skipped: 0 }],
+		["node-test-spec-file-only.txt", { executed: 0, matched: 0, skipped: 0 }],
 		["vitest-pass-skip.txt", { executed: 2, matched: 3, skipped: 1 }],
 		["vitest-fail.txt", { executed: 2, matched: 2, skipped: 0 }],
 		["vitest-zero.txt", { executed: 0, matched: 3, skipped: 3 }],
@@ -60,5 +64,23 @@ describe("classifyCheckKind", () => {
 		["node build.mjs", "shell"],
 	])("%s -> %s", (command, kind) => {
 		expect(classifyCheckKind(command)).toBe(kind);
+	});
+});
+
+describe("node:test file-only pass (spec 100 Tech Lead addition)", () => {
+	it("the file counted as 1 passing test is not an executed test: zero_tests, never passed", () => {
+		const counts = parseTestCounts(fixture("node-test-tap-file-only.txt"));
+		expect(counts?.executed).toBe(0);
+		const fact = factFromGoalAcceptance(
+			{ receiptId: "r", status: "passed", passed: true, workspace: { sha256: "w", completeness: "complete" } },
+			{
+				checkKind: "test_runner",
+				currentWorkspaceSha256: "w",
+				...(counts
+					? { executedTests: counts.executed, matchedTests: counts.matched, skippedTests: counts.skipped }
+					: {}),
+			},
+		);
+		expect(fact).toMatchObject({ status: "insufficient", reason: "zero_tests" });
 	});
 });

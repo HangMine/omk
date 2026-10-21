@@ -33,6 +33,9 @@ function lastMatch(text: string, pattern: RegExp): RegExpMatchArray | undefined 
 	return found;
 }
 
+/** A top-level pass whose name is a script file: node:test's stand-in for a file that ran no test (TAP, spec). */
+const FILE_ONLY_PASS = /^(?:ok \d+ - |\u2714 )\S+\.[cm]?[jt]sx?(?: \([\d.]+m?s\))?$/gm;
+
 /** node:test: `# tests N` (TAP) or `ℹ tests N` (spec), with pass/fail/cancelled/skipped/todo lines. */
 function nodeTestCounts(text: string): TestCounts | undefined {
 	const field = (name: string): number | undefined => {
@@ -49,7 +52,10 @@ function nodeTestCounts(text: string): TestCounts | undefined {
 	const skippedAll = (skipped as number) + (todo as number);
 	const executed = (pass as number) + (fail as number) + (cancelled as number);
 	if (executed + skippedAll !== tests) return undefined;
-	return { executed, matched: tests as number, skipped: skippedAll };
+	// A file whose own tests were all filtered out is reported as one passing test named after the file.
+	const files = [...text.matchAll(FILE_ONLY_PASS)].length;
+	if (files > (pass as number)) return undefined;
+	return { executed: executed - files, matched: (tests as number) - files, skipped: skippedAll };
 }
 
 function partsOf(list: string): Map<string, number> | undefined {
