@@ -21,25 +21,27 @@ import {
 	USAGE_CHECK_TIMEOUT_MS,
 } from "../../core/next-suggestion.ts";
 import {
+	dismissReasonForKey,
+	type SuggestionAcceptTracker,
+	suggestionAcceptTracker,
+	traceQueuedDispatch,
+	userMessageText,
+} from "../../core/next-suggestion-accept-trace.ts";
+import {
 	isSuggestionCapsEnabled,
 	type SuggestionBudget,
 	suggestionBudgetFromEnv,
 } from "../../core/next-suggestion-budget.ts";
 import * as settlement from "../../core/next-suggestion-settlement.ts";
 import { loadSubscriptionUsage } from "../../core/provider-usage.ts";
+import { type ActiveEditor, followActiveEditor, type SuggestionEditorPort } from "./suggestion-active-editor.ts";
 
 export interface SuggestionSessionPort {
 	readonly agent: { streamFn: StreamFn; readonly state: { readonly messages: readonly unknown[] } };
 	readonly model: { readonly provider: string; readonly id: string } | undefined;
-	subscribe(listener: (event: { readonly type: string; readonly outcome?: string }) => unknown): () => void;
-}
-
-export interface SuggestionEditorPort {
-	getText(): string;
-	setText(text: string): void;
-	setPlaceholder(text: string): void;
-	isShowingAutocomplete(): boolean;
-	onBeforeInput?: (data: string) => boolean;
+	subscribe(
+		listener: (event: { readonly type: string; readonly outcome?: string; readonly message?: unknown }) => unknown,
+	): () => void;
 }
 
 export interface NextSuggestionOptions {
@@ -53,6 +55,8 @@ export interface NextSuggestionOptions {
 	readonly onPlan?: (plan: SuggestionPlan) => void;
 	/** Spec 103: settle every suggestion request's usage, including discarded and cancelled ones. */
 	readonly settle?: (s: settlement.AnySuggestionSettlement) => void;
+	/** Accept-trace sink (`OMK_NEXT_SUGGESTIONS_ACCEPT_TRACE`); absent ⇒ nothing recorded, behavior unchanged. */
+	readonly acceptTrace?: SuggestionAcceptTracker;
 	/** Spec 103 caps budget (caps flag only); defaults to the env budget. */
 	readonly budget?: SuggestionBudget;
 	readonly timeoutSignal?: (ms: number) => AbortSignal;
@@ -77,6 +81,7 @@ export class NextSuggestionController {
 	private readonly wrapped: StreamFn;
 	private readonly unsubscribe: () => void;
 	private turnsInRun = 0;
+	private restorePrompt: (() => void) | undefined;
 
 	constructor(
 		session: SuggestionSessionPort,
@@ -94,16 +99,25 @@ export class NextSuggestionController {
 		session.agent.streamFn = this.wrapped;
 		this.unsubscribe = session.subscribe((event) => {
 			if (event.type === "agent_start") {
+				this.options.acceptTrace?.dismissed("new_turn", Date.now());
 				this.cancel();
 				this.turnsInRun = 0;
 			} else if (event.type === "turn_end") this.turnsInRun++;
 			else if (event.type === "prompt_settled") void this.onSettled(event.outcome);
+			else if (event.type === "message_start" && this.options.acceptTrace && !this.restorePrompt) {
+				// Only for ports without prompt(); a real session reports its dispatch branch instead.
+				const text = userMessageText(event.message);
+				if (text !== undefined) this.options.acceptTrace.sent(text, Date.now(), "prompt");
+			}
 		});
 		editor.onBeforeInput = this.keyHandler;
+		if (options.acceptTrace) this.restorePrompt = traceQueuedDispatch(session, options.acceptTrace);
 	}
 
 	/** Detach from the session and editor; restores the stream function if still ours. */
 	dispose(): void {
+		this.options.acceptTrace?.flush(Date.now());
+		this.restorePrompt?.();
 		this.cancel();
 		this.unsubscribe();
 		if (this.session.agent.streamFn === this.wrapped) this.session.agent.streamFn = this.inner;
@@ -129,16 +143,20 @@ export class NextSuggestionController {
 	private handleKey(data: string): boolean {
 		const suggestion = this.shown;
 		const isTab = this.options.isTab ?? ((key: string) => getKeybindings().matches(key, "tui.input.tab"));
+		const trace = this.options.acceptTrace;
+		trace?.observeEditor(this.editor.getText(), Date.now());
 		if (
 			suggestion !== undefined &&
 			isTab(data) &&
 			this.editor.getText().length === 0 &&
 			!this.editor.isShowingAutocomplete()
 		) {
+			trace?.accepted(Date.now());
 			this.cancel();
 			this.editor.setText(suggestion);
 			return true;
 		}
+		if (suggestion !== undefined) trace?.dismissed(dismissReasonForKey(data), Date.now());
 		this.cancel();
 		return false;
 	}
@@ -162,7 +180,9 @@ export class NextSuggestionController {
 		this.cancel();
 		const generation = this.generation;
 		const now = this.options.now ?? Date.now;
+		const settledAtEpochMs = Date.now();
 		const usage = await this.checkUsage();
+		const quotaCheckedAtEpochMs = Date.now();
 		if (generation !== this.generation) return;
 		const capsOn = isSuggestionCapsEnabled(this.options.env);
 		const plan = planSuggestion({
@@ -201,9 +221,13 @@ export class NextSuggestionController {
 		if (!text || this.editor.getText().length > 0) return;
 		this.shown = text;
 		this.editor.setPlaceholder(text);
+		const timing = { settledAtEpochMs, quotaCheckedAtEpochMs, shownAtEpochMs: Date.now() };
+		this.options.acceptTrace?.shown({ parentTurnIndex, provider, model: id, ...timing }, text);
 		this.options.requestRender?.();
 	}
 }
+
+export { type ActiveEditor, followActiveEditor, type SuggestionEditorPort };
 
 let active: NextSuggestionController | undefined;
 let activeSession: SuggestionSessionPort | undefined;
@@ -240,52 +264,6 @@ export async function activeQuotaUsage(session: AgentSession): Promise<QuotaUsag
 	return used.length > 0 ? Math.max(...used) : "unavailable";
 }
 
-/** An editor interactive mode can swap at runtime; extensions may install their own. */
-export type ActiveEditor = Pick<SuggestionEditorPort, "getText" | "setText"> &
-	Partial<Pick<SuggestionEditorPort, "setPlaceholder" | "isShowingAutocomplete" | "onBeforeInput">>;
-
-/**
- * Port over whichever editor is active when it is used. An extension that swaps in its own
- * editor (pi-powerline-footer does at session start) otherwise leaves the suggestion on the
- * hidden default editor, and Tab never reaches the key hook. The hook is attached lazily to
- * the active editor and never replaces a hook another owner already installed.
- */
-export function followActiveEditor(getEditor: () => ActiveEditor, basePlaceholder: string): SuggestionEditorPort {
-	let hook: ((data: string) => boolean) | undefined;
-	let shownOn: ActiveEditor | undefined;
-	const attached = new Set<ActiveEditor>();
-	const current = (): ActiveEditor => {
-		const editor = getEditor();
-		if (hook && editor.onBeforeInput === undefined) {
-			editor.onBeforeInput = hook;
-			attached.add(editor);
-		}
-		return editor;
-	};
-	return {
-		getText: () => current().getText(),
-		setText: (text) => current().setText(text),
-		isShowingAutocomplete: () => current().isShowingAutocomplete?.() ?? false,
-		setPlaceholder: (text) => {
-			const editor = current();
-			if (shownOn && shownOn !== editor) shownOn.setPlaceholder?.(basePlaceholder);
-			editor.setPlaceholder?.(text);
-			shownOn = text === basePlaceholder ? undefined : editor;
-		},
-		get onBeforeInput() {
-			return hook;
-		},
-		set onBeforeInput(next) {
-			for (const editor of attached) {
-				if (editor.onBeforeInput === hook) editor.onBeforeInput = next;
-			}
-			if (!next) attached.clear();
-			hook = next;
-			if (next) current();
-		},
-	};
-}
-
 /** Interactive wiring: one call site in interactive-mode. */
 export function installInteractiveNextSuggestions(
 	session: AgentSession,
@@ -298,5 +276,6 @@ export function installInteractiveNextSuggestions(
 		requestRender,
 		quotaUsage: () => activeQuotaUsage(session),
 		settle: settlement.suggestionMetricsSettler(() => session.sessionId, session.sessionManager.getCwd()),
+		acceptTrace: suggestionAcceptTracker(() => session.sessionId, session.sessionManager.getCwd()),
 	});
 }
