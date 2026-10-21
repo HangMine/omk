@@ -13,7 +13,10 @@ import {
 	loadProjectTraceSalt,
 } from "../src/core/request-trace-metadata.ts";
 import { RunBudget } from "../src/core/run-budget.ts";
-import { recordPrefixBoundaryCause } from "../src/core/system-prompt-cache-boundary.ts";
+import {
+	type PendingPrefixBoundaryCause,
+	recordPrefixBoundaryCause,
+} from "../src/core/system-prompt-cache-boundary.ts";
 
 const SECRET_PROMPT = "SYSTEM-PROMPT-CANARY-7f3a do not leak";
 const TOOL_CANARY = "TOOL-DESCRIPTION-CANARY-91bd";
@@ -112,20 +115,27 @@ describe("request trace metadata (spec 101)", () => {
 		});
 	});
 
-	it("records the spec 102 cause on boundaryChangeReason through the stream wrapper", async () => {
+	it("records the spec 102 cause through the stream wrapper, once per recorded prompt", async () => {
 		const tracePath = path.join(dir, "trace-102.jsonl");
 		process.env.OMK_EVAL_TRACE = tracePath;
 		const faux = registerFauxProvider();
 		const budget = new RunBudget({ maxRequests: 10 }, () => {});
-		const causes = ["suffix_changed", "flag_off", "bypass_surrogate"] as const;
-		const streams = [0, 1, 2, 3].map(() => createAssistantMessageEventStream());
+		const prompt = (tail: string) => `${SECRET_PROMPT} tail ${tail}`;
+		// [system prompt, cause recorded by the session before this request]
+		const sends: Array<[string, PendingPrefixBoundaryCause | undefined]> = [
+			[prompt("0"), { cause: "suffix_changed" }], // first request: stays "first"
+			[prompt("1"), { cause: "suffix_changed" }],
+			[prompt("1"), undefined], // same prompt again: no stale cause
+			[prompt("2"), { cause: "flag_off", shadowCause: "suffix_changed" }],
+			[prompt("3"), { cause: "bypass_surrogate" }],
+		];
+		const streams = sends.map(() => createAssistantMessageEventStream());
 		let call = 0;
 		const source: StreamFn = () => streams[call++];
 		try {
 			const wrapped = wrapBudgetStream(source, budget);
-			for (let i = 0; i < 4; i++) {
-				const systemPrompt = `${SECRET_PROMPT} tail ${i}`;
-				if (i > 0) recordPrefixBoundaryCause(systemPrompt, causes[i - 1]);
+			for (const [i, [systemPrompt, cause]] of sends.entries()) {
+				if (cause) recordPrefixBoundaryCause(systemPrompt, cause);
 				await wrapped(faux.getModel(), { ...context(), systemPrompt }, {});
 				streams[i].end(fauxAssistantMessage("done"));
 				await flush();
@@ -134,14 +144,26 @@ describe("request trace metadata (spec 101)", () => {
 			budget.close();
 			faux.unregister();
 		}
-		const reasons = fs
+		const dispatches = fs
 			.readFileSync(tracePath, "utf8")
 			.trim()
 			.split("\n")
 			.map((line) => JSON.parse(JSON.parse(line).body))
-			.filter((body) => body.kind === "logical_dispatch")
-			.map((body) => body.boundaryChangeReason);
-		expect(reasons).toEqual(["first", ...causes]);
+			.filter((body) => body.kind === "logical_dispatch");
+		expect(dispatches.map((body) => body.boundaryChangeReason)).toEqual([
+			"first",
+			"suffix_changed",
+			"unchanged",
+			"flag_off",
+			"bypass_surrogate",
+		]);
+		expect(dispatches.map((body) => body.shadowBoundaryChangeReason)).toEqual([
+			undefined,
+			undefined,
+			undefined,
+			"suffix_changed",
+			undefined,
+		]);
 	});
 
 	it("flags missing usage", () => {

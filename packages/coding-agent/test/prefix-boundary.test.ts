@@ -13,11 +13,11 @@ import { describe, expect, it } from "vitest";
 import { boundaryChangeReason } from "../src/core/request-trace-metadata.ts";
 import {
 	isPrefixBoundaryEnabled,
-	prefixBoundaryCauseFor,
 	recordPrefixBoundaryCause,
 	resolveExtendedSystemPromptCache,
 	type SystemPromptCachePlan,
 	type SystemPromptCacheState,
+	takePrefixBoundaryCause,
 } from "../src/core/system-prompt-cache-boundary.ts";
 
 /** Verbatim copy of the resolver body on `main` a3f7a3a1ac (spec 052), the flag-off reference. */
@@ -174,25 +174,41 @@ describe("spec 102 resolver", () => {
 		expect(resolveExtendedSystemPromptCache(plan, STABLE.slice(0, -1), { prefixBoundary: true }).bypass).toBe(true);
 	});
 
-	it("maps the cause onto boundaryChangeReason, with tool changes still winning", () => {
+	it("maps the cause onto boundaryChangeReason, with first, tool changes and unavailable still winning", () => {
 		const a = { prefix: "p1", tools: "t1" };
 		expect(boundaryChangeReason(a, { prefix: "p2", tools: "t1" }, "suffix_changed")).toBe("suffix_changed");
-		expect(boundaryChangeReason(undefined, a, "flag_off")).toBe("flag_off");
+		expect(boundaryChangeReason(undefined, a, "flag_off")).toBe("first");
 		expect(boundaryChangeReason(a, a, "bypass_surrogate")).toBe("bypass_surrogate");
 		expect(boundaryChangeReason(a, { prefix: "p2", tools: "t2" }, "suffix_changed")).toBe("prefix_and_tools_changed");
 		expect(boundaryChangeReason(a, undefined, "suffix_changed")).toBe("unavailable");
 		expect(boundaryChangeReason(a, { prefix: "p2", tools: "t1" })).toBe("prefix_changed");
 	});
 
-	it("hands the cause to the trace keyed by the exact prompt sent", () => {
-		recordPrefixBoundaryCause("prompt-1", "suffix_changed");
-		expect(prefixBoundaryCauseFor("prompt-1")).toBe("suffix_changed");
-		expect(prefixBoundaryCauseFor("prompt-2")).toBeUndefined();
+	it("hands the cause to the trace once, for the exact prompt only", () => {
+		recordPrefixBoundaryCause("prompt-1", { cause: "suffix_changed" });
+		expect(takePrefixBoundaryCause("prompt-2")).toBeUndefined();
+		expect(takePrefixBoundaryCause("prompt-1")).toEqual({ cause: "suffix_changed" });
+		expect(takePrefixBoundaryCause("prompt-1")).toBeUndefined();
+		recordPrefixBoundaryCause("prompt-1", { cause: "flag_off" });
 		recordPrefixBoundaryCause("prompt-1", undefined);
-		expect(prefixBoundaryCauseFor("prompt-1")).toBeUndefined();
-		for (let i = 0; i < 40; i++) recordPrefixBoundaryCause(`p${i}`, "flag_off");
-		expect(prefixBoundaryCauseFor("p0")).toBeUndefined();
-		expect(prefixBoundaryCauseFor("p39")).toBe("flag_off");
+		expect(takePrefixBoundaryCause("prompt-1")).toBeUndefined();
+	});
+
+	it("gives the off arm the flag-on cause as a shadow", () => {
+		const prefix = `${STABLE}${EMOJI}`;
+		expect(resolveExtendedSystemPromptCache(plan, `${STABLE}${TAIL_B}`, { prefixBoundary: false })).toEqual({
+			cacheBoundary: undefined,
+			bypass: true,
+			cause: "flag_off",
+			shadowCause: "suffix_changed",
+		});
+		const split = { prompt: `${prefix}${TAIL_A}`, cacheBoundary: prefix.length - 1 };
+		expect(resolveExtendedSystemPromptCache(split, `${prefix}${TAIL_B}`, { prefixBoundary: false }).shadowCause).toBe(
+			"bypass_surrogate",
+		);
+		expect(
+			resolveExtendedSystemPromptCache(plan, `${STABLE}${TAIL_B}`, { prefixBoundary: true }).shadowCause,
+		).toBeUndefined();
 	});
 });
 
