@@ -13,6 +13,7 @@ import {
 	loadProjectTraceSalt,
 } from "../src/core/request-trace-metadata.ts";
 import { RunBudget } from "../src/core/run-budget.ts";
+import { recordPrefixBoundaryCause } from "../src/core/system-prompt-cache-boundary.ts";
 
 const SECRET_PROMPT = "SYSTEM-PROMPT-CANARY-7f3a do not leak";
 const TOOL_CANARY = "TOOL-DESCRIPTION-CANARY-91bd";
@@ -109,6 +110,38 @@ describe("request trace metadata (spec 101)", () => {
 			costSource: "provider_billed",
 			usage: { input: 100, uncached: 100, cacheRead: 800, cacheWrite: 100, estimatedUsd: 0.01, billedUsd: 0.02 },
 		});
+	});
+
+	it("records the spec 102 cause on boundaryChangeReason through the stream wrapper", async () => {
+		const tracePath = path.join(dir, "trace-102.jsonl");
+		process.env.OMK_EVAL_TRACE = tracePath;
+		const faux = registerFauxProvider();
+		const budget = new RunBudget({ maxRequests: 10 }, () => {});
+		const causes = ["suffix_changed", "flag_off", "bypass_surrogate"] as const;
+		const streams = [0, 1, 2, 3].map(() => createAssistantMessageEventStream());
+		let call = 0;
+		const source: StreamFn = () => streams[call++];
+		try {
+			const wrapped = wrapBudgetStream(source, budget);
+			for (let i = 0; i < 4; i++) {
+				const systemPrompt = `${SECRET_PROMPT} tail ${i}`;
+				if (i > 0) recordPrefixBoundaryCause(systemPrompt, causes[i - 1]);
+				await wrapped(faux.getModel(), { ...context(), systemPrompt }, {});
+				streams[i].end(fauxAssistantMessage("done"));
+				await flush();
+			}
+		} finally {
+			budget.close();
+			faux.unregister();
+		}
+		const reasons = fs
+			.readFileSync(tracePath, "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(JSON.parse(line).body))
+			.filter((body) => body.kind === "logical_dispatch")
+			.map((body) => body.boundaryChangeReason);
+		expect(reasons).toEqual(["first", ...causes]);
 	});
 
 	it("flags missing usage", () => {
