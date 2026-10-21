@@ -59,4 +59,4 @@ Behind `OMK_COMPACTION_COST_OBSERVE=1` (default off; logging only, no model-beha
 - Default-on for `OMK_REQUIRED_TOOLS` (decided by Tech Lead after tests pass, on paired tasks): (a) zero false completions; (b) success-rate drop ≤ 5 pp; (c) the 95% CI upper bound of the per-task median-token ratio (on/off) is ≤ +10%, the same token rule as 098, because keeping required tools enlarges the prompt. No cost-reduction condition, since this is a correctness guard. Paid runs only after 인호 posts a cost cap.
 
 ## 5. Open questions
-1. Which acceptance contracts declare required tools first (browser verification only, or any MCP-backed check)? Proposal: only those whose approved command names an MCP tool.
+1. ~~Which acceptance contracts declare required tools first?~~ **Closed (Tech Lead, 2026-10-21 KST):** only tools an approved check explicitly declares count as required (`AcceptanceRequiredToolsField.requiredTools`). Nothing is inferred: not from the command text, the prompt, the MCP server a command mentions, or the tools a check happened to use. A check that declares nothing has no required tools.
