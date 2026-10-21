@@ -45,6 +45,20 @@ Shape: the public methods stay on `AgentSession` as one-line delegates with iden
 the moved bodies become functions taking the session (or a narrow host interface) as first argument,
 the same pattern `SessionTurnAdmission` already uses. Private fields stay on the class.
 
+## 3a. Scope and PR plan
+
+**PR 1 (before the 10/23 12:00 KST deadline)** contains only:
+1. the equivalence harness and its negative-control test (section 5), committed first against unchanged code;
+2. extraction of module 1, `agent-session-turn-admission-host.ts` (~40 lines, the 104 wiring point).
+
+**Follow-ups (after 10/23 12:00 KST, one module per PR, same rules and harness):**
+- F1 `agent-session-compaction.ts`
+- F2 `agent-session-thinking.ts`
+- F3 `agent-session-retry.ts`
+- F4 `agent-session-tree.ts` (tree / stats / export)
+- F5 `agent-session-events.ts`
+- F6 `agent-session-resources.ts`
+
 ## 4. Rules
 
 1. **Mechanical move only.** No logic change, no reordering of awaits, side effects or emitted events,
@@ -61,13 +75,30 @@ the same pattern `SessionTurnAdmission` already uses. Private fields stay on the
 
 - Full `npm test` and `test/suite/` pass with **zero test file changes**.
 - `npm run check` passes (module size, import cycles, dep tree, Biome, types).
-- **First-request byte equality:** a harness script runs a fixed set of scenarios (plain prompt,
-  prompt with MCP tools over budget, prompt forcing compaction, retry after a transient error) against
-  a recording faux provider on `origin/main` and on the split branch, with a fixed clock and session id,
-  and compares the serialized first request payload (system prompt, cache boundary, tools, messages)
-  byte for byte. It also compares the run trace/summary written by the 103b golden scenario. Any diff
-  fails the PR. The script lives under `scripts/` or `test/` and is added in the first code commit,
-  before any move, so its baseline output is captured from unchanged code.
+- **Whole-sequence byte equality:** a harness runs a fixed set of scenarios (plain prompt, MCP tools
+  over budget, forced compaction, retry after a transient error) against a recording faux provider on
+  the base commit and on the split branch, with a fixed clock and session id. It compares **every**
+  provider request of each scenario byte for byte (system prompt, cache boundary, tools, messages), not
+  only the first, because retry and compaction diverge from the 2nd request on. It also compares the
+  **order and payload of every session event** emitted to subscribers, and the run trace/summary from
+  the 103b golden scenario. Any diff fails the PR. The harness is added in the first commit of PR 1,
+  before any move, so its baseline output comes from unchanged code.
+- **Committed negative control:** a test in the same commit as the harness, touching no production
+  code, takes the recorded output, mutates one byte of one recorded request, and separately one byte of
+  one session event (and swaps the order of two events), and asserts the harness comparison **fails**
+  for each. It runs in CI on every run, so a harness that silently compares nothing cannot pass.
+
+### 5.1 Pass criterion and known-failure baseline
+
+"Tests pass" is judged on CI for the PR head, not on a local run. Failures that already occur on main
+are recorded here and do not block, provided they fail identically before and after:
+
+| Test | Known failing on |
+|---|---|
+| `task-result-producer` case 4 | main `d25366d265` and current main |
+| `2791-fswatch-error-crash` | main `d25366d265` and current main |
+
+Any other failure, or a change in these two, blocks the PR.
 
 ## 6. Out of scope
 
