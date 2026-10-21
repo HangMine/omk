@@ -6,7 +6,7 @@ import { createRequestAdmissionGuard, type RequestAdmissionGuard } from "./reque
 import { requestTraceFromEnv } from "./request-trace.ts";
 import { dispatchFingerprints } from "./request-trace-metadata.ts";
 import type { RunBudget } from "./run-budget.ts";
-import { prefixBoundaryCauseFor } from "./system-prompt-cache-boundary.ts";
+import { takePrefixBoundaryCause } from "./system-prompt-cache-boundary.ts";
 export function wrapBudgetStream(
 	source: StreamFn,
 	budget: RunBudget,
@@ -26,11 +26,13 @@ export function wrapBudgetStream(
 		let traceId: string | undefined;
 		// Explicit forwarding instead of AbortSignal.any(): see abort-link.ts for the Node 22 leak.
 		const link = options?.signal ? linkAbortSignals(options.signal, budget.signal) : undefined;
+		const pendingCause = takePrefixBoundaryCause(context.systemPrompt);
 		try {
 			traceId = trace?.begin(model.provider, model.id, {
 				cacheScope: options?.cacheRetention,
 				...(trace?.salt ? { fingerprints: dispatchFingerprints(trace.salt, context) } : {}),
-				prefixCause: prefixBoundaryCauseFor(context.systemPrompt),
+				prefixCause: pendingCause?.cause,
+				shadowReason: pendingCause?.shadowCause,
 			});
 			timingEnd("enter", "request.sent");
 			const stream = await source(model, context, {

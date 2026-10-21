@@ -83,9 +83,9 @@ export function boundaryChangeReason(
 	prefixCause?: "suffix_changed" | "bypass_surrogate" | "flag_off",
 ): BoundaryChangeReason {
 	if (current === undefined) return "unavailable";
-	// A tool change still dominates; otherwise the spec 102 cause explains the prompt.
-	if (prefixCause && (previous === undefined || previous.tools === current.tools)) return prefixCause;
 	if (previous === undefined) return "first";
+	// Spec 102: the session cause explains a prompt change; a tool change still dominates.
+	if (prefixCause && previous.tools === current.tools) return prefixCause;
 	const prefix = previous.prefix !== current.prefix;
 	const tools = previous.tools !== current.tools;
 	if (prefix && tools) return "prefix_and_tools_changed";

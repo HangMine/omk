@@ -26,6 +26,8 @@ export interface SystemPromptCacheState {
 	 * pair), `flag_off` (flag off, the prefix rule would have kept it).
 	 */
 	readonly cause?: PrefixBoundaryCause;
+	/** Flag off only: the cause the flag-on rule would have produced (spec 102 §5 off arm). */
+	readonly shadowCause?: "suffix_changed" | "bypass_surrogate";
 }
 
 export type PrefixBoundaryCause = "suffix_changed" | "bypass_surrogate" | "flag_off";
@@ -67,31 +69,38 @@ export function resolveExtendedSystemPromptCache(
 		systemPrompt.length >= boundary &&
 		systemPrompt.slice(0, boundary) === plan.prompt.slice(0, boundary);
 	if (!prefixIdentical) return { cacheBoundary: undefined, bypass: true };
-	const prefixBoundary = options.prefixBoundary ?? isPrefixBoundaryEnabled();
-	if (!prefixBoundary) return { cacheBoundary: undefined, bypass: true, cause: "flag_off" };
-	if (splitsSurrogatePair(plan.prompt, boundary) || splitsSurrogatePair(systemPrompt, boundary)) {
-		return { cacheBoundary: undefined, bypass: true, cause: "bypass_surrogate" };
+	const split = splitsSurrogatePair(plan.prompt, boundary) || splitsSurrogatePair(systemPrompt, boundary);
+	if (!(options.prefixBoundary ?? isPrefixBoundaryEnabled())) {
+		const shadowCause = split ? "bypass_surrogate" : "suffix_changed";
+		return { cacheBoundary: undefined, bypass: true, cause: "flag_off", shadowCause };
 	}
+	if (split) return { cacheBoundary: undefined, bypass: true, cause: "bypass_surrogate" };
 	return { cacheBoundary: boundary, bypass: false, cause: "suffix_changed" };
 }
 
 /**
  * Hand the cause from the session (which knows the turn plan) to the request
- * trace (which only sees the outgoing context), keyed by the exact system
- * prompt sent. Bounded so a long-lived process keeps only recent prompts.
+ * trace (which only sees the outgoing context). The agent loop builds a new
+ * Context per request, so the object cannot be the key: the cause is pending
+ * for the exact prompt and read once, so a later request with the same prompt
+ * (a retry, the next turn) falls back to the fingerprint reason.
  */
-const CAUSE_LIMIT = 16;
-const causes = new Map<string, PrefixBoundaryCause>();
-
-export function recordPrefixBoundaryCause(systemPrompt: string, cause: PrefixBoundaryCause | undefined): void {
-	causes.delete(systemPrompt);
-	if (cause === undefined) return;
-	causes.set(systemPrompt, cause);
-	if (causes.size > CAUSE_LIMIT) causes.delete(causes.keys().next().value as string);
+export interface PendingPrefixBoundaryCause {
+	readonly cause: PrefixBoundaryCause;
+	readonly shadowCause?: "suffix_changed" | "bypass_surrogate";
 }
 
-export function prefixBoundaryCauseFor(systemPrompt: string | undefined): PrefixBoundaryCause | undefined {
-	return systemPrompt === undefined ? undefined : causes.get(systemPrompt);
+let pending: { readonly systemPrompt: string; readonly value: PendingPrefixBoundaryCause } | undefined;
+
+export function recordPrefixBoundaryCause(systemPrompt: string, value: PendingPrefixBoundaryCause | undefined): void {
+	pending = value === undefined ? undefined : { systemPrompt, value };
+}
+
+export function takePrefixBoundaryCause(systemPrompt: string | undefined): PendingPrefixBoundaryCause | undefined {
+	if (pending === undefined || systemPrompt !== pending.systemPrompt) return undefined;
+	const { value } = pending;
+	pending = undefined;
+	return value;
 }
 
 /** Resolve for the session's extension override and record the cause for the request trace. */
@@ -100,6 +109,9 @@ export function resolveAndRecordSystemPromptCache(
 	systemPrompt: string,
 ): SystemPromptCacheState {
 	const cache = resolveExtendedSystemPromptCache(plan, systemPrompt);
-	recordPrefixBoundaryCause(systemPrompt, cache.cause);
+	recordPrefixBoundaryCause(
+		systemPrompt,
+		cache.cause === undefined ? undefined : { cause: cache.cause, shadowCause: cache.shadowCause },
+	);
 	return cache;
 }
