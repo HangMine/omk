@@ -69,7 +69,7 @@ required for your first task.
 - **One session, many models.** Switch with `/model` mid-conversation; resume later with `/resume` or `omk -c`.
 - **Sandboxed by default.** Built-in bash runs under `sandbox-exec` or `bwrap`, without network, and fails closed.
 - **Opt-in power.** Subagents, MCP servers, skills and extensions load only when you configure them.
-- **Honest evidence.** Claims below link to the tests that back them, and the limits are stated next to them.
+- **Honest evidence.** Claims below link to the docs that back them, and the limits are stated next to them.
 
 ```mermaid
 flowchart LR
