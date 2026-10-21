@@ -48,7 +48,7 @@ Behind `OMK_COMPACTION_COST_OBSERVE=1` (default off; logging only, no model-beha
 ## 4. Flags / deps / rollback
 - `OMK_REQUIRED_TOOLS` (default off; changes which tools a model sees), `OMK_COMPACTION_COST_OBSERVE` (default off; logging only). New dependencies: 0.
 - Rollback: unset flags; revert is confined to session-turn-admission.ts, tool-schema-budget call, one task_result reason, one trace line.
-- Default-on for `OMK_REQUIRED_TOOLS`: after tests pass, decided by Tech Lead with the same rule as 103 §6 (95% CI upper bound of per-verified-task cost change < 0 is not required here since it is a correctness guard; required: zero false completions and success drop ≤ 5 pp on paired tasks). Paid runs only after 인호 posts a cost cap.
+- Default-on for `OMK_REQUIRED_TOOLS` (decided by Tech Lead after tests pass, on paired tasks): (a) zero false completions; (b) success-rate drop ≤ 5 pp; (c) the 95% CI upper bound of the per-task median-token ratio (on/off) is ≤ +10%, the same token rule as 098, because keeping required tools enlarges the prompt. No cost-reduction condition, since this is a correctness guard. Paid runs only after 인호 posts a cost cap.
 
 ## 5. Open questions
 1. Which acceptance contracts declare required tools first (browser verification only, or any MCP-backed check)? Proposal: only those whose approved command names an MCP tool.
