@@ -2547,14 +2547,16 @@ export class AgentSession {
 				}
 				if (!this._runOwnsSession) {
 					this._deferredTurnInput.deferPrompt(expandedText, currentImages, options, promptSkills);
-					const shown = options.streamingBehavior === "followUp" ? this._followUpMessages : this._steeringMessages;
-					shown.push(expandedText);
+					(options.streamingBehavior === "followUp" ? this._followUpMessages : this._steeringMessages).push(
+						expandedText,
+					);
 					this._emitQueueUpdate();
 				} else if (options.streamingBehavior === "followUp") {
 					await this._queueFollowUp(expandedText, currentImages);
 				} else {
 					await this._queueSteer(expandedText, currentImages);
 				}
+				options.dispatched?.(options.streamingBehavior, expandedText);
 				preflightResult?.(true);
 				return;
 			}
@@ -2593,9 +2595,7 @@ export class AgentSession {
 			// Check if we need to compact before sending (catches aborted responses).
 			// The user's new prompt is sent below, so do not call agent.continue() here.
 			const lastAssistant = this._findLastAssistantMessage();
-			if (lastAssistant) {
-				await this._checkCompaction(lastAssistant, false);
-			}
+			if (lastAssistant) await this._checkCompaction(lastAssistant, false);
 
 			// Auto thinking mode: resolve this turn's level from the prompt content.
 			// Manual mode never enters the router, so /think <level> always wins.
@@ -2605,9 +2605,7 @@ export class AgentSession {
 			messages = [userMessage(expandedText, currentImages)];
 
 			// Inject any pending "nextTurn" messages as context alongside the user message
-			for (const msg of this._pendingNextTurnMessages) {
-				messages.push(msg);
-			}
+			messages.push(...this._pendingNextTurnMessages);
 			this._pendingNextTurnMessages = [];
 
 			// Spec 050 R6: the first prompt's skill choice goes into a session-frozen system prompt, later ones into a message.
@@ -2669,6 +2667,7 @@ export class AgentSession {
 			this._runBudget.assertActive();
 			// Over the hard ceiling: fit tools, compact retained history once, then re-check before rejecting.
 			await this._turnAdmission.admit(messages, admissionTokenCounter);
+			options?.dispatched?.("prompt", expandedText);
 		} catch (error) {
 			preflightResult?.(false);
 			this._publishTermination(

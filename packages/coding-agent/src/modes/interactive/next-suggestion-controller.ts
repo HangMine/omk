@@ -104,9 +104,9 @@ export class NextSuggestionController {
 				this.turnsInRun = 0;
 			} else if (event.type === "turn_end") this.turnsInRun++;
 			else if (event.type === "prompt_settled") void this.onSettled(event.outcome);
-			else if (event.type === "message_start" && this.options.acceptTrace) {
+			else if (event.type === "message_start" && this.options.acceptTrace && !this.restorePrompt) {
+				// Only for ports without prompt(); a real session reports its dispatch branch instead.
 				const text = userMessageText(event.message);
-				// Queued (steer/followUp) sends were already settled at dispatch; this is the prompt path.
 				if (text !== undefined) this.options.acceptTrace.sent(text, Date.now(), "prompt");
 			}
 		});

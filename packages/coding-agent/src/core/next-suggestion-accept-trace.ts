@@ -16,6 +16,8 @@ import { createHash, randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "../config.ts";
+import { inputAlreadyHandled } from "./deferred-turn-input.ts";
+import type { PromptOptions } from "./prompt-options.ts";
 
 export const ACCEPT_TRACE_ENV = "OMK_NEXT_SUGGESTIONS_ACCEPT_TRACE";
 export const SUGGESTION_OUTCOME_SCHEMA_VERSION = "omk-suggestion-outcome-1" as const;
@@ -173,29 +175,33 @@ export class SuggestionAcceptTracker {
 }
 
 /** The session's dispatch entry point, as seen by the accept trace (optional on test ports). */
-type PromptFn = (text: string, options?: { streamingBehavior?: "steer" | "followUp" }) => Promise<void>;
+type PromptFn = (text: string, options?: PromptOptions) => Promise<void>;
 interface QueuedDispatchPort {
-	readonly isStreaming?: boolean;
 	prompt?: PromptFn;
 }
 
 /**
- * `sentVia` is decided where the message is dispatched, not by counting
- * messages: `AgentSession.prompt` queues instead of starting a run exactly when
- * the session is streaming and a `streamingBehavior` is given (agent-session
- * `prompt`, steer → `_queueSteer`, followUp → `_queueFollowUp`). The interactive
- * Enter path passes "steer", Alt+Enter passes "followUp". Those sends settle here
- * with that via; every other send reaches the trace via `message_start` as
- * "prompt". Returns the restore function.
+ * `sentVia` comes from the branch `AgentSession._prompt` actually took, reported
+ * through the `dispatched` prompt option: "prompt" once a run is admitted, or
+ * the requested streamingBehavior when the input is queued (`_queueSteer` /
+ * `_queueFollowUp`) or deferred for a prompt in preflight (`deferPrompt`).
+ * Input handled by an extension command or input hook reports nothing, so it
+ * records nothing. Returns the restore function, or `undefined` for a port
+ * without `prompt()` (the caller then falls back to `message_start`).
  */
 export function traceQueuedDispatch(session: object, trace: SuggestionAcceptTracker): (() => void) | undefined {
 	const port = session as unknown as QueuedDispatchPort;
 	const inner = port.prompt;
 	if (typeof inner !== "function") return undefined;
 	const wrapped: PromptFn = (text, options) => {
-		const via = options?.streamingBehavior;
-		if (via && port.isStreaming) trace.sent(text, Date.now(), via);
-		return inner.call(port, text, options);
+		// A prepared resume already carries the original call's hook; keep its identity (input-handled marker).
+		if (inputAlreadyHandled(options)) return inner.call(port, text, options);
+		const outer = options?.dispatched;
+		const dispatched: PromptOptions["dispatched"] = (via, sentText) => {
+			trace.sent(sentText, Date.now(), via);
+			outer?.(via, sentText);
+		};
+		return inner.call(port, text, { ...options, dispatched });
 	};
 	port.prompt = wrapped;
 	return () => {
