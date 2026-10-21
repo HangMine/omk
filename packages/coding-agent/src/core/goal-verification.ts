@@ -176,7 +176,7 @@ export class GoalVerifier {
 		});
 		const { core, envelope } = execution.receipt;
 		const checkKind = classifyCheckKind(command);
-		const tests = checkKind === "test_runner" ? parseTestCounts(countTail.text()) : undefined;
+		const tests = checkKind === "test_runner" ? parseTestCounts(countTail.text(), command) : undefined;
 		return {
 			receiptId: core.receiptId,
 			digest: envelope.coreSha256,
