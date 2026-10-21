@@ -61,7 +61,7 @@ export class GoalAcceptance {
 	private readonly createVerifier: GoalVerifierFactory;
 	private running: AbortController | undefined;
 	/** Spec 104: goals whose segment hit `RequiredCapabilityUnavailable`; recorded only with `OMK_REQUIRED_TOOLS`. */
-	private readonly capabilityGaps = new Map<string, readonly string[]>();
+	private readonly capabilityGaps = new Map<string, { readonly missing: readonly string[]; present: boolean }>();
 
 	constructor(createVerifier: GoalVerifierFactory = (options) => new GoalVerifier(options)) {
 		this.createVerifier = createVerifier;
@@ -163,6 +163,7 @@ export class GoalAcceptance {
 				digest: result.digest,
 				workspace: result.workspace,
 			});
+			if (this.capabilityGaps.get(key)?.present) this.capabilityGaps.delete(key);
 			return { command, result, goal: next };
 		} finally {
 			if (this.running === controller) this.running = undefined;
@@ -205,8 +206,8 @@ export class GoalAcceptance {
 
 	/** Complete `goal`. With an approved check, only on a matching trusted receipt; otherwise the reducer's rule. */
 	async complete(store: DurableGoalStore, goal: DurableGoalSnapshot, cwd: string): Promise<DurableGoalSnapshot> {
-		const missing = this.capabilityGaps.get(goalKeyOf(goal));
-		if (missing) throw new DurableGoalError("evidence-required", `required tools unavailable: ${missing.join(", ")}`);
+		const gap = this.capabilityGaps.get(goalKeyOf(goal));
+		if (gap) throw new DurableGoalError("evidence-required", `required tools unavailable: ${gap.missing.join(", ")}`);
 		if (this.gated(goal)) {
 			const gap = this.acceptanceGap(goal, cwd);
 			if (gap !== undefined) throw new DurableGoalError("evidence-required", `${gap}; run /goal verify`);
@@ -226,7 +227,13 @@ export class GoalAcceptance {
 
 	/** Spec 104: a required capability was missing in this goal's segment; `complete()` is refused until forgotten. */
 	recordRequiredCapabilityMissing(goal: DurableGoalSnapshot, missing: readonly string[]): void {
-		this.capabilityGaps.set(goalKeyOf(goal), [...missing]);
+		this.capabilityGaps.set(goalKeyOf(goal), { missing: [...missing], present: false });
+	}
+
+	/** Spec 104: a later turn carried every required tool; the next passing check then releases the block. */
+	recordRequiredCapabilityPresent(goal: DurableGoalSnapshot): void {
+		const gap = this.capabilityGaps.get(goalKeyOf(goal));
+		if (gap) gap.present = true;
 	}
 
 	/** Stop a running check; its receipt records `aborted` and attaches nothing. */

@@ -2,9 +2,12 @@
  * Spec 104 §2.1/§2.2: required-tool contract for per-turn admission.
  *
  * Behind `OMK_REQUIRED_TOOLS` (default off). With the flag off nothing here is
- * consulted: admission keys, fitted tools and notices are unchanged. A contract
- * comes only from trusted host sources (approved acceptance contract, explicit
- * user or skill declaration); nothing is inferred from prompt text.
+ * consulted: admission keys, fitted tools and notices are unchanged. v1: a
+ * contract comes only from the approved acceptance contract; nothing is
+ * inferred from prompt text.
+ *
+ * Phase 1 has no effect on real sessions: nothing supplies `requiredTools` to
+ * `SessionTurnAdmission` yet (agent-session.ts wiring is a later PR).
  */
 import type { TaskCheckFact } from "./task-result.ts";
 
@@ -13,7 +16,17 @@ export const REQUIRED_TOOLS_ENV = "OMK_REQUIRED_TOOLS";
 export interface RequiredToolContract {
 	readonly taskSegmentId: string;
 	readonly tools: ReadonlySet<string>;
-	readonly source: "acceptance" | "user" | "skill";
+	/** v1 (Tech Lead ruling 2026-10-21): the approved acceptance contract only. */
+	readonly source: "acceptance";
+}
+
+/**
+ * Field the approved acceptance contract will carry (phase 2 plumbing). Type only:
+ * no producer or consumer reads it yet.
+ */
+export interface AcceptanceRequiredToolsField {
+	/** Exact tool names (e.g. `browser__verify`) the approved check needs. */
+	readonly requiredTools?: readonly string[];
 }
 
 export function isRequiredToolsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
