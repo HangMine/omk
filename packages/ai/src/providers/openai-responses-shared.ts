@@ -501,7 +501,7 @@ export async function processResponsesStream<TApi extends Api>(
 				output.responseId = response.id;
 			}
 			if (response?.usage) {
-				output.usage = parseResponsesUsage(response.usage);
+				output.usage = parseResponsesUsage(response.usage, model);
 			}
 			calculateCost(model, output.usage);
 			if (options?.applyServiceTierPricing) {

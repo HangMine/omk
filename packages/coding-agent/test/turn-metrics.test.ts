@@ -187,6 +187,41 @@ describe("turn metrics summary", () => {
 		expect(summary.cacheReadShare).toBe(0.8);
 		expect(summary.totals.cacheWrite).toBe(100);
 		expect(renderStatsReport(summary, "/tmp/turns.jsonl").join("\n")).toContain("1 missing cacheWrite");
+		expect(summary.cacheReadShareCoverage).toEqual({ turnsUsed: 1, turnsTotal: 2, turnsMissingCacheWrite: 1 });
+		const report = renderStatsReport(summary, "/tmp/turns.jsonl").join("\n");
+		expect(report).toContain("cache read share 80.0%");
+		expect(report).toContain("coverage 1/2 turns (1/2 missing cacheWrite)");
+	});
+
+	it("labels the estimated cost a lower bound when a turn has unknown cacheWrite", () => {
+		const unknown = turnUsageMetricFromUsage({
+			input: 1,
+			output: 1,
+			cacheRead: 0,
+			cacheWrite: 0,
+			cacheWriteUnknown: true,
+			cost: { total: 0.25 },
+		});
+		const summary = summarizeTurnMetrics(
+			lines([
+				turn({ turnIndex: 0, usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, costUsd: 0.5 } }),
+				turn({ turnIndex: 1, usage: unknown }),
+			]),
+		);
+		expect(summary.costIsLowerBound).toBe(true);
+		const report = renderStatsReport(summary, "/tmp/turns.jsonl").join("\n");
+		expect(report).toContain("estimated ≥ $0.7500 (price table; 하한/lower bound");
+	});
+
+	it("does not mark cost as a lower bound and shows full coverage when all cacheWrites are reported", () => {
+		const summary = summarizeTurnMetrics(
+			lines([turn({ usage: { input: 100, output: 1, cacheRead: 800, cacheWrite: 100, costUsd: 0.1 } })]),
+		);
+		expect(summary.costIsLowerBound).toBe(false);
+		const report = renderStatsReport(summary, "/tmp/turns.jsonl").join("\n");
+		expect(report).toContain("coverage 1/1 turns (0/1 missing cacheWrite)");
+		expect(report).toContain("estimated $0.1000 (price table)");
+		expect(report).not.toContain("하한");
 	});
 
 	it("keeps a reported cacheWrite of 0 as covered", () => {

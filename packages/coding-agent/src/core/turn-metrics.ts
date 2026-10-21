@@ -143,6 +143,10 @@ export interface TurnMetricsSummary {
 	readonly turnDurationP95Ms: number;
 	readonly timeToFirstChunkP50Ms?: number;
 	readonly cacheReadShare: number;
+	/** Which turns `cacheReadShare` was computed over: turns with usage and a reported cacheWrite. */
+	readonly cacheReadShareCoverage: Readonly<Record<"turnsUsed" | "turnsTotal" | "turnsMissingCacheWrite", number>>;
+	/** `true` when `totalCostUsd` includes a turn with unknown cacheWrite, so it is a lower bound (하한). */
+	readonly costIsLowerBound: boolean;
 	readonly compactions: number;
 	readonly failovers: number;
 	readonly contextCachePlanHitRate?: number;
@@ -282,6 +286,12 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		// covered turns only; turns with unknown cache writes are counted in
 		// usageCoverage.turnsMissingCacheWrite instead of being treated as 0.
 		cacheReadShare: cumulativeCacheReadShare([covered]) ?? 0,
+		cacheReadShareCoverage: {
+			turnsUsed: records.length - turnsMissingUsage - turnsMissingCacheWrite,
+			turnsTotal: records.length,
+			turnsMissingCacheWrite,
+		},
+		costIsLowerBound: turnsMissingCacheWrite > 0,
 		compactions,
 		failovers,
 		contextCachePlanHitRate: planObservations === 0 ? undefined : planHits / planObservations,

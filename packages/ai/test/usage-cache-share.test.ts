@@ -2,6 +2,7 @@ import type { ResponseStreamEvent } from "openai/resources/responses/responses.j
 import { describe, expect, it } from "vitest";
 import { parseChunkUsage } from "../src/providers/openai-completions-usage.ts";
 import { processResponsesStream } from "../src/providers/openai-responses-shared.ts";
+import { hasNoCacheWriteCharge, parseResponsesUsage } from "../src/providers/openai-responses-usage.ts";
 import type { AssistantMessage, Model } from "../src/types.ts";
 import {
 	cacheReadShare,
@@ -103,6 +104,36 @@ describe("cache read share", () => {
 	it("marks cacheWrite unknown (not 0) when OpenAI omits cache_write_tokens", async () => {
 		const usage = await completedUsage({ cached_tokens: 800 });
 		expect(usage).toMatchObject({ input: 200, cacheRead: 800, cacheWriteUnknown: true });
+	});
+
+	it("zero-fills a missing cache_write_tokens only for OpenAI models before GPT-5.6", async () => {
+		const raw = {
+			input_tokens: 1000,
+			output_tokens: 5,
+			total_tokens: 1005,
+			input_tokens_details: { cached_tokens: 800 },
+		};
+		for (const id of [
+			"gpt-5.5",
+			"gpt-5.5-pro",
+			"gpt-5",
+			"gpt-5.1-codex",
+			"gpt-4.1",
+			"gpt-4o-mini",
+			"o3",
+			"o4-mini",
+		]) {
+			const usage = parseResponsesUsage(raw, { provider: "openai", id });
+			expect(usage, id).toMatchObject({ input: 200, cacheRead: 800, cacheWrite: 0 });
+			expect(usage.cacheWriteUnknown, id).toBeUndefined();
+		}
+		for (const id of ["gpt-5.6", "gpt-6.1-sol", "gpt-10", "my-custom-model"]) {
+			expect(parseResponsesUsage(raw, { provider: "openai", id }).cacheWriteUnknown, id).toBe(true);
+		}
+		for (const provider of ["azure-openai-responses", "openai-codex", "anthropic"]) {
+			expect(parseResponsesUsage(raw, { provider, id: "gpt-5.5" }).cacheWriteUnknown, provider).toBe(true);
+		}
+		expect(hasNoCacheWriteCharge("anthropic", "claude-sonnet-4-5")).toBe(false);
 	});
 
 	it("keeps a reported cache_write_tokens of 0 as a known 0", async () => {
