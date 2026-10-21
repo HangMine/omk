@@ -35,7 +35,9 @@ on disk and points the model at it, so the excerpt becomes a hint.
 2. **Bytes cap 4 MiB.** Over the cap the file keeps the first 1 MiB and the last
    3 MiB with one `[omk: N bytes elided]` line in between.
 3. **Count cap.** Per goal the latest 3 artifacts, per recall dir 20; oldest
-   first. Files are not tied to the session lifetime; the caps bound them.
+   first. Files are not tied to the session lifetime; the caps bound them, and
+   clearing or replacing a goal deletes all of that goal's recall files (in any
+   flag state, so files from an earlier flag-on run do not linger).
 4. **Abort / runner error.** The partial file is deleted and no reference is given.
 5. **Follow-up** (replaces the `Run it to see the output` sentence):
    ```
@@ -52,7 +54,11 @@ on disk and points the model at it, so the excerpt becomes a hint.
    lines, complete, elidedBytes, elidedRatio }`, and the next check's entry gets
    `priorRecall: { readAfterFollowUp, readCalls }` (the model's `read` calls on the
    recall path named in the last follow-up, seen via `tool_call`; the handler is
-   registered only with the flag on). Counts, booleans and a digest only, 0 bytes of raw text.
+   registered only with the flag on). `readCalls`/`readAfterFollowUp` are the
+   primary metric: exactly a `read` tool call on that path. `priorRecall.otherAccessCalls`
+   counts, for reference only, a `grep` tool call on that path or a bash command
+   running grep/rg/cat/sed that names it; it never changes the primary fields.
+   Counts, booleans and a digest only, 0 bytes of raw text.
 7. **Separation.** The artifact is diagnostic only. Completion and evidence still
    come from the receipt alone. No redaction is applied and none is claimed.
 
@@ -80,6 +86,11 @@ does not protect against tools that ignore `.gitignore` (archives, backups, sync
   `wx`, abort deletes, per-goal and per-dir count caps, attempt numbers never reused.
 - Real `read` tool opens the recall path with and without a workspace loadout policy.
 - Re-run in the same round/revision keeps both files; `priorRecall` counts only `read` calls on the recall path.
+- `otherAccessCalls` counts grep tool / bash grep|rg|cat|sed on the path, ignores other files,
+  other commands and the directory, and leaves `readCalls`/`readAfterFollowUp` unchanged.
+- Clearing a goal, and replacing it, leaves 0 recall files for it.
+- In a git repo (main's goal state ignored by the repo), recall files leave
+  `git status --porcelain --untracked-files=all` empty via the recall dir's own `*` `.gitignore`.
 - Controller: flag off follow-up byte-identical to `main`; flag on follow-up has
   the path, counts, hint, no `Run it to see the output`; the file content equals
   the command output; trace has sha256/counts and no raw text.
