@@ -22,6 +22,7 @@ import {
 } from "../src/core/next-suggestion.ts";
 import {
 	cappedSuggestionOptions,
+	DEFAULT_SUGGESTION_BUDGET,
 	isSuggestionCapsEnabled,
 	type SuggestionBudget,
 	suggestionBudgetFromEnv,
@@ -91,17 +92,31 @@ afterEach(() => {
 });
 
 describe("spec 103: flags", () => {
-	it("caps flag is off by default and env budget has no invented defaults", () => {
+	it("caps flag is off by default; env budget = spec defaults, env only overrides", () => {
 		expect(isSuggestionCapsEnabled({})).toBe(false);
 		expect(isSuggestionCapsEnabled({ OMK_NEXT_SUGGESTIONS_CAPS: "1" })).toBe(true);
-		expect(suggestionBudgetFromEnv({})).toBeUndefined();
-		expect(suggestionBudgetFromEnv({ OMK_NEXT_SUGGESTIONS_DEADLINE_MS: "3000" })).toBeUndefined();
+		expect(DEFAULT_SUGGESTION_BUDGET).toEqual({ maxReasoning: "inherit", deadlineMs: 30_000, maxCostUsd: 0.02 });
+		expect(suggestionBudgetFromEnv({})).toEqual(DEFAULT_SUGGESTION_BUDGET);
+		expect(suggestionBudgetFromEnv({ OMK_NEXT_SUGGESTIONS_DEADLINE_MS: "3000" })).toEqual({
+			...DEFAULT_SUGGESTION_BUDGET,
+			deadlineMs: 3000,
+		});
 		expect(
 			suggestionBudgetFromEnv({
-				OMK_NEXT_SUGGESTIONS_DEADLINE_MS: "3000",
-				OMK_NEXT_SUGGESTIONS_MAX_COST_USD: "0.01",
+				OMK_NEXT_SUGGESTIONS_MAX_COST_USD: "0.5",
+				OMK_NEXT_SUGGESTIONS_MAX_REASONING: "low",
 			}),
-		).toEqual({ maxReasoning: "inherit", deadlineMs: 3000, maxCostUsd: 0.01 });
+		).toEqual({ maxReasoning: "low", deadlineMs: 30_000, maxCostUsd: 0.5 });
+		// Invalid values keep the default; they never disable the suggestion.
+		expect(
+			suggestionBudgetFromEnv({ OMK_NEXT_SUGGESTIONS_DEADLINE_MS: "abc", OMK_NEXT_SUGGESTIONS_MAX_COST_USD: "-1" }),
+		).toEqual(DEFAULT_SUGGESTION_BUDGET);
+	});
+
+	it("budget_unset only when a cap is explicitly set to 0", () => {
+		expect(suggestionBudgetFromEnv({ OMK_NEXT_SUGGESTIONS_DEADLINE_MS: "0" })).toBeUndefined();
+		expect(suggestionBudgetFromEnv({ OMK_NEXT_SUGGESTIONS_MAX_COST_USD: "0" })).toBeUndefined();
+		expect(reason(plan(record(anthropic), 2000, { budget: suggestionBudgetFromEnv({}) }))).toBe("request");
 	});
 
 	it("caps on with no budget configured skips (fail closed) with zero provider calls", () => {
@@ -295,6 +310,105 @@ describe("spec 103 §2.2: usage settlement", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	it("suggestion records are excluded from turns, durations and usageCoverage but kept in cost totals", () => {
+		const base = {
+			schemaVersion: "omk-turn-metrics-2",
+			sessionId: "s",
+			toolCalls: [],
+			toolCallCount: 0,
+			toolFailureCount: 0,
+		};
+		const main = {
+			...base,
+			turnIndex: 0,
+			startedAtEpochMs: 0,
+			endedAtEpochMs: 100,
+			durationMs: 100,
+			usage: { input: 100, output: 10, cacheRead: 0, cacheWrite: 0, costUsd: 0.05, billedUsd: 0.04 },
+		};
+		const sug = {
+			...base,
+			turnIndex: 0,
+			purpose: "suggestion",
+			parentTurnIndex: 0,
+			suggestionOutcome: "shown",
+			startedAtEpochMs: 0,
+			endedAtEpochMs: 9000,
+			durationMs: 9000,
+			usage: { input: 7, output: 3, cacheRead: 0, cacheWrite: 0, costUsd: 0.002, billedUsd: 0.001 },
+		};
+		const missing = {
+			...base,
+			turnIndex: 1,
+			purpose: "suggestion",
+			parentTurnIndex: 1,
+			suggestionOutcome: "error",
+			startedAtEpochMs: 0,
+			endedAtEpochMs: 5,
+			durationMs: 5,
+		};
+		const summary = summarizeTurnMetrics([main, sug, missing].map((r) => JSON.stringify(r)));
+		const mainOnly = summarizeTurnMetrics([JSON.stringify(main)]);
+		expect(summary.turns).toBe(1);
+		expect(summary.turnDurationP50Ms).toBe(100);
+		expect(summary.turnDurationP95Ms).toBe(100);
+		expect(summary.usageCoverage).toEqual(mainOnly.usageCoverage);
+		expect(summary.cacheReadShareCoverage).toEqual(mainOnly.cacheReadShareCoverage);
+		expect(summary.totals.input).toBe(107);
+		expect(summary.totalCostUsd).toBeCloseTo(0.052, 10);
+		expect(summary.billedCostUsd).toBeCloseTo(0.041, 10);
+		expect(summary.byPurpose?.suggestion).toMatchObject({ records: 2, missingUsage: 1, input: 7 });
+		expect(summary.byPurpose?.main).toMatchObject({ records: 1, input: 100 });
+	});
+
+	it("caps flag off through the controller: provider request bytes equal the main-branch reuse arm", async () => {
+		const seen: Array<{ context: string; options: Record<string, unknown> }> = [];
+		const options: SimpleStreamOptions = { reasoning: "high", cacheRetention: "short", sessionId: "s" };
+		const listeners: Array<(e: { type: string; outcome?: string }) => unknown> = [];
+		const final = assistant("Done.", { timestamp: Date.now() });
+		const session = {
+			agent: {
+				streamFn: ((_m: unknown, c: Context, o: Record<string, unknown>) => {
+					seen.push({ context: JSON.stringify(c), options: o });
+					return { result: async () => (c.messages.length > 1 ? assistant("Next.") : final) };
+				}) as unknown as StreamFn,
+				state: { messages: [] as unknown[] },
+			},
+			model: { provider: anthropic.provider, id: anthropic.id },
+			subscribe: (l: (e: { type: string; outcome?: string }) => unknown) => {
+				listeners.push(l);
+				return () => {};
+			},
+		};
+		const c = installNextSuggestions(
+			session as unknown as SuggestionSessionPort,
+			{ getText: () => "", setText: () => {}, setPlaceholder: () => {}, isShowingAutocomplete: () => false },
+			"base",
+			{
+				env: {
+					OMK_NEXT_SUGGESTIONS: "1",
+					OMK_NEXT_SUGGESTIONS_MAX_COST_USD: "0",
+					OMK_NEXT_SUGGESTIONS_MAX_REASONING: "low",
+				},
+				quotaUsage: async () => "no_quota",
+			},
+		)!;
+		await (await session.agent.streamFn(anthropic, context, options)).result();
+		session.agent.state.messages = [...context.messages, final];
+		await c.onSettled("completed");
+		c.dispose();
+		expect(seen).toHaveLength(2);
+		const expected = JSON.stringify({
+			...context,
+			messages: [...context.messages, final, JSON.parse(seen[1]!.context).messages.at(-1)],
+		});
+		expect(seen[1]!.context).toBe(expected);
+		const { signal, ...rest } = seen[1]!.options;
+		expect(signal).toBeInstanceOf(AbortSignal);
+		expect(rest).toEqual({ ...options, maxTokens: 128 });
+		expect(Object.keys(seen[1]!.options)).toEqual([...Object.keys(options), "maxTokens", "signal"]);
 	});
 
 	it("no suggestion records: summary has no byPurpose field (flag-off output unchanged)", () => {
