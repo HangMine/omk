@@ -32,7 +32,10 @@ export type RequiredToolSource = () => RequiredToolContract | undefined;
 
 /**
  * Spec 104 phase 2: trusted host-side sources, keyed by session. Kept off `AgentSession`'s public
- * surface and out of extension reach; consulted only with `OMK_REQUIRED_TOOLS` on.
+ * surface and out of extension reach; consulted only with `OMK_REQUIRED_TOOLS` on. A WeakMap, so a
+ * disposed and unreferenced session never retains its source (AgentSession has no dispose hook
+ * this module can join without growing agent-session.ts; the producer clears with `undefined`).
+ * Keyed by `object`, not `AgentSession`: even a type import of agent-session.ts is an import cycle.
  */
 const requiredToolSources = new WeakMap<object, RequiredToolSource>();
 

@@ -1,5 +1,8 @@
 /** Spec 104 phase 2: the session's turn-admission host supplies the required-tool contract (flag on only). */
+
 import { fileURLToPath } from "node:url";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { fauxAssistantMessage } from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setRequiredToolSource } from "../../src/core/agent-session-turn-admission-host.ts";
@@ -58,12 +61,36 @@ function recordMcpTools(target: Harness, count: number): string[][] {
 	return sent;
 }
 
-/** bulky + mid outgrow the tool budget; bulky alone (pinned) still fits the input ceiling. */
+/**
+ * bulky + mid outgrow the tool budget; bulky alone (pinned) still fits the input ceiling.
+ * These 150k/100k description sizes are tied to the current tool-budget formula
+ * (toolSchemaBudgetTokens / sessionInputTokenLimit for a 262k window); retune them if it changes.
+ */
 const CATALOG: Array<[string, number]> = [
 	["bulky", 150_000],
 	["mid", 100_000],
 	["slim", 0],
 ];
+
+/** In-process `gc()` (V8 flag set at runtime), so retention is checked deterministically, not by timing. */
+function forceGc(): () => void {
+	setFlagsFromString("--expose-gc");
+	return runInNewContext("gc") as () => void;
+}
+
+async function collected(register: (registry: FinalizationRegistry<string>) => void | Promise<void>): Promise<boolean> {
+	let done = false;
+	const registry = new FinalizationRegistry<string>(() => {
+		done = true;
+	});
+	await register(registry);
+	const gc = forceGc();
+	for (let i = 0; i < 20 && !done; i++) {
+		gc();
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	return done;
+}
 
 const groupsOf = (names: readonly string[] | undefined) => [...new Set((names ?? []).map((n) => n.split("__")[0]))];
 
@@ -181,5 +208,53 @@ describe("spec 104 wiring: required tools in real sessions", () => {
 		expect(new Set(payloads).size).toBe(1);
 		expect(payloads[0]).toContain("bulky__echo");
 		expect(payloads[0]).not.toContain("mid__echo");
+	});
+
+	it("flag on: a required MCP tool revoked between two requests in one segment rejects the next prompt as absent", async () => {
+		process.env.OMK_REQUIRED_TOOLS = "1";
+		harness = await overBudgetSession(CATALOG);
+		setRequiredToolSource(harness.session, () => contract("bulky__echo"));
+		const sent = recordMcpTools(harness, 2);
+
+		await harness.session.prompt("first");
+		expect(groupsOf(sent[0])).toEqual(["bulky", "slim"]);
+		const callsBefore = harness.faux.state.callCount;
+		// Revocation: the bulky server's tools leave the session's tool set before request N+1.
+		await harness.session.attachMcpServers({ servers: [server("mid", 100_000), server("slim", 0)] });
+		expect(harness.session.getActiveToolNames()).not.toContain("bulky__echo");
+
+		const error = await harness.session.prompt("second").catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(RequiredCapabilityUnavailable);
+		expect(error).toMatchObject({ kind: "absent", missing: ["bulky__echo"], taskSegmentId: "goal-1" });
+		expect(harness.faux.state.callCount).toBe(callsBefore);
+		expect(sent).toHaveLength(1);
+	});
+
+	it("the source store does not retain a session: a dropped key's source is garbage-collected", async () => {
+		const ok = await collected((registry) => {
+			let key: object | undefined = {};
+			let source: (() => RequiredToolContract | undefined) | undefined = () => contract("bulky__echo");
+			setRequiredToolSource(key, source);
+			registry.register(source, "source");
+			source = undefined;
+			key = undefined;
+		});
+		expect(ok).toBe(true);
+	});
+
+	it("a disposed, unreferenced session releases its source", async () => {
+		const ok = await collected((registry) => {
+			let created: Harness | undefined;
+			return createHarness({ settings: { resourceGovernor: { mode: "off" } } }).then((h) => {
+				created = h;
+				const source = () => contract("bulky__echo");
+				setRequiredToolSource(created.session, source);
+				registry.register(source, "source");
+				created.cleanup();
+				created = undefined;
+			});
+		});
+		expect(ok).toBe(true);
 	});
 });
