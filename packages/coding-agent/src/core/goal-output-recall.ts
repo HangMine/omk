@@ -97,12 +97,18 @@ function keepNewest(files: readonly string[], keep: number): void {
 	for (const { file } of dated.slice(0, Math.max(0, dated.length - keep))) removeQuietly(file);
 }
 
-function enforceCaps(dir: string, goalPrefix: string): void {
+/** Exactly `acceptance-<id>-<round>-<rev>-<attempt>.log` for this goal id; `a` never matches `a-1`'s files. */
+function goalFilePattern(goalId: string): RegExp {
+	const id = safeName(goalId).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+	return new RegExp(`^acceptance-${id}-\\d+-\\d+-\\d+\\.log$`, "u");
+}
+
+function enforceCaps(dir: string, goalId: string): void {
 	const all = readdirSync(dir)
 		.filter((name) => name.startsWith("acceptance-") && name.endsWith(".log"))
 		.map((name) => join(dir, name));
 	keepNewest(
-		all.filter((file) => basename(file).startsWith(goalPrefix)),
+		all.filter((file) => goalFilePattern(goalId).test(basename(file))),
 		OUTPUT_RECALL_PER_GOAL,
 	);
 	// Files the per-goal pass removed are skipped (stat fails).
@@ -226,7 +232,7 @@ export class OutputArtifactWriter {
 			this.fd = undefined;
 			this.tail = [];
 			const content = readFileSync(this.file);
-			enforceCaps(this.dir, `acceptance-${safeName(this.target.goalId)}-`);
+			enforceCaps(this.dir, this.target.goalId);
 			return {
 				displayPath: this.displayPath,
 				absolutePath: this.file,
@@ -265,10 +271,10 @@ export function outputRecallFollowUp(head: string, outputTail: string, artifact:
 /** Spec 098: delete every recall file of `goalId` (goal cleared or replaced). Best effort, any flag state. */
 export function deleteGoalRecallFiles(cwd: string, goalId: string): void {
 	const dir = outputRecallDir(cwd);
-	const prefix = `acceptance-${safeName(goalId)}-`;
+	const pattern = goalFilePattern(goalId);
 	try {
 		for (const name of readdirSync(dir)) {
-			if (name.startsWith(prefix) && name.endsWith(".log")) removeQuietly(join(dir, name));
+			if (pattern.test(name)) removeQuietly(join(dir, name));
 		}
 	} catch {
 		// No recall dir: nothing to delete.

@@ -18,6 +18,7 @@ import { DurableGoalStore } from "../src/core/durable-goal-store.ts";
 import goalController from "../src/core/extensions/builtin/goal-controller.ts";
 import type { ExtensionAPI, ExtensionCommandContext, RegisteredCommand } from "../src/core/extensions/types.ts";
 import {
+	deleteGoalRecallFiles,
 	goalOutputRecallEnabled,
 	OUTPUT_RECALL_HEAD_BYTES,
 	OUTPUT_RECALL_MAX_BYTES,
@@ -346,5 +347,40 @@ describe("spec 098 artifact writer", () => {
 		for (let goal = 0; goal < 10; goal++) for (let round = 0; round < 3; round++) run(`g${goal}`, round);
 		expect(logs()).toHaveLength(OUTPUT_RECALL_PER_DIR);
 		expect(logs().some((name) => name.startsWith("acceptance-a-"))).toBe(false);
+	});
+
+	it("goals `a` and `a-1` never delete or trim each other's files (clear and caps)", () => {
+		const cwd = tempRoot("omk-098-w-");
+		const dir = outputRecallDir(cwd);
+		let stamp = 1;
+		const run = (goalId: string, round: number) => {
+			const artifact = OutputArtifactWriter.open(target(cwd, goalId, round))?.finish();
+			if (artifact) utimesSync(artifact.absolutePath, stamp, stamp);
+			stamp += 1;
+		};
+		const of = (goalId: string) =>
+			readdirSync(dir)
+				.filter(
+					(name) =>
+						name.startsWith(`acceptance-${goalId}-`) &&
+						/^\d+-\d+-\d+\.log$/u.test(name.slice(`acceptance-${goalId}-`.length)),
+				)
+				.sort();
+		// `a-1` round 0 first, so the oldest files overall belong to `a-1`.
+		for (let attempt = 0; attempt < 3; attempt++) run("a-1", 0);
+		for (let attempt = 0; attempt < 4; attempt++) run("a", 1);
+		expect(of("a-1")).toEqual(["acceptance-a-1-0-1-1.log", "acceptance-a-1-0-1-2.log", "acceptance-a-1-0-1-3.log"]);
+		expect(of("a")).toEqual(["acceptance-a-1-1-2.log", "acceptance-a-1-1-3.log", "acceptance-a-1-1-4.log"]);
+		for (let attempt = 0; attempt < 2; attempt++) run("a-1", 2);
+		expect(of("a")).toHaveLength(3);
+		expect(of("a-1")).toEqual(["acceptance-a-1-0-1-3.log", "acceptance-a-1-2-1-1.log", "acceptance-a-1-2-1-2.log"]);
+
+		deleteGoalRecallFiles(cwd, "a");
+		expect(of("a")).toEqual([]);
+		expect(of("a-1")).toHaveLength(3);
+		run("a", 1);
+		deleteGoalRecallFiles(cwd, "a-1");
+		expect(of("a-1")).toEqual([]);
+		expect(of("a")).toEqual(["acceptance-a-1-1-1.log"]);
 	});
 });
