@@ -72,7 +72,7 @@ const controller = installNextSuggestions(session as unknown as SuggestionSessio
 		if (quotaDelayMs > 0) await sleep(quotaDelayMs);
 		return "no_quota";
 	},
-	acceptTrace: suggestionAcceptTracker(() => "latency", dir, env),
+	acceptTrace: suggestionAcceptTracker(() => "latency", dir, env, dir),
 })!;
 const ctx = { systemPrompt: "s", messages: [{ role: "user" as const, content: "go", timestamp: 1 }], tools: [] };
 for (let i = 0; i < runs; i++) {

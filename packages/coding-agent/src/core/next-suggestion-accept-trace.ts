@@ -8,8 +8,10 @@
  * stream is untouched. Metadata only: the suggestion and prompt text are held in
  * memory for the comparison and never written.
  */
+import { createHash, randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import { join } from "node:path";
+import { getAgentDir } from "../config.ts";
 
 export const ACCEPT_TRACE_ENV = "OMK_NEXT_SUGGESTIONS_ACCEPT_TRACE";
 export const SUGGESTION_OUTCOME_SCHEMA_VERSION = "omk-suggestion-outcome-1" as const;
@@ -17,6 +19,8 @@ export const SUGGESTION_OUTCOMES_FILE = "suggestion-outcomes.jsonl";
 /** Longest prompt prefix compared; keeps the edit-distance work bounded (200 x 2000 cells). */
 export const MAX_COMPARED_CHARS = 2000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** Per-install salt for `sessionHash` (0600, under the agent dir; never logged). */
+export const SESSION_SALT_FILE = "suggestion-trace-salt";
 
 export type SentAs = "exact" | "edited" | "cleared";
 export type DismissReason = "typed_over" | "new_turn" | "other";
@@ -42,7 +46,8 @@ export interface ShownSuggestionMeta {
 
 export interface SuggestionOutcomeRecord extends ShownSuggestionMeta {
 	readonly schemaVersion: typeof SUGGESTION_OUTCOME_SCHEMA_VERSION;
-	readonly sessionId: string;
+	/** sha256(salt + sessionId), hex, first 16 chars. The raw session id is never written. */
+	readonly sessionHash: string;
 	readonly outcome: "accepted" | "dismissed";
 	readonly decidedAtEpochMs: number;
 	readonly msToAccept?: number;
@@ -92,9 +97,9 @@ interface Pending {
 /** State machine: shown → (accepted → sent/cleared) | dismissed. Exactly one record per shown suggestion. */
 export class SuggestionAcceptTracker {
 	private pending: Pending | undefined;
-	private readonly write: (record: Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionId">) => void;
+	private readonly write: (record: Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionHash">) => void;
 
-	constructor(write: (record: Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionId">) => void) {
+	constructor(write: (record: Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionHash">) => void) {
 		this.write = write;
 	}
 
@@ -157,6 +162,31 @@ export class SuggestionAcceptTracker {
 	}
 }
 
+/** Read the install's 32-byte salt, creating it once (0600) when missing. */
+export function sessionHashSalt(agentDir: string = getAgentDir()): Buffer {
+	const file = join(agentDir, SESSION_SALT_FILE);
+	const existing = fs.readFileSync(file, { flag: "r" }).subarray(0, 32);
+	return existing;
+}
+
+function readOrCreateSalt(agentDir: string): Buffer {
+	try {
+		return sessionHashSalt(agentDir);
+	} catch {
+		fs.mkdirSync(agentDir, { recursive: true, mode: 0o700 });
+		try {
+			fs.writeFileSync(join(agentDir, SESSION_SALT_FILE), randomBytes(32), { flag: "wx", mode: 0o600 });
+		} catch {
+			// Lost a creation race (EEXIST): read the winner's salt below.
+		}
+		return sessionHashSalt(agentDir);
+	}
+}
+
+export function sessionHash(salt: Buffer, sessionId: string): string {
+	return createHash("sha256").update(salt).update(sessionId, "utf8").digest("hex").slice(0, 16);
+}
+
 const DISABLED = new Set(["0", "false", "off", "disable", "disabled"]);
 
 /** Tracker writing to `<metrics dir>/suggestion-outcomes.jsonl`; `undefined` when flag off or metrics opted out. */
@@ -164,14 +194,19 @@ export function suggestionAcceptTracker(
 	sessionId: () => string,
 	cwd: string,
 	env: NodeJS.ProcessEnv = process.env,
+	agentDir?: string,
 ): SuggestionAcceptTracker | undefined {
 	if (!isAcceptTraceEnabled(env)) return undefined;
 	const metrics = env.OMK_TURN_METRICS;
 	if (metrics !== undefined && DISABLED.has(metrics.trim().toLowerCase())) return undefined;
 	const file = join(env.OMK_TURN_METRICS_DIR ?? join(cwd, ".omk", "metrics"), SUGGESTION_OUTCOMES_FILE);
+	let salt: Buffer | undefined;
 	return new SuggestionAcceptTracker((record) => {
 		try {
-			const line = `${JSON.stringify({ schemaVersion: SUGGESTION_OUTCOME_SCHEMA_VERSION, sessionId: sessionId(), ...record })}\n`;
+			salt ??= readOrCreateSalt(agentDir ?? getAgentDir());
+			if (salt.length !== 32) return;
+			const hash = sessionHash(salt, sessionId());
+			const line = `${JSON.stringify({ schemaVersion: SUGGESTION_OUTCOME_SCHEMA_VERSION, sessionHash: hash, ...record })}\n`;
 			fs.mkdirSync(join(file, ".."), { recursive: true });
 			if ((fs.statSync(file, { throwIfNoEntry: false })?.size ?? 0) + line.length > MAX_FILE_BYTES) return;
 			fs.appendFileSync(file, line, "utf8");

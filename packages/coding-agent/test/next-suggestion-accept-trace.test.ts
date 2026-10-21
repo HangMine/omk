@@ -1,16 +1,19 @@
 /** Next-suggestion accept trace (`OMK_NEXT_SUGGESTIONS_ACCEPT_TRACE`, default off). */
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	dismissReasonForKey,
 	EDIT_RATIO_BUCKETS,
 	editDistance,
 	editRatioBucket,
 	isAcceptTraceEnabled,
+	SESSION_SALT_FILE,
 	type ShownSuggestionMeta,
 	SuggestionAcceptTracker,
 	type SuggestionOutcomeRecord,
+	sessionHash,
 	suggestionAcceptTracker,
 } from "../src/core/next-suggestion-accept-trace.ts";
 import { runAcceptScenario, SENT, SUGGESTION } from "./fixtures/accept-trace/scenario.ts";
@@ -20,7 +23,7 @@ const TRACE_ON = { ...SUGGEST_ON, OMK_NEXT_SUGGESTIONS_ACCEPT_TRACE: "1" };
 const T0 = 1_800_000_000_000;
 const ALLOWED_KEYS = new Set([
 	"schemaVersion",
-	"sessionId",
+	"sessionHash",
 	"parentTurnIndex",
 	"provider",
 	"model",
@@ -35,8 +38,18 @@ const ALLOWED_KEYS = new Set([
 	"dismissReason",
 ]);
 
+const SESSION_ID = "raw-session-id-7f3a9c";
+let home: string;
+beforeEach(() => {
+	// Temp HOME: the salt lands under <HOME>/.omk/agent, never the real one.
+	home = mkdtempSync(join(tmpdir(), "omk-accept-home-"));
+	vi.stubEnv("HOME", home);
+	vi.stubEnv("OMK_CODING_AGENT_DIR", "");
+});
 afterEach(() => {
 	vi.useRealTimers();
+	vi.unstubAllEnvs();
+	rmSync(home, { recursive: true, force: true });
 });
 
 function fakeDate() {
@@ -54,7 +67,7 @@ const meta: ShownSuggestionMeta = {
 };
 
 function tracker() {
-	const records: Array<Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionId">> = [];
+	const records: Array<Omit<SuggestionOutcomeRecord, "schemaVersion" | "sessionHash">> = [];
 	return { t: new SuggestionAcceptTracker((r) => records.push(r)), records };
 }
 
@@ -123,6 +136,22 @@ describe("accept trace: tracker state machine", () => {
 		expect(records.map((r) => r.dismissReason ?? r.sentAs)).toEqual(["typed_over", "new_turn", "other", "exact"]);
 	});
 
+	it("salt is created once per install and reused; hash is sha256(salt + id) truncated to 16 hex", () => {
+		const dir = join(home, "agent");
+		const write = (id: string) => {
+			const t = suggestionAcceptTracker(() => id, "/nonexistent", { ...TRACE_ON, OMK_TURN_METRICS_DIR: home }, dir)!;
+			t.shown(meta, "x");
+			t.flush(1);
+		};
+		write("a");
+		const salt = readFileSync(join(dir, SESSION_SALT_FILE));
+		write("b");
+		expect(readFileSync(join(dir, SESSION_SALT_FILE)).equals(salt)).toBe(true);
+		const lines = parse(readFileSync(join(home, "suggestion-outcomes.jsonl"), "utf8"));
+		expect(lines.map((r) => r.sessionHash)).toEqual([sessionHash(salt, "a"), sessionHash(salt, "b")]);
+		expect(sessionHash(salt, "a")).not.toBe(sessionHash(Buffer.alloc(32), "a"));
+	});
+
 	it("edit distance and buckets", () => {
 		expect(editDistance("kitten", "sitting")).toBe(3);
 		expect(editRatioBucket("abc", "abc")).toBe("0");
@@ -139,7 +168,7 @@ describe("accept trace: controller wiring", () => {
 		);
 		fakeDate();
 		const off = await runAcceptScenario(SUGGEST_ON, (dir) => ({
-			acceptTrace: suggestionAcceptTracker(() => "golden", "/nonexistent", {
+			acceptTrace: suggestionAcceptTracker(() => SESSION_ID, "/nonexistent", {
 				...SUGGEST_ON,
 				OMK_TURN_METRICS_DIR: dir,
 			}),
@@ -154,7 +183,7 @@ describe("accept trace: controller wiring", () => {
 		);
 		fakeDate();
 		const on = await runAcceptScenario(SUGGEST_ON, (dir) => ({
-			acceptTrace: suggestionAcceptTracker(() => "golden", "/nonexistent", {
+			acceptTrace: suggestionAcceptTracker(() => SESSION_ID, "/nonexistent", {
 				...TRACE_ON,
 				OMK_TURN_METRICS_DIR: dir,
 			}),
@@ -176,6 +205,15 @@ describe("accept trace: controller wiring", () => {
 				true,
 			);
 		}
+		// Salted session hash: per-install 32-byte 0600 salt; raw session id never written.
+		const saltFile = join(home, ".omk", "agent", SESSION_SALT_FILE);
+		const salt = readFileSync(saltFile);
+		expect(salt).toHaveLength(32);
+		expect(statSync(saltFile).mode & 0o777).toBe(0o600);
+		for (const r of records) expect(r.sessionHash).toBe(sessionHash(salt, SESSION_ID));
+		expect(records[0]!.sessionHash).toMatch(/^[0-9a-f]{16}$/);
+		expect(on.outcomes).not.toContain(SESSION_ID);
+		expect(on.outcomes).not.toContain(salt.toString("hex"));
 		// No suggestion or prompt text, nor any fragment of it.
 		for (const secret of [SUGGESTION, SENT, "SECRET", "parser", "first"]) expect(on.outcomes).not.toContain(secret);
 	});
