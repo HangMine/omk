@@ -11,6 +11,7 @@ import {
 	TURN_METRICS_SCHEMA_VERSION,
 	type TurnMetricInput,
 	TurnMetricsSink,
+	turnUsageMetricFromUsage,
 } from "../src/core/turn-metrics.ts";
 
 let dir: string;
@@ -166,6 +167,42 @@ describe("turn metrics summary", () => {
 		expect(summary.cacheReadShare).toBeCloseTo(0.989, 12);
 	});
 
+	it("records an unreported cacheWrite as unknown and excludes it from cache share", () => {
+		const metric = turnUsageMetricFromUsage({
+			input: 200,
+			output: 1,
+			cacheRead: 800,
+			cacheWrite: 0,
+			cacheWriteUnknown: true,
+			cost: { total: 0 },
+		});
+		expect(metric.cacheWrite).toBeUndefined();
+		const summary = summarizeTurnMetrics(
+			lines([
+				turn({ turnIndex: 0, usage: { input: 100, output: 1, cacheRead: 800, cacheWrite: 100, costUsd: 0 } }),
+				turn({ turnIndex: 1, usage: metric }),
+			]),
+		);
+		expect(summary.usageCoverage.turnsMissingCacheWrite).toBe(1);
+		expect(summary.cacheReadShare).toBe(0.8);
+		expect(summary.totals.cacheWrite).toBe(100);
+		expect(renderStatsReport(summary, "/tmp/turns.jsonl").join("\n")).toContain("1 missing cacheWrite");
+	});
+
+	it("keeps a reported cacheWrite of 0 as covered", () => {
+		const metric = turnUsageMetricFromUsage({
+			input: 200,
+			output: 1,
+			cacheRead: 800,
+			cacheWrite: 0,
+			cost: { total: 0 },
+		});
+		expect(metric.cacheWrite).toBe(0);
+		const summary = summarizeTurnMetrics(lines([turn({ usage: metric })]));
+		expect(summary.usageCoverage.turnsMissingCacheWrite).toBe(0);
+		expect(summary.cacheReadShare).toBe(0.8);
+	});
+
 	it("separates estimated and billed cost and reports usage coverage", () => {
 		const summary = summarizeTurnMetrics(
 			lines([
@@ -181,7 +218,12 @@ describe("turn metrics summary", () => {
 		expect(summary.totalCostUsd).toBeCloseTo(0.7, 12);
 		expect(summary.billedCostUsd).toBeCloseTo(0.3, 12);
 		expect(summary.billedTurns).toBe(1);
-		expect(summary.usageCoverage).toEqual({ turnsWithUsage: 2, turnsMissingUsage: 1, unverifiedProviders: ["xai"] });
+		expect(summary.usageCoverage).toEqual({
+			turnsWithUsage: 2,
+			turnsMissingUsage: 1,
+			turnsMissingCacheWrite: 0,
+			unverifiedProviders: ["xai"],
+		});
 		const report = renderStatsReport(summary, "/tmp/turns.jsonl").join("\n");
 		expect(report).toContain("estimated $0.7000 (price table)");
 		expect(report).toContain("billed $0.3000 (provider-reported, 1 turn(s))");

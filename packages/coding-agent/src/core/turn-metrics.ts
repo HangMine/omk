@@ -122,6 +122,8 @@ export interface ToolAggregate {
 export interface UsageCoverage {
 	readonly turnsWithUsage: number;
 	readonly turnsMissingUsage: number;
+	/** Turns with usage whose provider did not report cache writes; excluded from cache share. */
+	readonly turnsMissingCacheWrite: number;
 	/** Providers with usage whose `input` semantics were not verified (shown as 미검증). */
 	readonly unverifiedProviders: readonly string[];
 }
@@ -187,6 +189,9 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 	let billedCostUsd = 0;
 	let billedTurns = 0;
 	let turnsMissingUsage = 0;
+	let turnsMissingCacheWrite = 0;
+	// Cache share is computed over covered usage only: turns whose cache writes are known.
+	const covered = { input: 0, cacheRead: 0, cacheWrite: 0 };
 	const unverifiedProviders = new Set<string>();
 
 	for (const record of records) {
@@ -196,7 +201,14 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 			totals.input += record.usage.input;
 			totals.output += record.usage.output;
 			totals.cacheRead += record.usage.cacheRead;
-			totals.cacheWrite += record.usage.cacheWrite;
+			if (record.usage.cacheWrite === undefined) {
+				turnsMissingCacheWrite++;
+			} else {
+				totals.cacheWrite += record.usage.cacheWrite;
+				covered.input += record.usage.input;
+				covered.cacheRead += record.usage.cacheRead;
+				covered.cacheWrite += record.usage.cacheWrite;
+			}
 			totals.costUsd += record.usage.costUsd;
 			if (record.usage.billedUsd !== undefined) {
 				billedCostUsd += record.usage.billedUsd;
@@ -259,14 +271,17 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		usageCoverage: {
 			turnsWithUsage: records.length - turnsMissingUsage,
 			turnsMissingUsage,
+			turnsMissingCacheWrite,
 			unverifiedProviders: [...unverifiedProviders].sort(),
 		},
 		totals,
 		turnDurationP50Ms: percentile(turnDurations, 0.5),
 		turnDurationP95Ms: percentile(turnDurations, 0.95),
 		timeToFirstChunkP50Ms: firstChunkTimes.length > 0 ? percentile(firstChunkTimes, 0.5) : undefined,
-		// Shared helper: cacheRead / (input + cacheRead + cacheWrite) over token sums.
-		cacheReadShare: cumulativeCacheReadShare([totals]) ?? 0,
+		// Shared helper: cacheRead / (input + cacheRead + cacheWrite) over token sums of
+		// covered turns only; turns with unknown cache writes are counted in
+		// usageCoverage.turnsMissingCacheWrite instead of being treated as 0.
+		cacheReadShare: cumulativeCacheReadShare([covered]) ?? 0,
 		compactions,
 		failovers,
 		contextCachePlanHitRate: planObservations === 0 ? undefined : planHits / planObservations,

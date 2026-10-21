@@ -100,9 +100,15 @@ describe("cache read share", () => {
 		expect(uncachedInputFromInclusiveTotal(1000, 800, 100)).toBe(100);
 	});
 
-	it("falls back to cacheWrite 0 when OpenAI omits cache_write_tokens", async () => {
+	it("marks cacheWrite unknown (not 0) when OpenAI omits cache_write_tokens", async () => {
 		const usage = await completedUsage({ cached_tokens: 800 });
+		expect(usage).toMatchObject({ input: 200, cacheRead: 800, cacheWriteUnknown: true });
+	});
+
+	it("keeps a reported cache_write_tokens of 0 as a known 0", async () => {
+		const usage = await completedUsage({ cached_tokens: 800, cache_write_tokens: 0 });
 		expect(usage).toMatchObject({ input: 200, cacheRead: 800, cacheWrite: 0 });
+		expect(usage.cacheWriteUnknown).toBeUndefined();
 	});
 
 	it("marks providers whose input semantics were not verified", () => {

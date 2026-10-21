@@ -21,7 +21,8 @@ export interface TurnUsageMetric {
 	readonly input: number;
 	readonly output: number;
 	readonly cacheRead: number;
-	readonly cacheWrite: number;
+	/** Omitted when the provider did not report cache writes (unknown, not 0). */
+	readonly cacheWrite?: number;
 	/** Catalog-price estimate (`UsageCost.total`). */
 	readonly costUsd: number;
 	/** Provider-reported billed amount (`UsageCost.billed`), only when the provider returns one. */
@@ -33,13 +34,14 @@ export function turnUsageMetricFromUsage(usage: {
 	readonly output: number;
 	readonly cacheRead: number;
 	readonly cacheWrite: number;
+	readonly cacheWriteUnknown?: true;
 	readonly cost: { readonly total: number; readonly billed?: number };
 }): TurnUsageMetric {
 	return {
 		input: usage.input,
 		output: usage.output,
 		cacheRead: usage.cacheRead,
-		cacheWrite: usage.cacheWrite,
+		...(usage.cacheWriteUnknown ? {} : { cacheWrite: usage.cacheWrite }),
 		costUsd: usage.cost.total,
 		...(usage.cost.billed === undefined ? {} : { billedUsd: usage.cost.billed }),
 	};
@@ -157,7 +159,7 @@ function project(value: unknown, source: "input" | "v1" | "v2"): TurnMetricRecor
 						input: quantity(usage.input, true),
 						output: quantity(usage.output, true),
 						cacheRead: quantity(usage.cacheRead, true),
-						cacheWrite: quantity(usage.cacheWrite, true),
+						...(usage.cacheWrite === undefined ? {} : { cacheWrite: quantity(usage.cacheWrite, true) }),
 						costUsd: quantity(usage.costUsd),
 						...(usage.billedUsd === undefined ? {} : { billedUsd: quantity(usage.billedUsd) }),
 					},
