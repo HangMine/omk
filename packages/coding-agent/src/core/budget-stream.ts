@@ -3,6 +3,7 @@ import { linkAbortSignals } from "./abort-link.ts";
 import { timingEnd, timingMark } from "./debug-timing.ts";
 import { requestAdmissionPolicyFromEnv } from "./request-admission-policy.ts";
 import { createRequestAdmissionGuard, type RequestAdmissionGuard } from "./request-context-admission.ts";
+import { requestPurposeOf } from "./request-purpose.ts";
 import { requestTraceFromEnv } from "./request-trace.ts";
 import { dispatchFingerprints } from "./request-trace-metadata.ts";
 import type { RunBudget } from "./run-budget.ts";
@@ -29,7 +30,9 @@ export function wrapBudgetStream(
 		const link = options?.signal ? linkAbortSignals(options.signal, budget.signal) : undefined;
 		const pendingCause = prefixCauses?.take(context.systemPrompt);
 		try {
+			const purpose = requestPurposeOf(options);
 			traceId = trace?.begin(model.provider, model.id, {
+				...(purpose ? { purpose } : {}),
 				cacheScope: options?.cacheRetention,
 				...(trace?.salt ? { fingerprints: dispatchFingerprints(trace.salt, context) } : {}),
 				prefixCause: pendingCause?.cause,
