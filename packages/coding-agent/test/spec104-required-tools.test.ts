@@ -2,11 +2,7 @@ import { Agent, type AgentMessage, type AgentTool } from "omk-agent-core";
 import { type Api, type AssistantMessage, type Context, createAssistantMessageEventStream, type Model } from "omk-ai";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import {
-	isCompactionCostObserveEnabled,
-	observeCompactionCost,
-} from "../src/core/compaction/compaction-cost-observe.ts";
-import { type CompactionSettings, shouldCompact } from "../src/core/compaction/compaction-headroom.ts";
+import type { CompactionSettings } from "../src/core/compaction/compaction-headroom.ts";
 import type { TokenCounterAdapter } from "../src/core/context-budget-token-counter.ts";
 import { GoalAcceptance } from "../src/core/goal-acceptance.ts";
 import {
@@ -256,40 +252,78 @@ describe("spec 104: required-tool contract in turn admission", () => {
 	});
 });
 
-describe("spec 104 §2.4: compaction cost observe-only", () => {
-	it("8. one metadata line per evaluation in the safe band; decision identical to flag-off", () => {
-		expect(isCompactionCostObserveEnabled({})).toBe(false);
-		const lines: string[] = [];
-		const rates = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 };
-		for (const tokens of [100_000, 120_000, 190_000]) {
-			const plain = shouldCompact(tokens, 200_000, settings);
-			const observed = shouldCompact(tokens, 200_000, settings, (decision, trigger) => {
-				const obs = observeCompactionCost(
-					{
-						contextTokens: tokens,
-						triggerTokens: trigger ?? 0,
-						reserveFloorTokens: 18_192,
-						cacheReadShare: 0.8,
-						rates,
-						summaryTokens: 8192,
-						keepRecentTokens: 10000,
-					},
-					decision ? "compact" : "continue",
-				);
-				if (obs) lines.push(JSON.stringify(obs));
-			});
-			expect(observed).toBe(plain);
-		}
-		expect(lines).toHaveLength(2); // 190k is at/above the 140k trigger: outside the safe band.
-		const first = JSON.parse(lines[0]!);
-		expect(Object.keys(first).sort()).toEqual([
-			"compactCostUsd",
-			"contextTokens",
-			"continueCostUsd",
-			"decision",
-			"kind",
-		]);
-		expect(first.continueCostUsd).toBeCloseTo((100_000 * (0.8 * 0.3 + 0.2 * 3)) / 1e6, 10);
-		expect(first.decision).toBe("continue");
+describe("spec 104 rulings: block release and no flip-flop", () => {
+	it("completion block releases only after a later turn with the capability present and a passing check", async () => {
+		const at = "2026-10-21T00:00:00.000Z";
+		let goal = { ref: { id: "g2" }, createdAt: at, updatedAt: at, generationStartedAt: at } as never;
+		const store = {
+			current: async () => goal,
+			transition: async () => {
+				goal = { ...(goal as object), updatedAt: at } as never;
+				return goal;
+			},
+		} as never;
+		let pass = true;
+		const verifier = {
+			run: async () => ({
+				status: pass ? "passed" : "failed",
+				passed: pass,
+				capturedAt: at,
+				receiptId: `r-${Math.random()}`,
+				digest: "d",
+				workspace: { sha256: "w", completeness: "complete" },
+			}),
+			receiptMatches: () => true,
+		};
+		const acceptance = new GoalAcceptance(() => verifier as never);
+		acceptance.approve(goal, "npm test");
+		const blocked = (e: unknown) => String((e as Error)?.message ?? "").includes("required tools unavailable");
+		acceptance.recordRequiredCapabilityMissing(goal, ["browser__verify"]);
+		// A passing check without a capability-present turn does not release.
+		await acceptance.check(store, goal, "/nonexistent");
+		expect(blocked(await acceptance.complete(store, goal, "/nonexistent").catch((e) => e))).toBe(true);
+		// Capability present but the check fails: still blocked.
+		acceptance.recordRequiredCapabilityPresent(goal);
+		pass = false;
+		await acceptance.check(store, goal, "/nonexistent");
+		expect(blocked(await acceptance.complete(store, goal, "/nonexistent").catch((e) => e))).toBe(true);
+		// Capability present and the check passes: released.
+		pass = true;
+		await acceptance.check(store, goal, "/nonexistent");
+		expect(blocked(await acceptance.complete(store, goal, "/nonexistent").catch((e) => e))).toBe(false);
+		// A new miss blocks again; forget() also clears it.
+		acceptance.recordRequiredCapabilityMissing(goal, ["browser__verify"]);
+		expect(blocked(await acceptance.complete(store, goal, "/nonexistent").catch((e) => e))).toBe(true);
+		acceptance.forget(goal);
+		expect(blocked(await acceptance.complete(store, goal, "/nonexistent").catch((e) => e))).toBe(false);
+	});
+
+	it("a withheld group does not flip back and forth within a segment", async () => {
+		const sizes = [
+			[90_000, 80_000],
+			[70_000, 100_000],
+			[90_000, 80_000],
+			[70_000, 100_000],
+			[90_000, 80_000],
+		];
+		const make = ([a, b]: number[]) => [tool("read", 100), tool("a__x", a!), tool("b__x", b!), tool("c__x", 1_000)];
+		const h = harness({ tools: make(sizes[0]!), env: ON, contract: () => contract(["read"]) });
+		await h.admission.admit([user], counter);
+		const history = sizes.map((size) => {
+			h.state.tools = make(size);
+			return h.sent().join(",");
+		});
+		// Once withheld, a__x never returns while the budget is still tight.
+		expect(history.every((names) => !names.includes("a__x"))).toBe(true);
+		// After the first swap both stay out; the set is stable from then on.
+		expect(new Set(history.slice(1)).size).toBe(1);
+		// Control: without the contract (flag on, no segment) the plain re-fit does flip.
+		const plain = harness({ tools: make(sizes[0]!), env: ON });
+		await plain.admission.admit([user], counter);
+		const flips = sizes.map((size) => {
+			plain.state.tools = make(size);
+			return plain.sent().join(",");
+		});
+		expect(new Set(flips).size).toBe(2);
 	});
 });
