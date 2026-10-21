@@ -15,7 +15,7 @@ One record per suggestion actually shown, in `.omk/metrics/suggestion-outcomes.j
 - `sentAs`: `exact | edited | cleared | abandoned`
   - `cleared`: accepted, then the editor was emptied.
   - `abandoned`: accepted, never sent (session ended or replaced by the next suggestion).
-- `sentVia`: `prompt | steer | followUp`, taken from the actual dispatch branch (`_queueSteer`, `_queueFollowUp`, `deferPrompt`), not from message order. A command handled by an extension or input hook is not a send and writes no record.
+- `sentVia`: `prompt | steer | followUp`, taken from the actual dispatch branch (`_queueSteer`, `_queueFollowUp`, `deferPrompt`), not from message order. A message deferred during preflight is recorded once, at the moment it is deferred, with the requested value (`steer` or `followUp`), and is not recorded again when it later runs. A command handled by an extension or input hook is not a send and writes no record.
 - Edit-distance ratio bucket: `0, <=0.1, <=0.3, <=0.6, >0.6`
 - Dismiss reason when not accepted: `typed_over | new_turn | other`
 - Timestamps: `settled, quotaChecked, shown, decided`
