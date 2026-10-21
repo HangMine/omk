@@ -90,26 +90,35 @@ export interface PendingPrefixBoundaryCause {
 	readonly shadowCause?: "suffix_changed" | "bypass_surrogate";
 }
 
-let pending: { readonly systemPrompt: string; readonly value: PendingPrefixBoundaryCause } | undefined;
+/** Session-scoped handoff: each AgentSession owns one and passes it to its stream wrapper. */
+export class PrefixBoundaryCauseHolder {
+	private pending: { readonly systemPrompt: string; readonly value: PendingPrefixBoundaryCause } | undefined;
 
-export function recordPrefixBoundaryCause(systemPrompt: string, value: PendingPrefixBoundaryCause | undefined): void {
-	pending = value === undefined ? undefined : { systemPrompt, value };
-}
+	record(systemPrompt: string, value: PendingPrefixBoundaryCause | undefined): void {
+		this.pending = value === undefined ? undefined : { systemPrompt, value };
+	}
 
-export function takePrefixBoundaryCause(systemPrompt: string | undefined): PendingPrefixBoundaryCause | undefined {
-	if (pending === undefined || systemPrompt !== pending.systemPrompt) return undefined;
-	const { value } = pending;
-	pending = undefined;
-	return value;
+	/** Resolve the session's extension override and record its cause for the request trace. */
+	resolve(plan: SystemPromptCachePlan, systemPrompt: string): SystemPromptCacheState {
+		return resolveAndRecordSystemPromptCache(plan, systemPrompt, this);
+	}
+
+	take(systemPrompt: string | undefined): PendingPrefixBoundaryCause | undefined {
+		const pending = this.pending;
+		if (pending === undefined || systemPrompt !== pending.systemPrompt) return undefined;
+		this.pending = undefined;
+		return pending.value;
+	}
 }
 
 /** Resolve for the session's extension override and record the cause for the request trace. */
 export function resolveAndRecordSystemPromptCache(
 	plan: SystemPromptCachePlan,
 	systemPrompt: string,
+	causes: PrefixBoundaryCauseHolder,
 ): SystemPromptCacheState {
 	const cache = resolveExtendedSystemPromptCache(plan, systemPrompt);
-	recordPrefixBoundaryCause(
+	causes.record(
 		systemPrompt,
 		cache.cause === undefined ? undefined : { cause: cache.cause, shadowCause: cache.shadowCause },
 	);

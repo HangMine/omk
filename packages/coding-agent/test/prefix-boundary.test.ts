@@ -13,11 +13,10 @@ import { describe, expect, it } from "vitest";
 import { boundaryChangeReason } from "../src/core/request-trace-metadata.ts";
 import {
 	isPrefixBoundaryEnabled,
-	recordPrefixBoundaryCause,
+	PrefixBoundaryCauseHolder,
 	resolveExtendedSystemPromptCache,
 	type SystemPromptCachePlan,
 	type SystemPromptCacheState,
-	takePrefixBoundaryCause,
 } from "../src/core/system-prompt-cache-boundary.ts";
 
 /** Verbatim copy of the resolver body on `main` a3f7a3a1ac (spec 052), the flag-off reference. */
@@ -185,13 +184,43 @@ describe("spec 102 resolver", () => {
 	});
 
 	it("hands the cause to the trace once, for the exact prompt only", () => {
-		recordPrefixBoundaryCause("prompt-1", { cause: "suffix_changed" });
-		expect(takePrefixBoundaryCause("prompt-2")).toBeUndefined();
-		expect(takePrefixBoundaryCause("prompt-1")).toEqual({ cause: "suffix_changed" });
-		expect(takePrefixBoundaryCause("prompt-1")).toBeUndefined();
-		recordPrefixBoundaryCause("prompt-1", { cause: "flag_off" });
-		recordPrefixBoundaryCause("prompt-1", undefined);
-		expect(takePrefixBoundaryCause("prompt-1")).toBeUndefined();
+		const causes = new PrefixBoundaryCauseHolder();
+		causes.record("prompt-1", { cause: "suffix_changed" });
+		expect(causes.take("prompt-2")).toBeUndefined();
+		expect(causes.take("prompt-1")).toEqual({ cause: "suffix_changed" });
+		expect(causes.take("prompt-1")).toBeUndefined();
+		causes.record("prompt-1", { cause: "flag_off" });
+		causes.record("prompt-1", undefined);
+		expect(causes.take("prompt-1")).toBeUndefined();
+	});
+
+	it("keeps causes per session when two sessions share the same prompt", () => {
+		const prompt = `${STABLE}${TAIL_B}`;
+		const on = { cause: "suffix_changed" } as const;
+		const off = { cause: "flag_off", shadowCause: "suffix_changed" } as const;
+		const orders: Array<Array<"recA" | "recB" | "takeA" | "takeB">> = [
+			["recA", "recB", "takeA", "takeB"],
+			["recA", "recB", "takeB", "takeA"],
+			["recB", "recA", "takeA", "takeB"],
+			["recA", "takeA", "recB", "takeB"],
+			["recB", "takeB", "recA", "takeA"],
+			["recA", "recB", "takeB", "recA", "takeA", "takeA"],
+		];
+		for (const order of orders) {
+			const a = new PrefixBoundaryCauseHolder();
+			const b = new PrefixBoundaryCauseHolder();
+			const taken: { A: unknown[]; B: unknown[] } = { A: [], B: [] };
+			for (const step of order) {
+				if (step === "recA") a.record(prompt, on);
+				else if (step === "recB") b.record(prompt, off);
+				else if (step === "takeA") taken.A.push(a.take(prompt));
+				else taken.B.push(b.take(prompt));
+			}
+			expect(taken.A[0], order.join(",")).toEqual(on);
+			expect(taken.B[0], order.join(",")).toEqual(off);
+			// a second read of the same session never sees the other session's cause
+			for (const extra of taken.A.slice(1)) expect(extra).toBeUndefined();
+		}
 	});
 
 	it("gives the off arm the flag-on cause as a shadow", () => {

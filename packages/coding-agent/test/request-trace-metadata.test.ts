@@ -15,7 +15,7 @@ import {
 import { RunBudget } from "../src/core/run-budget.ts";
 import {
 	type PendingPrefixBoundaryCause,
-	recordPrefixBoundaryCause,
+	PrefixBoundaryCauseHolder,
 } from "../src/core/system-prompt-cache-boundary.ts";
 
 const SECRET_PROMPT = "SYSTEM-PROMPT-CANARY-7f3a do not leak";
@@ -132,10 +132,11 @@ describe("request trace metadata (spec 101)", () => {
 		const streams = sends.map(() => createAssistantMessageEventStream());
 		let call = 0;
 		const source: StreamFn = () => streams[call++];
+		const causes = new PrefixBoundaryCauseHolder();
 		try {
-			const wrapped = wrapBudgetStream(source, budget);
+			const wrapped = wrapBudgetStream(source, budget, undefined, causes);
 			for (const [i, [systemPrompt, cause]] of sends.entries()) {
-				if (cause) recordPrefixBoundaryCause(systemPrompt, cause);
+				if (cause) causes.record(systemPrompt, cause);
 				await wrapped(faux.getModel(), { ...context(), systemPrompt }, {});
 				streams[i].end(fauxAssistantMessage("done"));
 				await flush();
@@ -185,10 +186,11 @@ describe("request trace metadata (spec 101)", () => {
 			const streams = sends.map(() => createAssistantMessageEventStream());
 			let call = 0;
 			const source: StreamFn = () => streams[call++];
+			const causes = new PrefixBoundaryCauseHolder();
 			try {
-				const wrapped = wrapBudgetStream(source, budget);
+				const wrapped = wrapBudgetStream(source, budget, undefined, causes);
 				for (const [i, [systemPrompt, pending]] of sends.entries()) {
-					if (pending) recordPrefixBoundaryCause(systemPrompt, pending);
+					if (pending) causes.record(systemPrompt, pending);
 					await wrapped(faux.getModel(), { ...context(), systemPrompt }, {});
 					streams[i].end(fauxAssistantMessage("done"));
 					await flush();

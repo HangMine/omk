@@ -297,7 +297,7 @@ import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPromptPlan } from "./system-prompt.ts";
-import { resolveAndRecordSystemPromptCache } from "./system-prompt-cache-boundary.ts";
+import { PrefixBoundaryCauseHolder } from "./system-prompt-cache-boundary.ts";
 import * as taskResultWiring from "./task-result-collector.ts";
 import { todoControlState } from "./todo-runtime-state.ts";
 import { mcpToolGroup } from "./tool-schema-budget.ts";
@@ -757,6 +757,7 @@ export class AgentSession {
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
 		this._runBudget = new SessionRunBudget(this.agent, {
+			prefixCauses: new PrefixBoundaryCauseHolder(),
 			assertIdle: () => {
 				this._promptLifecycle.assertIdle();
 				if (this.isRetrying || this.isCompacting || this._branchSummaryAbortController)
@@ -2666,7 +2667,7 @@ export class AgentSession {
 			// Apply extension-modified system prompt, or reset to the turn plan.
 			if (result?.systemPrompt) {
 				// Spec 052/102: appended text (or, with OMK_PREFIX_BOUNDARY, a changed tail) keeps the boundary.
-				const cache = resolveAndRecordSystemPromptCache(turnSystemPrompt, result.systemPrompt);
+				const cache = this._runBudget.prefixCauses.resolve(turnSystemPrompt, result.systemPrompt);
 				this.agent.state.systemPrompt = result.systemPrompt;
 				this.agent.state.systemPromptCacheBoundary = cache.cacheBoundary;
 				this.agent.state.systemPromptCacheBoundaryBypass = cache.bypass;
