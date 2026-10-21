@@ -22,9 +22,12 @@ Add to suggestion records only (all optional; legacy readers ignore them; schema
 | `capsApplied` | `true` | present on every caps-on suggestion record (request or skip); defines the denominator |
 | `reasoningCapped` | `boolean` | `true` iff `cappedSuggestionOptions` returned a lower level than the recorded one |
 | `suggestionSkip` | `SuggestionSkipReason` (closed enum, validated by `member`) | set on a **skip record**: a record with no `usage`, `durationMs: 0`, written for every caps-on plan skip, incl. `over_cost_cap` |
+| `estimatedCostUsd` | `number` (≥ 0, `quantity`) | `over_cost_cap` skip records only: the pre-flight upper-bound estimate from `estimateSuggestionCostUsd` |
+| `maxCostUsd` | `number` (> 0, `quantity`) | `over_cost_cap` skip records only: the cost cap value that applied (default or env override) |
 
 - Deadline hit: reuse `suggestionOutcome: "timeout"` (no new field).
-- Cost cap hit: `suggestionSkip: "over_cost_cap"`. The pre-flight estimate itself is **not** stored (it is an upper-bound guess; Tech Lead can request it later as a number-only field).
+- Cost cap hit: `suggestionSkip: "over_cost_cap"`, with `estimatedCostUsd` and `maxCostUsd` stored as numbers only (lets the analysis see how far over the cap skipped requests were).
+- **Flag scope:** skip records and every new field (`capsApplied`, `reasoningCapped`, `suggestionSkip`, `estimatedCostUsd`, `maxCostUsd`) are written **only** when `OMK_NEXT_SUGGESTIONS_CAPS` is on. With the flag off, trace/metrics output (`turns.jsonl` lines and summary) must be **byte-identical to `main`** (`a0d6bfc9c0`).
 - Skip records are excluded from `missingUsage` (they made no request), from `turns`, duration percentiles and main-turn coverage (same as spec 103 suggestion records).
 - Summary: extend `summarizeByPurpose` suggestion bucket with `capHits { deadline, cost, reasoning, total }` and `capsEligible` (= caps-on records, requests + skips). `total` = records with ≥1 cap hit (a record counts once even if reasoning was capped and it then timed out); per-cap counts may therefore sum to more than `total`.
 
@@ -32,9 +35,9 @@ Add to suggestion records only (all optional; legacy readers ignore them; schema
 Trace stores **0 bytes of raw text**: only enums, booleans and numbers. No prompt, context, suggestion text, model output, or error message. Test asserts every new field is enum/boolean/number and that a skip record's serialized keys ⊆ the allowed key list.
 
 ## 3. Deterministic tests (faux provider, fake clock, no network)
-1. Caps off: suggestion records and request bytes identical to `a0d6bfc9c0`; no new fields; no skip records.
+1. Caps off (required): for the same faux session, the `turns.jsonl` bytes and summary output are byte-identical to `main` `a0d6bfc9c0` (golden fixture compare), request bytes identical, no new fields, no skip records — including when a plan would have skipped `over_cost_cap` under caps on.
 2. Caps on, deadline fires ⇒ one record, `timeout`, `capsApplied`, `capHits.deadline = 1`, `total = 1`.
-3. Caps on, estimate > `maxCostUsd` ⇒ zero provider calls, one skip record `over_cost_cap`, `capHits.cost = 1`.
+3. Caps on, estimate > `maxCostUsd` ⇒ zero provider calls, one skip record `over_cost_cap` with numeric `estimatedCostUsd` > numeric `maxCostUsd` (the applied cap, incl. env override), `capHits.cost = 1`.
 4. Caps on, `MAX_REASONING=low` with main `high` ⇒ `reasoningCapped: true`; with `inherit` ⇒ `false`.
 5. Reasoning capped + timeout ⇒ `deadline = 1`, `reasoning = 1`, `total = 1`.
 6. User abort (not deadline) ⇒ `aborted`, no deadline hit.
@@ -45,6 +48,7 @@ Trace stores **0 bytes of raw text**: only enums, booleans and numbers. No promp
 Arms as spec 103 §5 (A reuse, B capped, C skip). Sample unit = task; per cap, hit rate h = hits ÷ `capsEligible` in arm B.
 1. **Sensitivity gate (per cap).** A cap is "binding" only if h ≥ **5%** of eligible suggestions **and** ≥ **20** hits in total across the run. Below that, the verdict for that cap is **"caps too loose / not exercised"** — never "no effect".
 2. **If no cap is binding:** the A/B is **inconclusive (caps too loose)**. Next step is a lower-cap pilot (e.g. halve deadline / cost) in the free faux stage, not a paid rerun with the same caps, and not a conclusion.
+   - Pilot data (lowered caps) is used **only to choose cap values**. The verdict uses **only a fresh run** with the chosen caps, never pilot data.
 3. **If ≥1 cap is binding:** apply spec 103 §6 unchanged: promote B only if the 95% CI upper bound of per-verified-task cost change < 0 vs A **and** success-rate drop ≤ 5 pp. If the CI includes 0 with a binding cap ⇒ **"no effect (caps bound, cost not reduced)"**.
 4. **Harm check:** if any cap has h ≥ **50%** and adoption rate (spec 103 §3) drops ≥ 10 pp vs A ⇒ **"caps too tight"**; do not promote.
 5. Report per cap: hits, eligible, h, and which verdict branch applied. Thresholds (5% / 20 / 50% / 10 pp) are pre-registered here; changing them after seeing data requires a new spec revision posted in the room first.
@@ -57,4 +61,4 @@ Arms as spec 103 §5 (A reuse, B capped, C skip). Sample unit = task; per cap, h
 
 ## 6. Open questions
 - Should non-caps skip reasons (quota, cache_cold, …) also get skip records when caps are off? Proposed: no (keeps caps-off bytes identical); revisit after 103b.
-- Store the pre-flight estimate as a number? Deferred to Tech Lead.
+- ~~Store the pre-flight estimate as a number?~~ Closed (review 2026-10-21 KST): yes, on `over_cost_cap` skip records only, with the applied cap (§2).
