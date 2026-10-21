@@ -24,6 +24,7 @@ import {
 	dismissReasonForKey,
 	type SuggestionAcceptTracker,
 	suggestionAcceptTracker,
+	traceQueuedDispatch,
 	userMessageText,
 } from "../../core/next-suggestion-accept-trace.ts";
 import {
@@ -80,8 +81,7 @@ export class NextSuggestionController {
 	private readonly wrapped: StreamFn;
 	private readonly unsubscribe: () => void;
 	private turnsInRun = 0;
-	/** User messages seen since `agent_start` (first = prompt, later = steer). */
-	private userMessagesInRun = 0;
+	private restorePrompt: (() => void) | undefined;
 
 	constructor(
 		session: SuggestionSessionPort,
@@ -99,7 +99,6 @@ export class NextSuggestionController {
 		session.agent.streamFn = this.wrapped;
 		this.unsubscribe = session.subscribe((event) => {
 			if (event.type === "agent_start") {
-				this.userMessagesInRun = 0;
 				this.options.acceptTrace?.dismissed("new_turn", Date.now());
 				this.cancel();
 				this.turnsInRun = 0;
@@ -107,17 +106,18 @@ export class NextSuggestionController {
 			else if (event.type === "prompt_settled") void this.onSettled(event.outcome);
 			else if (event.type === "message_start" && this.options.acceptTrace) {
 				const text = userMessageText(event.message);
-				// The run's first user message is the prompt; later ones were steered into the running turn.
-				if (text !== undefined)
-					this.options.acceptTrace.sent(text, Date.now(), this.userMessagesInRun++ === 0 ? "prompt" : "steer");
+				// Queued (steer/followUp) sends were already settled at dispatch; this is the prompt path.
+				if (text !== undefined) this.options.acceptTrace.sent(text, Date.now(), "prompt");
 			}
 		});
 		editor.onBeforeInput = this.keyHandler;
+		if (options.acceptTrace) this.restorePrompt = traceQueuedDispatch(session, options.acceptTrace);
 	}
 
 	/** Detach from the session and editor; restores the stream function if still ours. */
 	dispose(): void {
 		this.options.acceptTrace?.flush(Date.now());
+		this.restorePrompt?.();
 		this.cancel();
 		this.unsubscribe();
 		if (this.session.agent.streamFn === this.wrapped) this.session.agent.streamFn = this.inner;

@@ -2,8 +2,8 @@
  * Accept-trace for next-task suggestions (default off: `OMK_NEXT_SUGGESTIONS_ACCEPT_TRACE`).
  *
  * One outcome record per shown suggestion, written once its fate is known:
- * `accepted` (Tab) with how it ended (`exact` / `edited` sent via `prompt` or
- * `steer`, `cleared` when the editor was emptied, `abandoned` when it was never
+ * `accepted` (Tab) with how it ended (`exact` / `edited` sent via `prompt`,
+ * `steer` or `followUp`, `cleared` when the editor was emptied, `abandoned` when it was never
  * sent) and an edit-distance-ratio bucket, or `dismissed` with a reason. Two
  * one-off marker records exist: `cap_reached` (written once when the 10 MB cap
  * is hit; nothing is written after it) and `salt_invalid` (the salt file is not
@@ -27,7 +27,8 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const SESSION_SALT_FILE = "suggestion-trace-salt";
 
 export type SentAs = "exact" | "edited" | "cleared" | "abandoned";
-export type SentVia = "prompt" | "steer";
+/** Dispatch path at submit time: new run, steer into the running turn, or follow-up queued after it. */
+export type SentVia = "prompt" | "steer" | "followUp";
 /** `abandoned`: shown, then replaced by another suggestion or the session ended, with no input. */
 export type DismissReason = "typed_over" | "new_turn" | "other" | "abandoned";
 export const EDIT_RATIO_BUCKETS = ["0", "le_0.1", "le_0.3", "le_0.6", "gt_0.6"] as const;
@@ -169,6 +170,37 @@ export class SuggestionAcceptTracker {
 			decidedAtEpochMs: atEpochMs,
 		});
 	}
+}
+
+/** The session's dispatch entry point, as seen by the accept trace (optional on test ports). */
+type PromptFn = (text: string, options?: { streamingBehavior?: "steer" | "followUp" }) => Promise<void>;
+interface QueuedDispatchPort {
+	readonly isStreaming?: boolean;
+	prompt?: PromptFn;
+}
+
+/**
+ * `sentVia` is decided where the message is dispatched, not by counting
+ * messages: `AgentSession.prompt` queues instead of starting a run exactly when
+ * the session is streaming and a `streamingBehavior` is given (agent-session
+ * `prompt`, steer → `_queueSteer`, followUp → `_queueFollowUp`). The interactive
+ * Enter path passes "steer", Alt+Enter passes "followUp". Those sends settle here
+ * with that via; every other send reaches the trace via `message_start` as
+ * "prompt". Returns the restore function.
+ */
+export function traceQueuedDispatch(session: object, trace: SuggestionAcceptTracker): (() => void) | undefined {
+	const port = session as unknown as QueuedDispatchPort;
+	const inner = port.prompt;
+	if (typeof inner !== "function") return undefined;
+	const wrapped: PromptFn = (text, options) => {
+		const via = options?.streamingBehavior;
+		if (via && port.isStreaming) trace.sent(text, Date.now(), via);
+		return inner.call(port, text, options);
+	};
+	port.prompt = wrapped;
+	return () => {
+		if (port.prompt === wrapped) port.prompt = inner;
+	};
 }
 
 /** Read the install's salt as stored (callers must check it is exactly 32 bytes). */
