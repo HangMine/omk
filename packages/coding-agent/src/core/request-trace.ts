@@ -85,14 +85,21 @@ export class RequestTrace {
 	begin(
 		provider: string,
 		model: string,
-		meta?: { purpose?: RequestPurpose; cacheScope?: string; fingerprints?: DispatchFingerprints },
+		meta?: {
+			purpose?: RequestPurpose;
+			cacheScope?: string;
+			fingerprints?: DispatchFingerprints;
+			prefixCause?: "suffix_changed" | "bypass_surrogate" | "flag_off";
+			/** Off arm only: what the flag-on rule would have recorded. Metadata only. */
+			shadowReason?: "suffix_changed" | "bypass_surrogate";
+		},
 	): string {
 		if (this.closedScope) throw new Error("trace.scope_closed");
 		const id = randomUUID();
 		const key = `${provider}\u0000${model}`;
 		const fingerprints = meta?.fingerprints;
 		const purpose = meta?.purpose && REQUEST_PURPOSES.includes(meta.purpose) ? meta.purpose : "unknown";
-		const reason = boundaryChangeReason(this.lastFingerprints.get(key), fingerprints);
+		const reason = boundaryChangeReason(this.lastFingerprints.get(key), fingerprints, meta?.prefixCause);
 		if (fingerprints) this.lastFingerprints.set(key, fingerprints);
 		this.append({
 			kind: "logical_dispatch",
@@ -103,6 +110,7 @@ export class RequestTrace {
 			cacheScope: meta?.cacheScope === undefined ? "default" : boundedId(meta.cacheScope),
 			...(fingerprints ? { prefixFingerprint: fingerprints.prefix, toolSchemaFingerprint: fingerprints.tools } : {}),
 			boundaryChangeReason: reason,
+			...(reason === "flag_off" && meta?.shadowReason ? { shadowBoundaryChangeReason: meta.shadowReason } : {}),
 		});
 		this.active.add(id);
 		return id;

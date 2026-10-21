@@ -22,7 +22,11 @@ export type BoundaryChangeReason =
 	| "prefix_changed"
 	| "tools_changed"
 	| "prefix_and_tools_changed"
-	| "unavailable";
+	| "unavailable"
+	// Spec 102: the prefix before the boundary matched the turn plan; only the tail changed.
+	| "suffix_changed"
+	| "bypass_surrogate"
+	| "flag_off";
 
 const SALT_BYTES = 32;
 
@@ -76,9 +80,12 @@ export function dispatchFingerprints(salt: Buffer, context: FingerprintContext):
 export function boundaryChangeReason(
 	previous: DispatchFingerprints | undefined,
 	current: DispatchFingerprints | undefined,
+	prefixCause?: "suffix_changed" | "bypass_surrogate" | "flag_off",
 ): BoundaryChangeReason {
 	if (current === undefined) return "unavailable";
 	if (previous === undefined) return "first";
+	// Spec 102: the session cause explains a prompt change; a tool change still dominates.
+	if (prefixCause && previous.tools === current.tools) return prefixCause;
 	const prefix = previous.prefix !== current.prefix;
 	const tools = previous.tools !== current.tools;
 	if (prefix && tools) return "prefix_and_tools_changed";

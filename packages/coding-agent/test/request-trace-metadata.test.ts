@@ -13,6 +13,10 @@ import {
 	loadProjectTraceSalt,
 } from "../src/core/request-trace-metadata.ts";
 import { RunBudget } from "../src/core/run-budget.ts";
+import {
+	type PendingPrefixBoundaryCause,
+	PrefixBoundaryCauseHolder,
+} from "../src/core/system-prompt-cache-boundary.ts";
 
 const SECRET_PROMPT = "SYSTEM-PROMPT-CANARY-7f3a do not leak";
 const TOOL_CANARY = "TOOL-DESCRIPTION-CANARY-91bd";
@@ -109,6 +113,113 @@ describe("request trace metadata (spec 101)", () => {
 			costSource: "provider_billed",
 			usage: { input: 100, uncached: 100, cacheRead: 800, cacheWrite: 100, estimatedUsd: 0.01, billedUsd: 0.02 },
 		});
+	});
+
+	it("records the spec 102 cause through the stream wrapper, once per recorded prompt", async () => {
+		const tracePath = path.join(dir, "trace-102.jsonl");
+		process.env.OMK_EVAL_TRACE = tracePath;
+		const faux = registerFauxProvider();
+		const budget = new RunBudget({ maxRequests: 10 }, () => {});
+		const prompt = (tail: string) => `${SECRET_PROMPT} tail ${tail}`;
+		// [system prompt, cause recorded by the session before this request]
+		const sends: Array<[string, PendingPrefixBoundaryCause | undefined]> = [
+			[prompt("0"), { cause: "suffix_changed" }], // first request: stays "first"
+			[prompt("1"), { cause: "suffix_changed" }],
+			[prompt("1"), undefined], // same prompt again: no stale cause
+			[prompt("2"), { cause: "flag_off", shadowCause: "suffix_changed" }],
+			[prompt("3"), { cause: "bypass_surrogate" }],
+		];
+		const streams = sends.map(() => createAssistantMessageEventStream());
+		let call = 0;
+		const source: StreamFn = () => streams[call++];
+		const causes = new PrefixBoundaryCauseHolder();
+		try {
+			const wrapped = wrapBudgetStream(source, budget, undefined, causes);
+			for (const [i, [systemPrompt, cause]] of sends.entries()) {
+				if (cause) causes.record(systemPrompt, cause);
+				await wrapped(faux.getModel(), { ...context(), systemPrompt }, {});
+				streams[i].end(fauxAssistantMessage("done"));
+				await flush();
+			}
+		} finally {
+			budget.close();
+			faux.unregister();
+		}
+		const dispatches = fs
+			.readFileSync(tracePath, "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(JSON.parse(line).body))
+			.filter((body) => body.kind === "logical_dispatch");
+		expect(dispatches.map((body) => body.boundaryChangeReason)).toEqual([
+			"first",
+			"suffix_changed",
+			"unchanged",
+			"flag_off",
+			"bypass_surrogate",
+		]);
+		expect(dispatches.map((body) => body.shadowBoundaryChangeReason)).toEqual([
+			undefined,
+			undefined,
+			undefined,
+			"suffix_changed",
+			undefined,
+		]);
+	});
+
+	it("classifies a same-prompt retry identically on both arms (spec 102)", async () => {
+		const runArm = async (arm: "on" | "off") => {
+			const tracePath = path.join(dir, `trace-102-retry-${arm}.jsonl`);
+			process.env.OMK_EVAL_TRACE = tracePath;
+			const faux = registerFauxProvider();
+			const budget = new RunBudget({ maxRequests: 10 }, () => {});
+			const base = `${SECRET_PROMPT} tail base`;
+			const changed = `${SECRET_PROMPT} tail changed`;
+			const cause: PendingPrefixBoundaryCause =
+				arm === "on" ? { cause: "suffix_changed" } : { cause: "flag_off", shadowCause: "suffix_changed" };
+			// first request, tail-changed request with the session cause, then a retry of the same prompt
+			const sends: Array<[string, PendingPrefixBoundaryCause | undefined]> = [
+				[base, undefined],
+				[changed, cause],
+				[changed, undefined],
+			];
+			const streams = sends.map(() => createAssistantMessageEventStream());
+			let call = 0;
+			const source: StreamFn = () => streams[call++];
+			const causes = new PrefixBoundaryCauseHolder();
+			try {
+				const wrapped = wrapBudgetStream(source, budget, undefined, causes);
+				for (const [i, [systemPrompt, pending]] of sends.entries()) {
+					if (pending) causes.record(systemPrompt, pending);
+					await wrapped(faux.getModel(), { ...context(), systemPrompt }, {});
+					streams[i].end(fauxAssistantMessage("done"));
+					await flush();
+				}
+			} finally {
+				budget.close();
+				faux.unregister();
+			}
+			return fs
+				.readFileSync(tracePath, "utf8")
+				.trim()
+				.split("\n")
+				.map((line) => JSON.parse(JSON.parse(line).body))
+				.filter((body) => body.kind === "logical_dispatch");
+		};
+		const on = await runArm("on");
+		const off = await runArm("off");
+		// The tail-changed request: on by its actual reason, off by its shadow.
+		expect(on[1].boundaryChangeReason).toBe("suffix_changed");
+		expect(off[1]).toMatchObject({ boundaryChangeReason: "flag_off", shadowBoundaryChangeReason: "suffix_changed" });
+		// The retry falls back to the fingerprint reason on both arms, with no stale shadow.
+		expect(on[2].boundaryChangeReason).toBe("unchanged");
+		expect(on[2].shadowBoundaryChangeReason).toBeUndefined();
+		expect(off[2].boundaryChangeReason).toBe("unchanged");
+		expect(off[2].shadowBoundaryChangeReason).toBeUndefined();
+		// Symmetry: the measured class (actual on, shadow ?? actual off) matches for every request.
+		const measured = (body: Record<string, unknown>) => body.shadowBoundaryChangeReason ?? body.boundaryChangeReason;
+		expect(off.map(measured)).toEqual(on.map(measured));
+		expect(on.map(measured)).toEqual(["first", "suffix_changed", "unchanged"]);
 	});
 
 	it("flags missing usage", () => {

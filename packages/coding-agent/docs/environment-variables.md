@@ -122,6 +122,7 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
 | `OMK_RESOURCE_GOVERNOR` | Resource-governor mode: `off`, `observe` (default), `adaptive`, or `strict`. Feeds `/resource [probe\|policy]` and `omk doctor resources [--json]`; see the resource governor section in [Settings](settings.md) |
 | `OMK_TOOL_SCHEDULER` | Tool scheduler override: `dag-v2` or the `waves-v1` rollback path; see also the `agent.toolScheduler` setting |
+| `OMK_PREFIX_BOUNDARY` | Spec 102, default off. Set to `1` to keep the system-prompt cache boundary when an extension changes only the dynamic tail after it (the prefix must match byte-for-byte). Off is the spec 052 rule. |
 | `OMK_TURN_METRICS`, `OMK_TURN_METRICS_DIR` | Turn metrics are written under `.omk/metrics/` as sessions run; set `OMK_TURN_METRICS=0` to disable or `OMK_TURN_METRICS_DIR` to relocate. Aggregate with `omk stats`; see [Metrics](metrics.md) |
 
 Provider credentials such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and cloud-provider configuration are listed in [Providers](providers.md).

@@ -99,11 +99,15 @@ OpenAI Completions (where `prompt_cache_key` is emitted).
   measured from provider-reported usage (cache read tokens) via the spec 101
   trace.
 - Primary metric: difference (flag on − off) in cache-read ratio, computed
-  only over requests whose 101-trace boundary-change cause is
-  `suffix_changed`.
+  only over `suffix_changed` requests: on arm by the actual
+  `boundaryChangeReason`, off arm by `shadowBoundaryChangeReason` (the cause
+  the flag-on rule would have recorded; metadata only, off arm only, next to
+  `boundaryChangeReason: flag_off`). First requests are excluded.
 - Minimum sample, fixed before any measurement: at least 30 `suffix_changed`
-  requests per arm. Below that in either arm the result is `inconclusive`
+  requests per arm on that basis. Below that in either arm the result is `inconclusive`
   and the flag stays off; the bar is never relaxed.
+- The boundary change cause is recorded as new values on #183's existing
+  `boundaryChangeReason`, not a new field.
 - No default-on decision until 101 lands. Default-on bar (A/B, flag on vs off,
   same tasks/models), all three required: 95% CI upper bound of
   Δ(cost per verified completion) `< 0`, AND success-rate drop `<= 5pp`,
