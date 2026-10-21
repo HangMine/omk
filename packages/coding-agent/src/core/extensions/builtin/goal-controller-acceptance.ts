@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { DurableGoalError, type DurableGoalSnapshot, nextDurableGoalTimestamp } from "../../durable-goal.ts";
 import type { DurableGoalStore } from "../../durable-goal-store.ts";
 import type { GoalAcceptance, GoalCheckOutcome } from "../../goal-acceptance.ts";
@@ -10,6 +9,7 @@ import {
 	outputRecallFollowUp,
 	summarizeArtifact,
 } from "../../goal-output-recall.ts";
+import { RecallAccessTracker } from "../../goal-output-recall-access.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
 import { type GoalAcceptanceTestHooks, GoalTaskFacts } from "./goal-acceptance-task-facts.ts";
@@ -27,8 +27,8 @@ export class GoalAcceptanceFlow {
 	private readonly continueGoal: ContinueGoal;
 	private readonly testHooks: GoalAcceptanceTestHooks | undefined;
 	private readonly taskFacts: GoalTaskFacts;
-	/** Spec 098: the recall file named in the last follow-up, and the model's `read` calls on it since. */
-	private recall: { readonly absolutePath: string; readCalls: number } | undefined;
+	/** Spec 098: access to the recall file named in the last follow-up (counts only). */
+	readonly recallAccess = new RecallAccessTracker();
 
 	constructor(
 		omk: Pick<ExtensionAPI, "appendEntry"> & Partial<Pick<ExtensionAPI, "events">>,
@@ -173,7 +173,7 @@ export class GoalAcceptanceFlow {
 			{ kind: "advance-round", ref: outcome.goal.ref },
 			nextDurableGoalTimestamp(outcome.goal),
 		);
-		this.recall = outcome.artifact && { absolutePath: outcome.artifact.absolutePath, readCalls: 0 };
+		this.recallAccess.start(outcome.artifact);
 		const head = `Acceptance check \`${displayCommand(outcome.command)}\` ${failureText(result)} (${receiptLabel(result)})`;
 		this.continueGoal(
 			advanced,
@@ -212,8 +212,7 @@ export class GoalAcceptanceFlow {
 			throw error;
 		}
 		const { result } = outcome;
-		const recall = this.recall && { readAfterFollowUp: this.recall.readCalls > 0, readCalls: this.recall.readCalls };
-		this.recall = undefined;
+		const recall = this.recallAccess.take();
 		let artifact: OutputArtifact | undefined;
 		if (writer !== undefined) {
 			if (result.status === "aborted" || result.passed) writer.discard();
@@ -246,12 +245,6 @@ export class GoalAcceptanceFlow {
 			ctx.ui.notify(`goal: acceptance check ${failureText(result)} (${receiptLabel(result)})${tail}`, "warning");
 		}
 		return artifact === undefined ? outcome : { ...outcome, artifact };
-	}
-
-	/** Spec 098 (flag on): count `read` calls on the recall path named in the last follow-up. Counts only. */
-	observeRead(path: unknown, cwd: string): void {
-		if (this.recall === undefined || typeof path !== "string") return;
-		if (resolve(cwd, path.replace(/^@/u, "")) === this.recall.absolutePath) this.recall.readCalls += 1;
 	}
 
 	private openArtifact(goal: DurableGoalSnapshot, ctx: ExtensionContext): OutputArtifactWriter | undefined {

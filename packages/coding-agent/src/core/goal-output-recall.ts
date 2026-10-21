@@ -261,3 +261,16 @@ export function outputRecallFollowUp(head: string, outputTail: string, artifact:
 		"Fix the cause, then end your turn; the check re-runs automatically.",
 	].join("\n");
 }
+
+/** Spec 098: delete every recall file of `goalId` (goal cleared or replaced). Best effort, any flag state. */
+export function deleteGoalRecallFiles(cwd: string, goalId: string): void {
+	const dir = outputRecallDir(cwd);
+	const prefix = `acceptance-${safeName(goalId)}-`;
+	try {
+		for (const name of readdirSync(dir)) {
+			if (name.startsWith(prefix) && name.endsWith(".log")) removeQuietly(join(dir, name));
+		}
+	} catch {
+		// No recall dir: nothing to delete.
+	}
+}

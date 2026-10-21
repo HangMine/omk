@@ -10,7 +10,7 @@ import { parseDurableGoalCheckpointCommand } from "../../durable-goal-checkpoint
 import { DurableGoalStore } from "../../durable-goal-store.ts";
 import { GoalAcceptance, type GoalVerifierFactory } from "../../goal-acceptance.ts";
 import { decideGoalContinuation } from "../../goal-continuation.ts";
-import { goalOutputRecallEnabled } from "../../goal-output-recall.ts";
+import { deleteGoalRecallFiles, goalOutputRecallEnabled } from "../../goal-output-recall.ts";
 import { goalStateDirectory } from "../../goal-verification.ts";
 import type { ExtensionAPI } from "../types.ts";
 import { GoalAcceptanceFlow, type GoalAcceptanceTestHooks } from "./goal-controller-acceptance.ts";
@@ -35,7 +35,7 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 	// Spec 098: registered only with the flag on, so the off arm adds no handler.
 	if (goalOutputRecallEnabled()) {
 		omk.on("tool_call", (event, ctx) => {
-			if (event.toolName === "read") flow.observeRead((event.input as { path?: unknown }).path, ctx.cwd);
+			flow.recallAccess.observe(event.toolName, event.input, ctx.cwd);
 			return undefined;
 		});
 	}
@@ -84,6 +84,7 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 					if (text === "clear") {
 						trustedCheckpointDigests.clear();
 						acceptance.forget(existing);
+						deleteGoalRecallFiles(ctx.cwd, existing.ref.id);
 					}
 					ctx.ui.notify(renderGoal(next, flow.line(next)), "info");
 					return;
@@ -127,6 +128,7 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 				}
 				if (existing) {
 					acceptance.forget(existing);
+					deleteGoalRecallFiles(ctx.cwd, existing.ref.id);
 					await rm(goalPath(ctx.cwd), { force: true });
 				}
 				const created = await store.create(
