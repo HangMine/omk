@@ -32,6 +32,8 @@ Flag: `OMK_REQUIRED_TOOLS=1` (default off). Off ⇒ byte-identical requests and 
 
 ### 2.2 Outcome
 - `RequiredCapabilityUnavailable` is published as task_result `insufficient/required_capability_missing` (reuses spec 100 projection; new reason) and blocks `acceptance.complete()` for that segment. It can **never** produce `complete`.
+- **No run, no fact (Tech Lead, 2026-10-21 KST):** the task_result fact is published only inside an active task-result run. A rejection in prompt preflight (before any run begins) produces no task_result fact and is never attached to a later run; it leaves only the count record (`goal_required_capability`, counts only) and the completion block.
+- **A/B accounting:** the denominator for required-capability misses is the number of `recordRequiredCapabilityMissing` records; preflight rejections are also counted separately (they have no task_result fact).
 
 ### 2.3 Stability within a task segment
 - Within one `taskSegmentId`, the sent tool list keeps its order and schemas (already canonical via `serializePromptToolSchemas`, `session-turn-admission.ts:74`); optional groups withheld at segment start stay withheld for the segment unless the budget frees (avoids churn).
