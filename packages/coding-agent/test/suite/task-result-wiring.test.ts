@@ -77,7 +77,7 @@ describe("task_result emission (spec 096 phase 2)", () => {
 		);
 		const projection = (h.eventsOfType("task_result") as TaskResultEvent[])[0]?.projection;
 		expect(projection?.check).toBe("required_failed");
-		expect(projection?.coverage).toEqual({ checksRun: 1, checksTotal: 1 });
+		expect(projection?.coverage).toEqual({ checksRun: 1, checksTotal: 1, receiptsObserved: 1 });
 		expect(projection?.modelClaims.every((c) => c.source === "model_text")).toBe(true);
 	});
 

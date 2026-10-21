@@ -23,6 +23,7 @@ import { DEFAULT_BUILTIN_TOOL_TIMEOUTS } from "./agent-tool-settings.ts";
 import type { DurableGoalSnapshot } from "./durable-goal.ts";
 import { detectSandboxBackend } from "./sandbox/backend.ts";
 import { createDefaultBashSandboxPreflight, resolveBashSandboxMode } from "./sandbox/default-policy.ts";
+import { type CheckKind, classifyCheckKind, parseTestCounts, type TestCounts } from "./test-counts.ts";
 import type { BashSandboxPreflight } from "./tools/bash.ts";
 import { executeVerifiedLocalBash } from "./verified-bash-adapter.ts";
 import { resolveSessionWorkspaceScopeReport, type SessionScopeCompleteness } from "./verified-bash-runtime.ts";
@@ -33,6 +34,8 @@ export const GOAL_ACCEPTANCE_TIMEOUT_MS = DEFAULT_BUILTIN_TOOL_TIMEOUTS.bash ?? 
 export const GOAL_SCOPE_MAX_PATHS = 512;
 
 const OUTPUT_TAIL_CHARS = 2_000;
+/** Spec 100: runner summaries sit at the end of the output; this much is kept only to read counts. */
+const COUNT_TAIL_CHARS = 16_000;
 const CLAIM_COMMAND_CHARS = 160;
 const LANE_ID = "goal-acceptance";
 
@@ -56,6 +59,10 @@ export interface GoalAcceptanceResult {
 	readonly workspace: GoalWorkspaceState;
 	/** Redacted end of the combined output, for the operator only. */
 	readonly outputTail: string;
+	/** Spec 100: what the approved command is, from its text. */
+	readonly checkKind?: CheckKind;
+	/** Spec 100: counts from the runner's summary text; absent when unreadable or not a test runner. */
+	readonly tests?: TestCounts;
 }
 
 export interface GoalVerifierOptions {
@@ -140,6 +147,7 @@ export class GoalVerifier {
 	async run(command: string, signal?: AbortSignal): Promise<GoalAcceptanceResult> {
 		const claim = `goal acceptance: ${command.slice(0, CLAIM_COMMAND_CHARS)}`;
 		const tail = new OutputTail(OUTPUT_TAIL_CHARS);
+		const countTail = new OutputTail(COUNT_TAIL_CHARS);
 		const sandboxPolicy = this.sandboxPreflight();
 		const execution = await executeVerifiedLocalBash({
 			evidenceExecutor: this.executor,
@@ -153,7 +161,10 @@ export class GoalVerifier {
 			executor: "ci-runner",
 			...(sandboxPolicy !== undefined ? { sandboxPolicy } : {}),
 			...(signal !== undefined ? { signal } : {}),
-			onData: (data) => tail.push(data),
+			onData: (data) => {
+				tail.push(data);
+				countTail.push(data);
+			},
 		});
 		const { gate, passed } = checkReceiptWithStrictGate({
 			executor: this.executor,
@@ -164,6 +175,8 @@ export class GoalVerifier {
 			execution,
 		});
 		const { core, envelope } = execution.receipt;
+		const checkKind = classifyCheckKind(command);
+		const tests = checkKind === "test_runner" ? parseTestCounts(countTail.text(), command) : undefined;
 		return {
 			receiptId: core.receiptId,
 			digest: envelope.coreSha256,
@@ -174,6 +187,8 @@ export class GoalVerifier {
 			gateReason: gate.reason,
 			workspace: captureGoalWorkspace(this.cwd),
 			outputTail: tail.text(),
+			checkKind,
+			...(tests !== undefined ? { tests } : {}),
 		};
 	}
 

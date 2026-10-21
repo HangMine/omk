@@ -12,12 +12,14 @@ import { GoalAcceptance, type GoalVerifierFactory } from "../../goal-acceptance.
 import { decideGoalContinuation } from "../../goal-continuation.ts";
 import { goalStateDirectory } from "../../goal-verification.ts";
 import type { ExtensionAPI } from "../types.ts";
-import { GoalAcceptanceFlow } from "./goal-controller-acceptance.ts";
+import { GoalAcceptanceFlow, type GoalAcceptanceTestHooks } from "./goal-controller-acceptance.ts";
 import { checkpointPayload, continuationSeam, renderGoal, unavailableWorkspaceCode } from "./goal-controller-text.ts";
 
 export interface GoalControllerOptions {
 	/** Test seam for the acceptance-check runner. */
 	readonly createVerifier?: GoalVerifierFactory;
+	/** Spec 100 test-only ordering seams; never set by the built-in registration. */
+	readonly testHooks?: GoalAcceptanceTestHooks;
 }
 
 function goalPath(cwd: string): string {
@@ -27,7 +29,7 @@ function goalPath(cwd: string): string {
 export default function goalController(omk: ExtensionAPI, options: GoalControllerOptions = {}): void {
 	const trustedCheckpointDigests = new Set<string>();
 	const acceptance = new GoalAcceptance(options.createVerifier);
-	const flow = new GoalAcceptanceFlow(omk, acceptance, continueGoal);
+	const flow = new GoalAcceptanceFlow(omk, acceptance, continueGoal, options.testHooks);
 
 	function continueGoal(advanced: DurableGoalSnapshot, detail: string): void {
 		const seam = continuationSeam(advanced, trustedCheckpointDigests);

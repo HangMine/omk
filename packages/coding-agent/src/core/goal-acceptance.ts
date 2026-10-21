@@ -82,6 +82,24 @@ export class GoalAcceptance {
 		return this.contracts.get(goalKeyOf(goal))?.command;
 	}
 
+	/**
+	 * Spec 100: the identity of the approved check, for the task-result projection.
+	 * One approved command is one required check; a new command (099 revision) is a new check id.
+	 */
+	checkIdentity(goal: DurableGoalSnapshot): { readonly checkId: string; readonly revision: number } | undefined {
+		const contract = this.contracts.get(goalKeyOf(goal));
+		if (contract?.command === undefined) return undefined;
+		return {
+			checkId: `goal-acceptance:${goalKeyOf(goal)}:${contract.digest.slice(0, 12)}`,
+			revision: contract.revision,
+		};
+	}
+
+	/** Spec 100: the goal workspace state now, from the same capture `complete()` compares against. */
+	currentWorkspaceSha256(cwd: string): string {
+		return captureGoalWorkspace(cwd).sha256;
+	}
+
 	/** Drop the approval and trusted receipts of a cleared or replaced goal. */
 	forget(goal: DurableGoalSnapshot): void {
 		const key = goalKeyOf(goal);

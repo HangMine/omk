@@ -2,28 +2,34 @@ import { DurableGoalError, type DurableGoalSnapshot, nextDurableGoalTimestamp } 
 import type { DurableGoalStore } from "../../durable-goal-store.ts";
 import type { GoalAcceptance, GoalCheckOutcome } from "../../goal-acceptance.ts";
 import type { GoalContinuationDecision } from "../../goal-continuation.ts";
-import { factFromGoalAcceptance, isTaskResultEnabled } from "../../task-result.ts";
-import { currentTaskRunId, publishHostTaskFact } from "../../task-result-collector.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
+import { type GoalAcceptanceTestHooks, GoalTaskFacts } from "./goal-acceptance-task-facts.ts";
 import { displayCommand, displayError, failureText, receiptLabel, renderGoal } from "./goal-controller-text.ts";
 
 type ContinueGoal = (advanced: DurableGoalSnapshot, detail: string) => void;
+
+export type { GoalAcceptanceTestHooks } from "./goal-acceptance-task-facts.ts";
 
 /** `/goal verify` and the settled-turn acceptance loop of the goal controller. */
 export class GoalAcceptanceFlow {
 	private readonly omk: Pick<ExtensionAPI, "appendEntry"> & Partial<Pick<ExtensionAPI, "events">>;
 	private readonly acceptance: GoalAcceptance;
 	private readonly continueGoal: ContinueGoal;
+	private readonly testHooks: GoalAcceptanceTestHooks | undefined;
+	private readonly taskFacts: GoalTaskFacts;
 
 	constructor(
 		omk: Pick<ExtensionAPI, "appendEntry"> & Partial<Pick<ExtensionAPI, "events">>,
 		acceptance: GoalAcceptance,
 		continueGoal: ContinueGoal,
+		testHooks?: GoalAcceptanceTestHooks,
 	) {
 		this.omk = omk;
 		this.acceptance = acceptance;
 		this.continueGoal = continueGoal;
+		this.testHooks = testHooks;
+		this.taskFacts = new GoalTaskFacts(omk.events);
 	}
 
 	line(goal: DurableGoalSnapshot): string {
@@ -99,9 +105,13 @@ export class GoalAcceptanceFlow {
 		ctx: ExtensionContext,
 	): Promise<void> {
 		let outcome: GoalCheckOutcome;
+		const taskRunId = this.taskFacts.runId();
+		const identity = taskRunId === undefined ? undefined : this.acceptance.checkIdentity(current);
 		try {
 			outcome = await this.run(store, current, ctx, "turn");
 		} catch (error) {
+			// Spec 100: the approved check got no result in this run.
+			this.taskFacts.publishNotRun(identity, taskRunId);
 			if (error instanceof DurableGoalError) {
 				ctx.ui.notify(error.message, "error");
 				return;
@@ -113,11 +123,18 @@ export class GoalAcceptanceFlow {
 		if (result.status === "aborted") return;
 		if (result.passed) {
 			let completed: DurableGoalSnapshot;
+			if (this.taskFacts.hasPublished())
+				await this.testHooks?.afterPublishBeforeComplete?.({
+					cwd: ctx.cwd,
+					goal: outcome.goal,
+					acceptance: this.acceptance,
+				});
 			try {
 				completed = await this.acceptance.complete(store, outcome.goal, ctx.cwd);
 			} catch (error) {
 				// A rejected completion must surface; an unhandled throw here left the goal silently active.
 				if (!(error instanceof DurableGoalError)) throw error;
+				this.taskFacts.downgrade(error.message);
 				ctx.ui.notify(error.message, "error");
 				return;
 			}
@@ -160,7 +177,9 @@ export class GoalAcceptanceFlow {
 		const command = this.acceptance.approvedCommand(goal) ?? "";
 		ctx.ui.notify(`goal: running acceptance check \`${displayCommand(command)}\``, "info");
 		// Spec 096: the run this check starts in; a receipt that lands after it settled is dropped.
-		const taskRunId = this.omk.events && isTaskResultEnabled() ? currentTaskRunId(this.omk.events) : undefined;
+		const taskRunId = this.taskFacts.runId();
+		const identity = taskRunId === undefined ? undefined : this.acceptance.checkIdentity(goal);
+		this.taskFacts.forgetPublished();
 		// At a settled turn the run still owns the session, so its abort (Esc) stops the check too.
 		const outcome = await this.acceptance.check(store, goal, ctx.cwd, ctx.signal);
 		const { result } = outcome;
@@ -174,9 +193,16 @@ export class GoalAcceptanceFlow {
 			passed: result.passed,
 			trigger,
 		});
-		// Spec 096: hand the host receipt to the task-result projection (flag on only).
-		if (this.omk.events && isTaskResultEnabled())
-			publishHostTaskFact(this.omk.events, factFromGoalAcceptance(result), taskRunId);
+		// Spec 096/100: hand the host receipt to the task-result projection (flag on only), with the
+		// workspace state at publish, the runner's counts and the check identity.
+		if (taskRunId !== undefined) {
+			await this.testHooks?.afterCheckBeforePublish?.({
+				cwd: ctx.cwd,
+				goal: outcome.goal,
+				acceptance: this.acceptance,
+			});
+			this.taskFacts.publishCheck(result, identity, taskRunId, this.acceptance.currentWorkspaceSha256(ctx.cwd));
+		}
 		if (!result.passed && result.status !== "aborted") {
 			const tail = result.outputTail ? `\n${result.outputTail}` : "";
 			ctx.ui.notify(`goal: acceptance check ${failureText(result)} (${receiptLabel(result)})${tail}`, "warning");

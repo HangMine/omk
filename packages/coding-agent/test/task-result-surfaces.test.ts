@@ -4,8 +4,9 @@ import { GoalAcceptanceFlow } from "../src/core/extensions/builtin/goal-controll
 import type { GoalAcceptance } from "../src/core/goal-acceptance.ts";
 import type { GoalAcceptanceResult } from "../src/core/goal-verification.ts";
 import type { PromptSettledEvent } from "../src/core/prompt-settlement.ts";
-import { buildTaskResultEvent, formatTaskResultLine, type TaskResultEvent } from "../src/core/task-result.ts";
+import { buildTaskResultEvent, type TaskResultEvent } from "../src/core/task-result.ts";
 import { TaskResultCollector } from "../src/core/task-result-collector.ts";
+import { formatTaskResultLine } from "../src/core/task-result-format.ts";
 import { runPrintMode } from "../src/modes/print-mode.ts";
 import { serializeJsonLine } from "../src/modes/rpc/jsonl.ts";
 import { createAssistantMessage, createRuntimeHost } from "./print-mode-fixtures.ts";
@@ -121,7 +122,9 @@ describe("B1: every surface renders the same projection", () => {
 		expect(fromRpc.projection).toEqual(fromPrint.projection);
 		const line = formatTaskResultLine(fromRpc.projection);
 		expect(line).toBe(formatTaskResultLine(fromPrint.projection));
-		expect(line).toBe("task result: execution completed, check required_failed (host_receipt), checks 1/1");
+		expect(line).toBe(
+			"task result: execution completed, check required_failed (host_receipt), checks 1/1, receipts 1 (host check observation, not task correctness)",
+		);
 	});
 });
 
@@ -147,6 +150,8 @@ describe("goal-controller-acceptance wiring", () => {
 		const acceptance = {
 			approvedCommand: () => "npm test",
 			check: async () => ({ command: "npm test", result, goal }),
+			checkIdentity: () => undefined,
+			currentWorkspaceSha256: () => "s",
 		} as unknown as GoalAcceptance;
 		const flow = new GoalAcceptanceFlow(
 			{ appendEntry: (type: string) => entries.push(type), events: bus },

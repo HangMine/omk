@@ -15,12 +15,18 @@ import {
 	claimFromModelText,
 	claimsFromFinishCheckLedger,
 	isTaskResultEnabled,
+	TASK_RESULT_VERSION,
+	type TaskCheckAttempt,
 	type TaskCheckFact,
 	type TaskModelClaim,
+	type TaskResultDowngradeEvent,
 	type TaskResultEvent,
 } from "./task-result.ts";
 
-export type { TaskResultEvent } from "./task-result.ts";
+export type { TaskResultDowngradeEvent, TaskResultEvent } from "./task-result.ts";
+
+/** The session events this feature adds (flag on only). */
+export type TaskResultSessionEvent = TaskResultEvent | TaskResultDowngradeEvent;
 
 /** Event-bus channel goal acceptance publishes host facts on (flag on only). */
 export const TASK_RESULT_FACT_CHANNEL = "task_result_fact";
@@ -88,20 +94,35 @@ function ledgerOf(data: unknown): readonly FinishCheckLedgerItem[] | undefined {
 	return Array.isArray(ledger) ? (ledger as FinishCheckLedgerItem[]) : undefined;
 }
 
+function attemptOf(fact: TaskCheckFact): TaskCheckAttempt {
+	return {
+		attempt: fact.attempt ?? 1,
+		status: fact.status,
+		...(fact.reason !== undefined ? { reason: fact.reason } : {}),
+		...(fact.receiptId !== undefined ? { receiptId: fact.receiptId } : {}),
+	};
+}
+
+/** Spec 100: emits the downgrade event the moment a check's pass stops being one. */
+export type TaskResultDowngradeSink = (event: TaskResultDowngradeEvent) => void;
+
 export class TaskResultCollector {
+	/** Current fact per check (`checkId`, else the fact id); earlier attempts ride on it. */
 	private facts = new Map<string, TaskCheckFact>();
+	private readonly onDowngrade: TaskResultDowngradeSink | undefined;
 	private ledger: readonly FinishCheckLedgerItem[] = [];
 	private readonly unsubscribe: Array<() => void> = [];
 	private readonly run: { promptRunId: string | undefined } = { promptRunId: undefined };
 
 	/** Without a bus the run still gets an event, with no host facts and no ledger claims. */
-	constructor(bus: EventBus | undefined) {
+	constructor(bus: EventBus | undefined, onDowngrade?: TaskResultDowngradeSink) {
+		this.onDowngrade = onDowngrade;
 		if (!bus) return;
 		this.unsubscribe.push(
 			bus.on(TASK_RESULT_FACT_CHANNEL, (data) => {
 				// Anything not published through publishHostTaskFact is ignored.
 				const fact = hostFactOf(data, this.run.promptRunId);
-				if (fact) this.facts.set(fact.id, { ...fact });
+				if (fact) this.record(fact);
 			}),
 			bus.on(TASK_RESULT_RUN_CHANNEL, (data) => {
 				if (typeof data === "object" && data !== null && this.run.promptRunId !== undefined)
@@ -112,6 +133,25 @@ export class TaskResultCollector {
 				if (ledger !== undefined) this.ledger = ledger;
 			}),
 		);
+	}
+
+	private record(fact: TaskCheckFact): void {
+		const key = fact.checkId ?? fact.id;
+		const previous = this.facts.get(key);
+		const sameAttempt = previous !== undefined && (previous.attempt ?? 1) === (fact.attempt ?? 1);
+		const history = previous === undefined ? [] : [...(previous.attempts ?? []), attemptOf(previous)];
+		const attempts = sameAttempt ? history.slice(0, -1) : history;
+		const next: TaskCheckFact = { ...fact, ...(attempts.length > 0 ? { attempts } : {}) };
+		this.facts.set(key, next);
+		const promptRunId = this.run.promptRunId;
+		if (sameAttempt && previous.status === "passed" && fact.status !== "passed" && promptRunId !== undefined)
+			this.onDowngrade?.({
+				type: "task_result_downgrade",
+				version: TASK_RESULT_VERSION,
+				promptRunId,
+				from: "passed",
+				fact: { ...next },
+			});
 	}
 
 	/** A new top-level run starts with no facts and accepts only its own receipts. */
@@ -149,9 +189,10 @@ export function beginTaskResult(
 	existing: TaskResultCollector | undefined,
 	loader: { getEventBus?(): EventBus },
 	promptRunId: string,
+	onDowngrade?: TaskResultDowngradeSink,
 ): TaskResultCollector | undefined {
 	if (!isTaskResultEnabled()) return existing?.dispose();
-	const collector = existing ?? new TaskResultCollector(loader.getEventBus?.());
+	const collector = existing ?? new TaskResultCollector(loader.getEventBus?.(), onDowngrade);
 	collector.begin(promptRunId);
 	return collector;
 }
