@@ -59,4 +59,29 @@ describe("run lifecycle: prepareTools throws on the continue path", () => {
 		const json = JSON.stringify(session.runJournalRecords);
 		expect(json).not.toContain("without run_started");
 	});
+
+	it("flag off: an absent required tool never makes prepareTools throw; prompt and the goal follow-up both reach the provider", async () => {
+		delete process.env.OMK_REQUIRED_TOOLS;
+		harness = await createHarness();
+		const session = harness.session;
+		setRequiredToolSource(session, () => contract("browser__verify"));
+		const prepareTools = session.agent.prepareTools;
+		expect(prepareTools).toBeDefined();
+		expect(() => prepareTools?.(session.agent.state.tools.slice(), [])).not.toThrow();
+		harness.setResponses([fauxAssistantMessage("first done"), fauxAssistantMessage("follow-up done")]);
+		let queued = false;
+		session.subscribe((event) => {
+			if (event.type !== "agent_end" || queued) return;
+			queued = true;
+			session.agent.followUp(followUp("continue the goal"));
+		});
+
+		await session.prompt("start goal");
+
+		expect(queued).toBe(true);
+		expect(harness.faux.state.callCount).toBe(2);
+		expect(session.lastTermination?.kind).toBe("completed");
+		const events = session.runJournalRecords.map((record) => record.event);
+		expect(events).toEqual(["run_started", "run_finished", "run_started", "run_finished"]);
+	});
 });
