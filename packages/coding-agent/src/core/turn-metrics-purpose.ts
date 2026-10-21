@@ -47,3 +47,26 @@ export function summarizeByPurpose(
 	}
 	return result;
 }
+
+type MutableTotals = { input: number; output: number; cacheRead: number; cacheWrite: number; costUsd: number };
+
+/** Add suggestion usage to the cost/token totals; returns their billed count and amount. */
+export function addSuggestionTotals(
+	records: readonly TurnMetricRecord[],
+	totals: MutableTotals,
+): { billedTurns: number; billedCostUsd: number } {
+	const billed = { billedTurns: 0, billedCostUsd: 0 };
+	for (const record of records) {
+		if (record.purpose !== "suggestion" || !record.usage) continue;
+		totals.input += record.usage.input;
+		totals.output += record.usage.output;
+		totals.cacheRead += record.usage.cacheRead;
+		totals.cacheWrite += record.usage.cacheWrite ?? 0;
+		totals.costUsd += record.usage.costUsd;
+		if (record.usage.billedUsd !== undefined) {
+			billed.billedTurns++;
+			billed.billedCostUsd += record.usage.billedUsd;
+		}
+	}
+	return billed;
+}
