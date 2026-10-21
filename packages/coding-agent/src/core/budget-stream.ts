@@ -4,6 +4,7 @@ import { timingEnd, timingMark } from "./debug-timing.ts";
 import { requestAdmissionPolicyFromEnv } from "./request-admission-policy.ts";
 import { createRequestAdmissionGuard, type RequestAdmissionGuard } from "./request-context-admission.ts";
 import { requestTraceFromEnv } from "./request-trace.ts";
+import { dispatchFingerprints } from "./request-trace-metadata.ts";
 import type { RunBudget } from "./run-budget.ts";
 export function wrapBudgetStream(
 	source: StreamFn,
@@ -25,7 +26,10 @@ export function wrapBudgetStream(
 		// Explicit forwarding instead of AbortSignal.any(): see abort-link.ts for the Node 22 leak.
 		const link = options?.signal ? linkAbortSignals(options.signal, budget.signal) : undefined;
 		try {
-			traceId = trace?.begin(model.provider, model.id);
+			traceId = trace?.begin(model.provider, model.id, {
+				cacheScope: options?.cacheRetention,
+				...(trace?.salt ? { fingerprints: dispatchFingerprints(trace.salt, context) } : {}),
+			});
 			timingEnd("enter", "request.sent");
 			const stream = await source(model, context, {
 				...options,
