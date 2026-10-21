@@ -1,12 +1,12 @@
 {
 	"name": "open-multi-agent-kit",
-	"version": "1.5.4",
+	"version": "1.5.5",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "open-multi-agent-kit",
-			"version": "1.5.4",
+			"version": "1.5.5",
 			"license": "MIT",
 			"dependencies": {
 				"omk-agent-core": "^1.5.4",

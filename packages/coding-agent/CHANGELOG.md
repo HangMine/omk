@@ -2,10 +2,16 @@
 
 ## [Unreleased]
 
-### Breaking
+## [1.5.5] - 2026-10-21
 
-- `redactForModel` is no longer exported from the package root. It was removed together with secret redaction on text, log and session paths (d58ed90719); v1.5.4 still exported it. There is no replacement stub.
+### Changed
+
+- Secret redaction no longer runs on text, log and session paths (d58ed90719). Values such as API responses recorded by `ApiBroker`, compaction input and run-journal entries are now stored as-is.
 - `VERIFIED_BASH_REDACTION_POLICY_ID` is now `omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k`. The old id claimed `omk-sensitive-text-v1` redaction that no longer runs. Receipts already written with the old id are unchanged; code that compares against the old string must update.
+
+### Deprecated
+
+- `redactForModel` is still exported from the package root with its v1.5.4 behavior, but omk no longer calls it. It will be removed in 2.0.0.
 
 ### Fixed
 

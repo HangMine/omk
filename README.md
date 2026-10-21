@@ -455,7 +455,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.4](.github/RELEASE_NOTES_v1.5.4.md)
+- [Release notes for v1.5.5](.github/RELEASE_NOTES_v1.5.5.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -546,6 +546,21 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.5
+
+### Changed
+
+- Secret redaction no longer runs on text, log and session paths (d58ed90719). Values such as API responses recorded by `ApiBroker`, compaction input and run-journal entries are now stored as-is.
+- `VERIFIED_BASH_REDACTION_POLICY_ID` is now `omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k`. The old id claimed `omk-sensitive-text-v1` redaction that no longer runs. Receipts already written with the old id are unchanged; code that compares against the old string must update.
+
+### Deprecated
+
+- `redactForModel` is still exported from the package root with its v1.5.4 behavior, but omk no longer calls it. It will be removed in 2.0.0.
+
+### Fixed
+
+- Next-task suggestions follow the editor on screen. An extension that swaps in its own editor at session start (for example `pi-powerline-footer`) left the gray suggestion on the hidden default editor, so it never appeared and Tab never inserted it.
+
 ## Release v1.5.4
 
 ### Added
@@ -590,14 +605,6 @@ Release notes live in [RELEASE_NOTES_v1.5.4.md](.github/RELEASE_NOTES_v1.5.4.md)
 - The `journal-read-retry` mutator writes each record with one `pwrite` call, so the fixture only produces the two valid journal states it claims to produce. The reader-side retry above is what makes the live-writer assertions hold without weakening them.
 
 Release notes live in [RELEASE_NOTES_v1.5.3.md](.github/RELEASE_NOTES_v1.5.3.md).
-
-## Release v1.5.2
-
-### Changed
-
-- Lockstep version alignment with OMK 1.5.2 to restore publication of all seven workspace packages after the 1.5.1 registry staging conflict. Provider recovery behavior is unchanged from 1.5.1.
-
-Release notes live in [RELEASE_NOTES_v1.5.2.md](.github/RELEASE_NOTES_v1.5.2.md).
 
 <!-- releases:end -->
 
