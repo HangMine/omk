@@ -3,16 +3,12 @@
  * Kept out of interactive-mode.ts; ChatContainer feeds every session event through here.
  */
 import { type Component, Spacer, Text } from "omk-tui";
-import { formatTaskResultLine, type TaskResultEvent } from "../../core/task-result.ts";
+import { taskResultSurfaceLine } from "../../core/task-result-format.ts";
 import { theme } from "./theme/theme.ts";
 
-function isTaskResultEvent(event: { type: string }): event is TaskResultEvent {
-	return event.type === "task_result" && typeof (event as Partial<TaskResultEvent>).projection === "object";
-}
-
-/** The dim status line for a `task_result` event, the same text print mode writes; undefined otherwise. */
+/** The dim status line for a `task_result` or `task_result_downgrade` event, the same text print mode writes. */
 export function taskResultStatusLine(event: { type: string }): string | undefined {
-	return isTaskResultEvent(event) ? formatTaskResultLine(event.projection) : undefined;
+	return taskResultSurfaceLine(event);
 }
 
 /** Spacer + dim line for the transcript, or undefined for any other event. */

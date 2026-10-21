@@ -352,7 +352,7 @@ export type AgentSessionEvent =
 			willRetry: boolean;
 	  }
 	| promptSettlement.PromptSettledEvent
-	| taskResultWiring.TaskResultEvent
+	| taskResultWiring.TaskResultSessionEvent
 	| {
 			type: "queue_update";
 			steering: readonly string[];
@@ -2122,7 +2122,9 @@ export class AgentSession {
 		this._pinNotice.resetTurn(); // spec 089: re-arm the once-per-turn pinned quota notice
 		const ownedRun = this._promptLifecycle.begin(promptRunId);
 		// Spec 096: undefined with OMK_TASK_RESULT off (no subscription, no event).
-		this._taskResult = taskResultWiring.beginTaskResult(this._taskResult, this._resourceLoader, promptRunId);
+		// Spec 100: the collector emits task_result_downgrade through this the moment a pass is withdrawn.
+		const emit = (event: taskResultWiring.TaskResultDowngradeEvent) => this._emit(event);
+		this._taskResult = taskResultWiring.beginTaskResult(this._taskResult, this._resourceLoader, promptRunId, emit);
 		const taskResult = this._taskResult;
 		// Roadmap M2: the lease spans the whole run including internal retries
 		// and continuations, so they share one admission decision (§8.3).

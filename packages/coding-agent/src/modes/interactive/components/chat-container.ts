@@ -72,7 +72,7 @@ export class ChatContainer extends WindowedContainer {
 			this.settleAll();
 		} else if (event.type === "tool_execution_end") {
 			this.prunePending();
-		} else if (event.type === "task_result") {
+		} else if (event.type === "task_result" || event.type === "task_result_downgrade") {
 			// Spec 096 (flag on only): the shared projection as a status line.
 			for (const component of taskResultStatusComponents(event) ?? []) this.addChild(component);
 		}
