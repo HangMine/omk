@@ -6,6 +6,7 @@
 import type { Agent, AgentMessage } from "omk-agent-core";
 import type { Api, Model } from "omk-ai";
 import type { ExtensionRunner } from "./extensions/runner.ts";
+import type { RequiredToolContract } from "./required-tools.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { getLatestCompactionEntry } from "./session-manager.ts";
 import type { SessionRunBudget } from "./session-run-budget.ts";
@@ -26,6 +27,21 @@ export interface TurnAdmissionSession {
 	_runThresholdCompaction(emergency: boolean): Promise<boolean>;
 }
 
+/** Supplies the current task segment's required-tool contract (spec 104 v1: the approved acceptance contract). */
+export type RequiredToolSource = () => RequiredToolContract | undefined;
+
+/**
+ * Spec 104 phase 2: trusted host-side sources, keyed by session. Kept off `AgentSession`'s public
+ * surface and out of extension reach; consulted only with `OMK_REQUIRED_TOOLS` on.
+ */
+const requiredToolSources = new WeakMap<object, RequiredToolSource>();
+
+/** Set (or clear with `undefined`) the required-tool source of `session`; read at every fit. */
+export function setRequiredToolSource(session: object, source: RequiredToolSource | undefined): void {
+	if (source) requiredToolSources.set(session, source);
+	else requiredToolSources.delete(session);
+}
+
 export function installTurnAdmission(session: TurnAdmissionSession): SessionTurnAdmission {
 	// One tool selection serves admission and the admitted run: MCP servers the model's input
 	// budget cannot carry are withheld per request, never removed from the active tool set.
@@ -41,6 +57,8 @@ export function installTurnAdmission(session: TurnAdmissionSession): SessionTurn
 			session._runBudget.assertActive();
 		},
 		notify: (message) => session._extensionRunner.getUIContext().notify(message, "warning"),
+		// Spec 104: ignored unless OMK_REQUIRED_TOOLS is on (SessionTurnAdmission checks the flag first).
+		requiredTools: () => requiredToolSources.get(session)?.(),
 	});
 	session.agent.prepareTools = (tools, pending) => turnAdmission.fitTools(tools, pending);
 	return turnAdmission;
