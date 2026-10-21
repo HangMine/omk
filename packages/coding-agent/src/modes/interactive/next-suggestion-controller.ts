@@ -20,6 +20,12 @@ import {
 	type SuggestionPlan,
 	USAGE_CHECK_TIMEOUT_MS,
 } from "../../core/next-suggestion.ts";
+import {
+	isSuggestionCapsEnabled,
+	type SuggestionBudget,
+	suggestionBudgetFromEnv,
+} from "../../core/next-suggestion-budget.ts";
+import { type SuggestionSettlement, suggestionMetricsSettler } from "../../core/next-suggestion-settlement.ts";
 import { loadSubscriptionUsage } from "../../core/provider-usage.ts";
 
 export interface SuggestionSessionPort {
@@ -45,6 +51,11 @@ export interface NextSuggestionOptions {
 	readonly usageTimeoutMs?: number;
 	readonly requestRender?: () => void;
 	readonly onPlan?: (plan: SuggestionPlan) => void;
+	/** Spec 103: settle every suggestion request's usage, including discarded and cancelled ones. */
+	readonly settle?: (settlement: SuggestionSettlement) => void;
+	/** Spec 103 caps budget (caps flag only); defaults to the env budget. */
+	readonly budget?: SuggestionBudget;
+	readonly timeoutSignal?: (ms: number) => AbortSignal;
 }
 
 function lastAssistant(messages: readonly unknown[]): AssistantMessage | undefined {
@@ -65,6 +76,7 @@ export class NextSuggestionController {
 	private shown: string | undefined;
 	private readonly wrapped: StreamFn;
 	private readonly unsubscribe: () => void;
+	private turnsInRun = 0;
 
 	constructor(
 		session: SuggestionSessionPort,
@@ -81,7 +93,10 @@ export class NextSuggestionController {
 		this.wrapped = this.recorder.wrap(this.inner);
 		session.agent.streamFn = this.wrapped;
 		this.unsubscribe = session.subscribe((event) => {
-			if (event.type === "agent_start") this.cancel();
+			if (event.type === "agent_start") {
+				this.cancel();
+				this.turnsInRun = 0;
+			} else if (event.type === "turn_end") this.turnsInRun++;
 			else if (event.type === "prompt_settled") void this.onSettled(event.outcome);
 		});
 		editor.onBeforeInput = this.keyHandler;
@@ -156,15 +171,29 @@ export class NextSuggestionController {
 			currentModel: this.session.model,
 			nowMs: now(),
 			usage,
+			...(isSuggestionCapsEnabled(this.options.env)
+				? { caps: { budget: this.options.budget ?? suggestionBudgetFromEnv(this.options.env) } }
+				: {}),
 		});
 		this.options.onPlan?.(plan);
 		if (plan.kind !== "request") return;
 		const controller = new AbortController();
 		this.pending = controller;
-		const text = await requestNextSuggestion(this.inner, plan.record, plan.finalAssistant, controller.signal);
+		const parentTurnIndex = Math.max(0, this.turnsInRun - 1);
+		const startedAtEpochMs = Date.now();
+		const result = await requestNextSuggestion(this.inner, plan.record, plan.finalAssistant, controller.signal, {
+			caps: plan.caps,
+			now: this.options.now,
+			timeoutSignal: this.options.timeoutSignal,
+		});
+		const { provider, id } = plan.record.model;
+		this.options.settle?.({ result, provider, model: id, parentTurnIndex, startedAtEpochMs });
 		// Late result: the user typed, sent the next turn, or a newer turn settled.
 		if (generation !== this.generation || controller.signal.aborted) return;
 		this.pending = undefined;
+		const current = this.session.model;
+		if (plan.caps && (current?.provider !== provider || current?.id !== id)) return;
+		const text = result.text;
 		if (!text || this.editor.getText().length > 0) return;
 		this.shown = text;
 		this.editor.setPlaceholder(text);
@@ -264,5 +293,6 @@ export function installInteractiveNextSuggestions(
 	installNextSuggestions(session as unknown as SuggestionSessionPort, editor, basePlaceholder, {
 		requestRender,
 		quotaUsage: () => activeQuotaUsage(session),
+		settle: suggestionMetricsSettler(() => session.sessionId, session.sessionManager.getCwd()),
 	});
 }

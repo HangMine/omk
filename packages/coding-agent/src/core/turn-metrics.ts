@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { cumulativeCacheReadShare, isUsageInputSemanticsVerified } from "omk-ai";
+import { addSuggestionTotals, type PurposeUsageTotals, summarizeByPurpose } from "./turn-metrics-purpose.ts";
 import {
 	buildTurnMetricRecord,
 	parseTurnMetricRecord,
@@ -155,6 +156,8 @@ export interface TurnMetricsSummary {
 	readonly tools: readonly ToolAggregate[];
 	/** Lines that could not be parsed as a metric record. */
 	readonly malformedLines: number;
+	/** Spec 103: only when suggestion records exist; `totals` above is the sum of both. */
+	readonly byPurpose?: Readonly<Record<"main" | "suggestion", PurposeUsageTotals>>;
 }
 
 function percentile(sorted: readonly number[], fraction: number): number {
@@ -190,15 +193,16 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 	let planHits = 0;
 	let planObservations = 0;
 	let provenanceMismatchTurns = 0;
-	let billedCostUsd = 0;
-	let billedTurns = 0;
+	// Spec 103: suggestion records count only toward cost totals (and `byPurpose`), never as turns.
+	let { billedTurns, billedCostUsd } = addSuggestionTotals(records, totals);
 	let turnsMissingUsage = 0;
 	let turnsMissingCacheWrite = 0;
 	// Cache share is computed over covered usage only: turns whose cache writes are known.
 	const covered = { input: 0, cacheRead: 0, cacheWrite: 0 };
 	const unverifiedProviders = new Set<string>();
 
-	for (const record of records) {
+	const mainRecords = records.filter((record) => record.purpose !== "suggestion");
+	for (const record of mainRecords) {
 		sessions.add(record.sessionId);
 		if (record.model) models.add(record.provider ? `${record.provider}/${record.model}` : record.model);
 		if (record.usage) {
@@ -266,14 +270,14 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		.sort((a, b) => b.totalMs - a.totalMs || a.name.localeCompare(b.name));
 
 	return {
-		turns: records.length,
+		turns: mainRecords.length,
 		sessions: sessions.size,
 		models: [...models].sort(),
 		totalCostUsd: totals.costUsd,
 		billedCostUsd,
 		billedTurns,
 		usageCoverage: {
-			turnsWithUsage: records.length - turnsMissingUsage,
+			turnsWithUsage: mainRecords.length - turnsMissingUsage,
 			turnsMissingUsage,
 			turnsMissingCacheWrite,
 			unverifiedProviders: [...unverifiedProviders].sort(),
@@ -287,8 +291,8 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		// usageCoverage.turnsMissingCacheWrite instead of being treated as 0.
 		cacheReadShare: cumulativeCacheReadShare([covered]) ?? 0,
 		cacheReadShareCoverage: {
-			turnsUsed: records.length - turnsMissingUsage - turnsMissingCacheWrite,
-			turnsTotal: records.length,
+			turnsUsed: mainRecords.length - turnsMissingUsage - turnsMissingCacheWrite,
+			turnsTotal: mainRecords.length,
 			turnsMissingCacheWrite,
 		},
 		costIsLowerBound: turnsMissingCacheWrite > 0,
@@ -298,6 +302,7 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		provenanceMismatchTurns,
 		tools,
 		malformedLines,
+		...(records.some((r) => r.purpose === "suggestion") ? { byPurpose: summarizeByPurpose(records) } : {}),
 	};
 }
 

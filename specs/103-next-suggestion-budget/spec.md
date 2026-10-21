@@ -18,7 +18,11 @@ Source: 인호's review "OMK 캐시 효율과 기본기 통합 개선 검토", p
 Flag: existing `OMK_NEXT_SUGGESTIONS` (default off, `next-suggestion.ts:21,60-62`) stays the master switch. New behavior that changes the suggestion request is under `OMK_NEXT_SUGGESTIONS_CAPS=1` (default off) so the "reuse current settings" arm remains byte-identical to today.
 
 ### 2.1 Independent caps (flag on only)
-- `SuggestionBudget { maxReasoning: ThinkingLevel | "inherit"; deadlineMs: number; maxCostUsd: number }`, passed from settings; no defaults invented here — initial values are chosen in the free pilot (§6) and written into this spec before default-on.
+- `SuggestionBudget { maxReasoning: ThinkingLevel | "inherit"; deadlineMs: number; maxCostUsd: number }`. Defaults (Tech Lead ruling, 2026-10-21 KST); env only overrides (`OMK_NEXT_SUGGESTIONS_DEADLINE_MS`, `OMK_NEXT_SUGGESTIONS_MAX_COST_USD`, `OMK_NEXT_SUGGESTIONS_MAX_REASONING`):
+  - `deadlineMs = 30000` — same as `DEFAULT_TIMEOUT_MS` of the other background side-call, `coding-agent/src/core/advisory-judge-model.ts`.
+  - `maxCostUsd = 0.02` — automation default run budget `maxCostUsd: 10` ÷ `maxToolCalls: 500` (`coding-agent/src/core/automation/index.ts`), i.e. the per-action share of the default run budget.
+  - `maxReasoning = "inherit"` — keeps today's bytes (arm B, §5); a lower level is only an arm.
+  - Skip reason `budget_unset` only when the user explicitly sets the deadline or cost cap to `0`. Invalid values keep the default. The pilot (§6) may revise these before default-on.
 - Wall time: one `AbortSignal.timeout(deadlineMs)` linked with the existing controller signal; timeout ⇒ outcome `timeout`.
 - Cost: pre-flight estimate (input tokens × model rates, using the capability table's read/write multipliers) > `maxCostUsd` ⇒ skip reason `over_cost_cap` (new `SuggestionSkipReason`). Post-hoc actual cost is recorded, never used to retroactively hide a shown suggestion.
 - Reasoning: `"inherit"` keeps today's bytes. A lower level is only an **arm** (§5), never forced: on Anthropic, thinking/effort changes invalidate message cache blocks, and on OpenAI `reasoning.effort` is listed as prefix-affecting (docs in §3).
@@ -91,7 +95,7 @@ Sources (fetched 2026-10-21 KST):
 - Promote an arm to default (still behind `OMK_NEXT_SUGGESTIONS`) only if, on paired tasks: **95% CI upper bound of per-verified-task cost change < 0** vs A, and **success-rate drop ≤ 5 pp**. Otherwise inconclusive; keep A. Task, not request, is the sample unit.
 
 ## 7. Flags / deps / rollback
-- Flags: `OMK_NEXT_SUGGESTIONS` (existing, default off); `OMK_NEXT_SUGGESTIONS_CAPS` (new, default off). Usage settlement and the capability table apply whenever suggestions are on (accounting, not model behavior); if Tech Lead prefers, they can also sit behind the caps flag.
+- Flags: `OMK_NEXT_SUGGESTIONS` (existing, default off); `OMK_NEXT_SUGGESTIONS_CAPS` (new, default off). Usage settlement applies whenever suggestions are on (accounting, not model behavior). The capability table (§2.4) sits behind `OMK_NEXT_SUGGESTIONS_CAPS` (Tech Lead ruling 2026-10-21): with the caps flag off, skip decisions and suggestion request bytes are identical to `main`. Metrics summary: suggestion records are excluded from `turns`, duration percentiles and main-turn `usageCoverage`; they count toward cost/token totals and appear under `byPurpose`.
 - New dependencies: 0.
 - Rollback: unset flags ⇒ today's behavior; code revert is self-contained (next-suggestion.ts, controller, one optional trace field, one table module). `turns.jsonl` readers ignore the new `purpose` field.
 

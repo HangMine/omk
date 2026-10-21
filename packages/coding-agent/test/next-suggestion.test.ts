@@ -169,13 +169,14 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 			return { result: async () => assistant("Next.") };
 		}) as never;
 		const controller = new AbortController();
-		const text = await requestNextSuggestion(
+		const result = await requestNextSuggestion(
 			streamFn,
 			{ ...record, options: mainOptions },
 			assistant("Done."),
 			controller.signal,
 		);
-		expect(text).toBe("Next.");
+		expect(result.text).toBe("Next.");
+		expect(result.outcome).toBe("shown");
 		expect(seenModel).toBe(model);
 		expect(seenContext?.systemPrompt).toBe(context.systemPrompt);
 		expect(SUGGESTION_MAX_TOKENS).toBe(128);
