@@ -1,8 +1,10 @@
+import { existsSync } from "fs";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
 import type { AgentTool } from "omk-agent-core";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
+import { EditDiagnosticsRun, isEditDiagnosticsEnabled, type NewDiagnosticsDetails } from "./edit-diagnostics.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -14,6 +16,11 @@ const writeSchema = Type.Object({
 });
 
 export type WriteToolInput = Static<typeof writeSchema>;
+
+/** Only present when OMK_EDIT_DIAGNOSTICS=1 (spec 107); `undefined` otherwise, as before. */
+export interface WriteToolDetails {
+	newDiagnostics: NewDiagnosticsDetails;
+}
 
 /**
  * Pluggable operations for the write tool.
@@ -46,7 +53,7 @@ export interface WriteToolOptions {
 export function createWriteToolDefinition(
 	cwd: string,
 	options?: WriteToolOptions,
-): ToolDefinition<typeof writeSchema, undefined> {
+): ToolDefinition<typeof writeSchema, WriteToolDetails | undefined> {
 	const ops = options?.operations ?? defaultWriteOperations;
 	return {
 		name: "write",
@@ -69,7 +76,11 @@ export function createWriteToolDefinition(
 				throw new Error(`Write blocked by active loadout policy: ${path}`);
 			}
 			const dir = dirname(absolutePath);
-			return withFileMutationQueue(absolutePath, async () => {
+			const diag =
+				isEditDiagnosticsEnabled() && EditDiagnosticsRun.applies(path)
+					? new EditDiagnosticsRun("write", cwd, path, absolutePath, signal)
+					: undefined;
+			const result = await withFileMutationQueue(absolutePath, async () => {
 				// Do not reject from an abort event listener here: that would release the
 				// mutation queue while an in-flight filesystem operation may still finish.
 				// Checking signal.aborted after each await observes the same aborts while
@@ -83,17 +94,32 @@ export function createWriteToolDefinition(
 				await ops.mkdir(dir);
 				throwIfAborted();
 
+				if (diag) {
+					await diag.baseline(existsSync(absolutePath));
+					throwIfAborted();
+				}
+
 				// Write the file contents.
 				await ops.writeFile(absolutePath, content);
 				throwIfAborted();
+				await diag?.afterWrite();
 
 				return {
 					content: [
-						{ type: "text", text: `Successfully wrote ${Buffer.byteLength(content, "utf8")} bytes to ${path}` },
+						{
+							type: "text" as const,
+							text: `Successfully wrote ${Buffer.byteLength(content, "utf8")} bytes to ${path}`,
+						},
 					],
 					details: undefined,
 				};
 			});
+			if (!diag) return result;
+			// Post-check runs outside the mutation queue (spec 107 Q6).
+			const report = await diag.report();
+			if (signal?.aborted) throw new Error("Operation aborted");
+			const text = report.text ? `${result.content[0].text}\n${report.text}` : result.content[0].text;
+			return { content: [{ type: "text" as const, text }], details: { newDiagnostics: report.details } };
 		},
 	};
 }
