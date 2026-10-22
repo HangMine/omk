@@ -62,7 +62,7 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
 
 - **Primary:** paired resolve rate on the same task set, arm ON (`OMK_EDIT_DIAGNOSTICS=1`) vs OFF. The original superiority target (ON − OFF ≥ +δ pp, δ = 2 pp, Q4) is kept for record but is superseded by the non-inferiority goal below.
 - **δ = 2 pp (Q4, decided).**
-- **n = TBD — fixed after pilot. BLOCKING: no main measurement run may start until n is written here in a commit.**
+- **n = TBD — computed from the pilot (ρ, p_d) as the free-run count needed for the clustered CI lower bound to clear −3pp, then committed here. BLOCKING: no main measurement run may start until n is committed. If n exceeds the free-run budget, commit "inconclusive" instead and skip the main run; n is never raised afterwards.**
   - Power calc (Bench Analyst, 2026-10-22 KST, relayed by OMK): paired McNemar, α = 0.05 two-sided, power 0.8, δ = 2 pp. Required pairs by discordant-pair rate p_d:
     | p_d | required pairs |
     |---|---|
