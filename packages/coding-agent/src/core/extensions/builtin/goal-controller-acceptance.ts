@@ -236,7 +236,7 @@ export class GoalAcceptanceFlow {
 			...(artifact !== undefined ? { outputArtifact: summarizeArtifact(artifact) } : {}),
 			...(recall !== undefined ? { priorRecall: recall } : {}),
 			// Spec 106 D1: counts, digests and would-delete ids only; absent when the flag is off.
-			...recallEvidence.evidenceReportField(ctx.sessionManager.getSessionId()),
+			...recallEvidence.evidenceReportField(ctx),
 		});
 		// Spec 096/100: hand the host receipt to the task-result projection (flag on only), with the
 		// workspace state at publish, the runner's counts and the check identity.

@@ -39,7 +39,13 @@ export function observeRecallBlockedExhausted(goalId: string): void {
 	updateEvidenceArtifactsByOwner(goalId, { blockedExhausted: true });
 }
 
-/** The `goal_verification` field: this session's counts-only report, absent when the flag is off. */
-export function evidenceReportField(sessionId: string): { evidenceLifecycle?: EvidenceLifecycleReport } {
-	return evidenceLifecycleObserveEnabled() ? { evidenceLifecycle: evidenceLifecycleReport(sessionId) } : {};
+/**
+ * The `goal_verification` field: this session's counts-only report, absent when the flag is off. The session
+ * id is read only when the flag is on, so flag-off callers touch nothing new.
+ */
+export function evidenceReportField(ctx: { readonly sessionManager: { getSessionId(): string } }): {
+	evidenceLifecycle?: EvidenceLifecycleReport;
+} {
+	if (!evidenceLifecycleObserveEnabled()) return {};
+	return { evidenceLifecycle: evidenceLifecycleReport(ctx.sessionManager.getSessionId()) };
 }
