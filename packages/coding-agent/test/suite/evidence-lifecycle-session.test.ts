@@ -58,6 +58,8 @@ describe("spec 106 D1 session sink", () => {
 		const data = (written[0] as { data: Record<string, unknown> }).data;
 		expect(data).toMatchObject({
 			schemaVersion: 1,
+			aggregation: "cumulative",
+			settleIndex: 0,
 			report: {
 				mode: "observe",
 				deletes: 0,
@@ -74,14 +76,29 @@ describe("spec 106 D1 session sink", () => {
 		expect(entries(harness.sessionManager)).toHaveLength(1);
 	});
 
-	it("flag observe: a second prompt adds one more entry (one per settle)", async () => {
+	it("flag observe: two prompts give 2 cumulative entries, settleIndex 0 and 1; the last covers both", async () => {
 		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
 		const harness = await createHarness();
 		harnesses.push(harness);
 		for (const text of ["a", "b"]) {
+			spill();
 			harness.setResponses([fauxAssistantMessage("ok")]);
 			await harness.session.prompt(text);
 		}
-		expect(entries(harness.sessionManager)).toHaveLength(2);
+		const data = entries(harness.sessionManager).map(
+			(e) => (e as { data: { settleIndex: number; aggregation: string; report: Record<string, number> } }).data,
+		);
+		expect(data.map((d) => [d.settleIndex, d.aggregation])).toEqual([
+			[0, "cumulative"],
+			[1, "cumulative"],
+		]);
+		const [first, last] = data;
+		expect(first?.report.registered).toBe(1);
+		// Analysis reads the last entry per session: it includes the artifacts of both prompts.
+		expect(last?.report.registered).toBe(2);
+		expect(last?.report.present).toBe(2);
+		for (const key of ["registered", "present", "presentBytes"]) {
+			expect(last?.report[key] ?? 0).toBeGreaterThanOrEqual(first?.report[key] ?? 0);
+		}
 	});
 });

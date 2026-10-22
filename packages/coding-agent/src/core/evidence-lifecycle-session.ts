@@ -13,15 +13,28 @@ export const EVIDENCE_LIFECYCLE_ENTRY_TYPE = "evidence_lifecycle";
 
 export interface EvidenceLifecycleEntryData {
 	readonly schemaVersion: 1;
+	/** Each entry is the whole report so far, not a delta: analyse the last entry per session. */
+	readonly aggregation: "cumulative";
+	/** 0-based, monotonic per session (counts this session's earlier entries, so it survives resume). */
+	readonly settleIndex: number;
 	readonly report: EvidenceLifecycleReport;
 }
 
 export function appendEvidenceLifecycleEntry(sink: {
 	appendCustomEntry(customType: string, data?: unknown): string;
+	getEntries(): readonly { type: string; customType?: string }[];
 }): void {
 	if (!evidenceLifecycleObserveEnabled()) return;
 	try {
-		const data: EvidenceLifecycleEntryData = { schemaVersion: 1, report: evidenceLifecycleReport() };
+		const settleIndex = sink
+			.getEntries()
+			.filter((e) => e.type === "custom" && e.customType === EVIDENCE_LIFECYCLE_ENTRY_TYPE).length;
+		const data: EvidenceLifecycleEntryData = {
+			schemaVersion: 1,
+			aggregation: "cumulative",
+			settleIndex,
+			report: evidenceLifecycleReport(),
+		};
 		sink.appendCustomEntry(EVIDENCE_LIFECYCLE_ENTRY_TYPE, data);
 	} catch {
 		// Observation must never fail the prompt.
