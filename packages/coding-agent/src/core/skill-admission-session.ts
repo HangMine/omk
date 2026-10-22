@@ -1,0 +1,103 @@
+/**
+ * Spec 106 A1: AgentSession's single skill admission decision, persisted in the session file.
+ * Every body-delivering path (explicit `/skill:` in prompt, steer, followUp; SDK callers through
+ * `AgentSession.admitSkillBody`) goes through {@link admitSkillBody}. Flag off: always admitted, nothing written.
+ */
+import { readFileSync } from "node:fs";
+import { stripFrontmatter } from "../utils/frontmatter.ts";
+import type { SessionEntry, SessionManager } from "./session-manager.ts";
+import {
+	isSkillAdmissionEnabled,
+	isSkillAdmissionRecord,
+	makeSkillAdmissionRecord,
+	SKILL_ADMISSION_CAP,
+	SKILL_ADMISSION_ENTRY_TYPE,
+	SkillAdmissionLedger,
+	type SkillAdmissionRecord,
+	type SkillAdmissionSource,
+	skillBodyDigest,
+} from "./skill-admission-ledger.ts";
+import type { Skill } from "./skills.ts";
+
+const SKILL_BLOCK = /^<skill name="([^"]+)" location="[^"]+">\n([\s\S]*?)\n<\/skill>(?:\n\n[\s\S]+)?$/;
+
+/** Rebuild from the whole session file: resume, compaction and model switch never reset the count. */
+export function restoreSkillAdmissionLedger(entries: readonly SessionEntry[]): SkillAdmissionLedger {
+	const records: SkillAdmissionRecord[] = [];
+	const legacyBodies = new Set<string>();
+	for (const entry of entries) {
+		if (entry.type === "custom" && entry.customType === SKILL_ADMISSION_ENTRY_TYPE) {
+			if (isSkillAdmissionRecord(entry.data)) records.push(entry.data);
+			continue;
+		}
+		if (entry.type !== "message" || entry.message.role !== "user") continue;
+		const content = entry.message.content;
+		const texts =
+			typeof content === "string" ? [content] : content.flatMap((p) => (p.type === "text" ? [p.text] : []));
+		for (const text of texts) {
+			const match = text.match(SKILL_BLOCK);
+			if (match) legacyBodies.add(`${match[1]}\u0000${skillBodyDigest(match[2] ?? "")}`);
+		}
+	}
+	const ledger = SkillAdmissionLedger.restore(records);
+	// SK7: only a session that never wrote a ledger is reconstructed from history.
+	if (records.length === 0) ledger.markLegacy(legacyBodies.size);
+	return ledger;
+}
+
+/** Host decision for one skill body. Returns true to deliver, otherwise the refusal reason for an explicit notice. */
+export function admitSkillBody(
+	sessionManager: SessionManager,
+	skillId: string,
+	body: string,
+	source: SkillAdmissionSource,
+	env: NodeJS.ProcessEnv = process.env,
+): true | string {
+	if (!isSkillAdmissionEnabled(env)) return true;
+	const ledger = restoreSkillAdmissionLedger(sessionManager.getEntries());
+	const digest = skillBodyDigest(body);
+	const decision = ledger.reserve(skillId, digest);
+	if (!decision.ok) {
+		return decision.reason === "cap"
+			? `session skill cap ${SKILL_ADMISSION_CAP} reached`
+			: `session already holds more than ${SKILL_ADMISSION_CAP} skill bodies (legacy)`;
+	}
+	if (decision.reused) return true;
+	// reserve and commit run in one synchronous turn; the expanded text is handed straight to the request.
+	ledger.commit(decision.requestId);
+	sessionManager.appendCustomEntry(
+		SKILL_ADMISSION_ENTRY_TYPE,
+		makeSkillAdmissionRecord(skillId, digest, source, "admitted", decision.requestId),
+	);
+	return true;
+}
+
+/**
+ * Expand `/skill:name args` to its body (moved from AgentSession unchanged), gated by {@link admitSkillBody}.
+ * A refused skill is replaced by an explicit notice, never silently dropped.
+ */
+export function expandSkillCommand(
+	text: string,
+	skills: readonly Skill[],
+	sessionManager: SessionManager,
+	source: SkillAdmissionSource,
+	onError: (skill: Skill, error: unknown) => void,
+): string {
+	if (!text.startsWith("/skill:")) return text;
+	const spaceIndex = text.indexOf(" ");
+	const skillName = spaceIndex === -1 ? text.slice(7) : text.slice(7, spaceIndex);
+	const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
+	const skill = skills.find((s) => s.name === skillName);
+	if (!skill) return text; // Unknown skill, pass through
+	try {
+		const content = readFileSync(skill.filePath, "utf-8");
+		const body = stripFrontmatter(content).trim();
+		const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
+		const admitted = admitSkillBody(sessionManager, skill.name, skillBlock, source);
+		const head = admitted === true ? skillBlock : `[skill admission] "${skill.name}" was not loaded: ${admitted}.`;
+		return args ? `${head}\n\n${args}` : head;
+	} catch (err) {
+		onError(skill, err);
+		return text; // Return original on error
+	}
+}
