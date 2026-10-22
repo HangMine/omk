@@ -38,7 +38,6 @@ new flag off, behavior is the same as 1.5.5.
 
 - There is no on/off benchmark for the lane ready frontier yet.
 - The skill cap of 10 is a chosen contract value, not a measured one (#207).
-- The test suite passes (1198/1198, as reported in #211).
 
 ## Upgrade
 
