@@ -173,4 +173,25 @@ describe("spec 107 checkerRan per session (pre-registration)", () => {
 		expect(record).toBeUndefined();
 		expect(lines).toEqual([]);
 	});
+
+	it("ON/shadow with zero edits writes exactly one session line, checkerRan=false; OFF writes none", async () => {
+		for (const flag of ["1", "shadow", undefined] as const) {
+			logDir = mkdtempSync(join(tmpdir(), "omk-edit-diag-session-"));
+			process.env.OMK_RUN_LOG_DIR = logDir;
+			if (flag) process.env.OMK_EDIT_DIAGNOSTICS = flag;
+			else delete process.env.OMK_EDIT_DIAGNOSTICS;
+			const harness = await createHarness();
+			harnesses.push(harness);
+			harness.setResponses([fauxAssistantMessage("done")]);
+			await harness.session.prompt("Say done.");
+			flushEditDiagnosticsSession();
+			const file = join(logDir, "edit-diag-session.jsonl");
+			const lines = existsSync(file) ? readFileSync(file, "utf8").trim().split("\n") : [];
+			if (flag) {
+				expect(lines).toHaveLength(1);
+				expect(JSON.parse(lines[0])).toMatchObject({ checkerRan: false, checks: 0, checkerRuns: 0 });
+			} else expect(lines).toEqual([]);
+			rmSync(logDir, { recursive: true, force: true });
+		}
+	});
 });

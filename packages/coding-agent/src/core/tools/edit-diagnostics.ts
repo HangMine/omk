@@ -21,7 +21,13 @@ import {
 	type FileDiagnosticsResult,
 	languageForFile,
 } from "./diagnostics-checkers.ts";
-import { recordCheck } from "./edit-diagnostics-session.ts";
+import { recordCheck, sessionState } from "./edit-diagnostics-session.ts";
+
+/** Start the per-session record at tool creation when on/shadow (no-op when off). */
+export function ensureEditDiagnosticsSession(env: NodeJS.ProcessEnv = process.env): void {
+	const mode = editDiagnosticsMode(env);
+	if (mode !== "off") sessionState(mode);
+}
 
 export {
 	EDIT_DIAG_CHECKERS_LOG,

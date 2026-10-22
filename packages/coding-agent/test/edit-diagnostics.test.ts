@@ -509,4 +509,24 @@ describe("checkerRan and checker versions (spec 107 pre-registration)", () => {
 		expect(flushEditDiagnosticsSession()).toBeUndefined();
 		expect(existsSync(logDir)).toBe(false);
 	});
+
+	it("ON/shadow with zero edits or no checker-backed file: exactly one session line, checkerRan=false", async () => {
+		for (const mode of ["1", "shadow"] as const) {
+			process.env.OMK_EDIT_DIAGNOSTICS = mode;
+			createEditToolDefinition(root);
+			expect(flushEditDiagnosticsSession()).toMatchObject({ checkerRan: false, checks: 0, checkerRuns: 0 });
+			const calls = fake([]);
+			writeFileSync(join(root, "n.md"), "a\n");
+			await edit("n.md", "a", "b");
+			expect(calls).toHaveLength(0);
+			flushEditDiagnosticsSession();
+			restore?.();
+			restore = undefined;
+		}
+		const lines = readLog("edit-diag-session");
+		expect(lines).toHaveLength(4);
+		for (const l of lines) {
+			expect(l).toMatchObject({ checkerRan: false, checks: 0, checkerRuns: 0, checkerVersions: null });
+		}
+	});
 });

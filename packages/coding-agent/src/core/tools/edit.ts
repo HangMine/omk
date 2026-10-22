@@ -5,6 +5,7 @@ import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 import {
 	EditDiagnosticsRun,
+	ensureEditDiagnosticsSession,
 	isEditDiagnosticsEnabled,
 	isEditDiagnosticsReported,
 	type NewDiagnosticsDetails,
@@ -130,6 +131,7 @@ export function createEditToolDefinition(
 	cwd: string,
 	options?: EditToolOptions,
 ): ToolDefinition<typeof editSchema, EditToolDetails | undefined, EditRenderState> {
+	ensureEditDiagnosticsSession();
 	const ops = options?.operations ?? defaultEditOperations;
 	return {
 		name: "edit",

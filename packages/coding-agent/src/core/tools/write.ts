@@ -6,6 +6,7 @@ import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 import {
 	EditDiagnosticsRun,
+	ensureEditDiagnosticsSession,
 	isEditDiagnosticsEnabled,
 	isEditDiagnosticsReported,
 	type NewDiagnosticsDetails,
@@ -59,6 +60,7 @@ export function createWriteToolDefinition(
 	cwd: string,
 	options?: WriteToolOptions,
 ): ToolDefinition<typeof writeSchema, WriteToolDetails | undefined> {
+	ensureEditDiagnosticsSession();
 	const ops = options?.operations ?? defaultWriteOperations;
 	return {
 		name: "write",
