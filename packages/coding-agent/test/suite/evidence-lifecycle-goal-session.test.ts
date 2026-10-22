@@ -172,4 +172,39 @@ describe("spec 106 D1 evidence attribution through a live session", () => {
 		expect(evidenceEntries(harness)).toHaveLength(0);
 		expect(evidenceRegistrySessionCount()).toBe(0);
 	});
+
+	it("flag observe: a turn started by the deferred-turn drain (after manual compaction) is attributed", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
+		const probe = await createHarness();
+		harnesses.push(probe);
+		const harness = await createHarness({ tools: [createReadTool(probe.tempDir)] });
+		harnesses.push(harness);
+		const file = join(probe.tempDir, "big.txt");
+		writeFileSync(file, Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n"));
+		harness.setResponses([fauxAssistantMessage("hello")]);
+		await harness.session.prompt("start");
+		await idle(harness);
+		const id = harness.sessionManager.getSessionId();
+		expect(evidenceRegistryStats(id).registered).toBe(0);
+		harness.setResponses([
+			fauxAssistantMessage("summary of the session"),
+			fauxAssistantMessage([fauxToolCall("read", { path: file })], { stopReason: "toolUse" }),
+			fauxAssistantMessage("read it"),
+		]);
+		// Public trigger, from outside any session scope: a triggerTurn message while manual compaction owns
+		// the session is deferred; compaction's finally drains it with setTimeout → _runAgentPrompt.
+		const compaction = harness.session.compact();
+		expect(harness.session.isCompacting).toBe(true);
+		await harness.session.sendCustomMessage(
+			{ customType: "test-deferred", content: "after compaction", display: false },
+			{ triggerTurn: true },
+		);
+		await compaction;
+		await idle(harness);
+		const last = evidenceEntries(harness).at(-1)?.report as Report;
+		expect(last.byProducer["read-spill"]).toBe(1);
+		expect(last.registered).toBe(1);
+		expect(last.unattributed).toBe(0);
+		expect(evidenceRegistryStats("unattributed").registered).toBe(0);
+	});
 });
