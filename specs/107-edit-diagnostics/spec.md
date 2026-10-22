@@ -96,7 +96,7 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
   1. **New errors remaining at end:** diagnostics are run **outside the tool-call record**, identically for both arms, at session end. Counted as the **net increase vs the pre-edit baseline** (task starting state), **paired per task** (ON vs OFF). Tasks in languages without a diagnostics checker are **excluded from the denominator**, and the excluded count is reported.
   2. **Next-edit fix rate (report-only, NOT part of the verdict):** denominator = edits that produced new diagnostics. *Fixed* = after the next edit, the diagnostic with the **same file + same normalized message key** is gone. Disappearance due to **file deletion is counted separately** (not as fixed). The "hidden" comparison comes from a **separate shadow run** (`OMK_EDIT_DIAGNOSTICS=shadow`), never from the OFF arm.
 - **Shadow mode (decided, Tech Lead 2026-10-22 KST):** `OMK_EDIT_DIAGNOSTICS=shadow`, off by default. The checker runs, but results go **only** to the run log (`edit-diag` event with `mode: "shadow"`); the model-facing tool result text and `details` are **byte-identical to OFF** (tested, including the first request payload in a faux session). Shadow is **not** the control arm: running the checker changes time and tokens. **The A/B stays OFF vs ON.**
-- **Wall time excludes diagnostic check time:** every `edit-diag` event logs `mode` (`on`|`shadow`), `baselineMs`, `postMs` and `diagMs` (= baseline + post checker time), so the wall-time guardrail can subtract checker time where a comparison requires it (e.g. shadow vs OFF).
+- **Telemetry:** every `edit-diag` event logs `mode` (`on`|`shadow`), `baselineMs`, `postMs` and `diagMs` (= baseline + post checker time). `diagMs` is report-only; it is never subtracted from wall time (CPU/I/O contention would remain).
 - **Arms pinned** to the same `origin/main` SHA that contains `e4cefedb15` (bash truncation fix) once merged; the only difference is the env flag.
 - **Equal-path-length build dirs** for both arms (e.g. `/workspace/omk-ab-on` / `/workspace/omk-ab-of`… same length) so prompt bytes do not differ by path.
 - **Diff the first request payload** of ON vs OFF on one task: must be byte-identical (flag changes only tool results, never the system prompt/tool schema). Any diff ⇒ stop, fix, re-pin.
@@ -104,7 +104,7 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
 
 ## 5. Guardrails (must not regress, judged on the same pairs)
 - tokens/turn (median, p90): ON ≤ OFF × 1.10.
-- wall time/task (median, p90): ON ≤ OFF × 1.25, measured **excluding diagnostic check time** (`diagMs` from the `edit-diag` events is subtracted); per-edit diagnostics latency (`diagMs`) p90 reported separately.
+- wall time/task (median, p90): ON ≤ OFF × 1.25, measured as-is on pure OFF vs ON arms (no subtraction, no shadow in the control arm); per-edit diagnostics latency (`diagMs`) p90 reported separately.
 - turns/task: report; no hard gate.
 - edit/write tool error rate: must be unchanged (report-only must never turn a success into an error).
 - Diagnostics-skipped rate by reason (timeout/missing checker) reported; if timeout > 50% of TS edits the result is "not measurable", not "no effect".
