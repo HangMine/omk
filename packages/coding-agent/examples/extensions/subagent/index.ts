@@ -27,7 +27,6 @@ import {
 	type ExtensionAPI,
 	getAgentDir,
 	getMarkdownTheme,
-	type SkillAdmissionStore,
 	type SubagentLoopGuard,
 	withFileMutationQueue,
 	workerProjectTrustEnv,
@@ -40,11 +39,11 @@ import {
 	type AgentCapabilities,
 	buildCapabilitiesPreamble,
 	buildCapabilityCatalog,
-	buildEnforcementArgs,
 	type CapabilityCatalog,
 	parseEmbeddedCapabilities,
-	resolveSkillPaths,
 	validateCapabilities,
+	type WorkerSkillAdmit,
+	workerSkillArgs,
 } from "./capabilities.ts";
 import {
 	createExecutionBudget,
@@ -341,7 +340,7 @@ type ResultUpdateCallback = (partial: SingleResult) => void;
 type WorkerExtensionArgsFn = (model: string | undefined) => string[];
 
 /** Spec 106 SK6: the parent session's admission store for one subagent tool call, keyed by its args closure. */
-const workerSkillAdmission = new WeakMap<WorkerExtensionArgsFn, SkillAdmissionStore>();
+const workerSkillAdmission = new WeakMap<WorkerExtensionArgsFn, WorkerSkillAdmit>();
 
 async function runSingleAgentAttempt(
 	defaultCwd: string,
@@ -394,25 +393,15 @@ async function runSingleAgentAttempt(
 			console.warn(`[subagent] agent "${agentName}" declares unknown capabilities: ${unknowns.join(", ")}`);
 		}
 	}
-	// Spec 106 SK6 (OMK_SKILL_ADMISSION): granted skill bodies take parent-session slots; the worker gets only the
-	// admitted ones. Flag off: admitWorkerSkills returns undefined and the legacy branch below runs unchanged.
-	const admissionStore = workerSkillAdmission.get(workerExtensionArgs);
-	const catalog = validatedCapabilities ? getCapabilityCatalog() : undefined;
-	const granted = (validatedCapabilities?.skills ?? []).flatMap((name) => {
-		const filePath = catalog ? resolveSkillPaths([name], catalog)[0] : undefined;
-		return filePath ? [{ name, filePath }] : [];
-	});
-	const workerAdmission = admissionStore ? admitWorkerSkills(admissionStore, granted) : undefined;
-	if (workerAdmission) {
-		args.push(...workerAdmission.args);
-		if (workerAdmission.notices.length > 0) task = `${workerAdmission.notices.join("\n")}\n\n${task}`;
-	} else if (agent.enforceCapabilities && validatedCapabilities) {
-		// Opt-in hard enforcement: restrict the subprocess to the declared skills only, via the
-		// existing --no-skills + --skill <path> flags (no core change). Off by default.
-		for (const arg of buildEnforcementArgs(validatedCapabilities, getCapabilityCatalog())) {
-			args.push(arg);
-		}
-	}
+	// Spec 106 SK6 (OMK_SKILL_ADMISSION): see workerSkillArgs; flag off keeps the legacy args byte-identical.
+	const skillArgs = workerSkillArgs(
+		validatedCapabilities,
+		getCapabilityCatalog,
+		agent.enforceCapabilities === true,
+		workerSkillAdmission.get(workerExtensionArgs),
+	);
+	args.push(...skillArgs.args);
+	if (skillArgs.notices.length > 0) task = `${skillArgs.notices.join("\n")}\n\n${task}`;
 
 	let tmpPromptDir: string | null = null;
 	let tmpPromptPath: string | null = null;
@@ -699,10 +688,11 @@ export default function (omk: ExtensionAPI) {
 			);
 			const workerExtensionArgs: WorkerExtensionArgsFn = (model) =>
 				workerExtensions.argsFor(model, ctx.modelRegistry);
-			workerSkillAdmission.set(workerExtensionArgs, {
+			const parentLedger = {
 				getEntries: () => ctx.sessionManager.getEntries(),
-				appendCustomEntry: (customType, data) => omk.appendEntry(customType, data),
-			});
+				appendCustomEntry: (customType: string, data?: unknown) => omk.appendEntry(customType, data),
+			};
+			workerSkillAdmission.set(workerExtensionArgs, (granted) => admitWorkerSkills(parentLedger, granted));
 			const confirmProjectAgents = params.confirmProjectAgents ?? true;
 			const executionPolicy = resolveSubagentExecutionPolicy(
 				ctx.thinkingLevel,
