@@ -57,6 +57,7 @@ interface OperationRunner {
  * Flag off: exactly `runner.run(fn)`.
  */
 export function evidenceScope<T>(source: SessionIdSource, runner: OperationRunner, fn: () => Promise<T>): Promise<T> {
+	if (!evidenceLifecycleObserveEnabled()) return runner.run(fn);
 	return withEvidenceSession(source.getSessionId(), () => runner.run(fn));
 }
 

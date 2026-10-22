@@ -6,6 +6,7 @@ import {
 	type EvidenceLifecycleReport,
 	type EvidenceProducer,
 	type EvidenceProducerGroup,
+	evidenceProcessRegistered,
 	evidenceRegistryStats,
 	listEvidenceArtifacts,
 	type UnknownHoldShare,
@@ -76,5 +77,6 @@ export function evidenceLifecycleReport(sessionId: string = currentEvidenceSessi
 		overflow: stats.overflow,
 		// Process-wide count of artifacts with no owning session; never merged into this session's counts.
 		unattributed: sessionId === EVIDENCE_UNATTRIBUTED ? 0 : evidenceRegistryStats(EVIDENCE_UNATTRIBUTED).registered,
+		processRegistered: evidenceProcessRegistered(),
 	};
 }

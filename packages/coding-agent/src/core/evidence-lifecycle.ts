@@ -71,6 +71,8 @@ export interface EvidenceLifecycleReport {
 	readonly overflow: number;
 	/** Artifacts registered with no session context (explicit bucket, not part of this report's counts). */
 	readonly unattributed: number;
+	/** Artifacts registered in this process across every session bucket and `unattributed` (ratio denominator). */
+	readonly processRegistered: number;
 }
 
 /** Per session. */
@@ -255,6 +257,13 @@ export function listEvidenceArtifacts(sessionId: string = currentEvidenceSession
 export function evidenceRegistryStats(sessionId: string): { readonly registered: number; readonly overflow: number } {
 	const registry = registryOf(sessionId, false);
 	return { registered: registry?.records.size ?? 0, overflow: registry?.overflow ?? 0 };
+}
+
+/** All registered artifacts in this process, every bucket included. */
+export function evidenceProcessRegistered(): number {
+	let total = 0;
+	for (const registry of sessions.values()) total += registry.records.size;
+	return total;
 }
 
 /** Number of session keys (including `unattributed`) currently held. */

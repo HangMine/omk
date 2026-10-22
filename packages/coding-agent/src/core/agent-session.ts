@@ -625,6 +625,8 @@ export class AgentSession {
 	private _eventListeners: AgentSessionEventListener[] = [];
 	private readonly _runBudget: SessionRunBudget;
 	private readonly _shutdown = new SessionShutdown();
+	/** Spec 106 D1: `_shutdown.run(fn)` in this session's evidence scope; every agent-loop start goes through it. */
+	private readonly _evRun = <T>(fn: () => Promise<T>) => evidenceScope(this.sessionManager, this._shutdown, fn);
 	private readonly _memory: SessionMemory;
 	private readonly _turnAdmission: SessionTurnAdmission;
 	private _control: Promise<SessionControlServer> | undefined;
@@ -1922,7 +1924,7 @@ export class AgentSession {
 			const next = this._deferredTurnInput.next();
 			// prompt() and _runAgentPrompt publish their own failures; nothing else awaits this run.
 			if (next && "prompt" in next) this.prompt(next.prompt.text, next.prompt.options).catch(() => undefined);
-			else if (next) this._shutdown.run(() => this._runAgentPrompt(next.messages)).catch(() => undefined);
+			else if (next) this._evRun(() => this._runAgentPrompt(next.messages)).catch(() => undefined);
 		}, 0);
 	}
 
@@ -2455,7 +2457,7 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	prompt(text: string, options?: PromptOptions): Promise<void> {
-		return evidenceScope(this.sessionManager, this._shutdown, () => {
+		return this._evRun(() => {
 			const command = options?.expandPromptTemplates !== false && isSessionCommand(text, this._extensionRunner);
 			if (routesOutsideScope(command, options, this._runOwnsSession, this._runBudget.active))
 				return this._prompt(text, options, true);
@@ -2835,7 +2837,7 @@ export class AgentSession {
 			// A top-level run started now would be refused, or would race the busy work on stale context.
 			this._deferredTurnInput.defer(appMessage, options.deliverAs);
 		} else if (options?.triggerTurn) {
-			await this._shutdown.run(() => this._runAgentPrompt(appMessage));
+			await this._evRun(() => this._runAgentPrompt(appMessage));
 		} else {
 			this.agent.state.messages.push(appMessage);
 			this.sessionManager.appendCustomMessageEntry(
@@ -5075,8 +5077,7 @@ export class AgentSession {
 		onChunk?: (chunk: string) => void,
 		options?: ExecuteBashOptions,
 	): Promise<BashResult> {
-		const run = () => this._bashService.executeBash(command, onChunk, options);
-		return evidenceScope(this.sessionManager, this._shutdown, run);
+		return this._evRun(() => this._bashService.executeBash(command, onChunk, options));
 	}
 
 	/**
