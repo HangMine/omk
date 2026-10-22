@@ -74,6 +74,17 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
   - Free runs likely cannot reach 1,000+ pairs, so δ = 2 pp is likely **undetectable**; per pre-registration the result is then reported as **NOISE / SMALL**. Once the free-run budget is known, Bench Analyst states the **minimum detectable δ** at that n, written here before the main run.
   - **Clustering (Agent Researcher):** ≈ 89 tasks × ≈ 22 reps makes pairs within a task non-independent, violating McNemar's independence assumption. The **verdict uses task-clustered analysis**: per-task resolve-rate difference with a task-level cluster bootstrap, or GEE with task as cluster. Effective sample size is below 1,960 pairs; **Bench Analyst recomputes power under clustering** before n is fixed.
   - **Pilot hold-out:** pilot data used to estimate p_d is held out and **never reused** for the main-run verdict.
+  - **Clustered power (Bench Analyst, 2026-10-22 KST, relayed by OMK):** design effect DE = 1 + (m−1)ρ (m = reps per task). With K tasks fixed, the effective sample size is bounded above by **K/ρ**. ρ (ICC of paired differences) is an **unmeasured assumption**.
+    | ρ | effective-sample upper bound (K = 89) | feasible p_d |
+    |---|---|---|
+    | 0.05 | 1,780 | only p_d = 0.05 (24 reps = 2,136 pairs) |
+    | 0.10 | 890 | none |
+    | 0.30 | 297 | none |
+    | 0.50 | 178 | none |
+    - ρ ≥ 0.10 makes every p_d infeasible. Spec 094 measured success ICC 0.4858, i.e. near ρ = 0.50.
+    - **Conclusion: with 89 tasks, δ = 2 pp is effectively undetectable.**
+  - **Pilot design:** the pilot uses **separate runs on the SAME 89 tasks** (not separate tasks), so K stays 89; pilot runs are held out from the verdict. The pilot measures **ρ and p_d**; Bench Analyst then computes the **minimum detectable δ** at the free-run budget, written into this spec (commit) before the main run.
+  - Until then the verdict is **NOISE / SMALL** as pre-registered. Default-on still requires a resolve-rate PASS, so **with this design the flag stays default-off**.
 - Task set: frozen list (ids + hash committed before first run), tasks in TS/Python only (where checkers exist).
 - **Verdict is on resolve rate only.** Default-on requires a resolve-rate PASS; mechanism metrics below cannot rescue a failed or NOISE result.
 - **Supporting mechanism metrics (pre-registered; mechanism-only — never evidence for resolve-rate claims):**
