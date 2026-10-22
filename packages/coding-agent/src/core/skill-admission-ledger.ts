@@ -24,7 +24,11 @@ export interface SkillAdmissionRecord {
 	readonly source: SkillAdmissionSource;
 	readonly status: SkillAdmissionStatus;
 	readonly requestId: string;
+	/** "body": digest of SKILL.md without frontmatter. Absent: a #209 record, digest of the wrapped `<skill>` block. */
+	readonly digestMode?: SkillAdmissionDigestMode;
 }
+
+export type SkillAdmissionDigestMode = "body";
 
 export type SkillAdmissionDecision =
 	| { readonly ok: true; readonly requestId: string; readonly reused: boolean }
@@ -52,6 +56,7 @@ export function isSkillAdmissionRecord(value: unknown): value is SkillAdmissionR
 		typeof r.skillId === "string" &&
 		typeof r.digest === "string" &&
 		typeof r.requestId === "string" &&
+		(r.digestMode === undefined || r.digestMode === "body") &&
 		(r.status === "reserved" || r.status === "admitted" || r.status === "released")
 	);
 }
@@ -175,5 +180,6 @@ export function makeSkillAdmissionRecord(
 		source,
 		status,
 		requestId,
+		digestMode: "body",
 	};
 }
