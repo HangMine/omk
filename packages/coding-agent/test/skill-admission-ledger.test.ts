@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
 	isSkillAdmissionEnabled,
+	isSkillAdmissionRecord,
 	makeSkillAdmissionRecord,
 	SKILL_ADMISSION_CAP,
+	SKILL_ADMISSION_POLICY_REVISION,
 	SkillAdmissionLedger,
+	type SkillAdmissionRecord,
 	skillBodyDigest,
 } from "../src/core/skill-admission-ledger.ts";
 
@@ -84,5 +87,25 @@ describe("spec 106 A1 skill admission ledger", () => {
 			}
 		}
 		expect(violations).toBe(0);
+	});
+
+	it("digestMode: records with and without the field are known; a #209-style record restores", () => {
+		const r209 = {
+			schemaVersion: 1,
+			policyRevision: SKILL_ADMISSION_POLICY_REVISION,
+			skillId: "old",
+			digest: "d209",
+			source: "explicit",
+			status: "admitted",
+			requestId: "sa-1-d209",
+		};
+		expect(isSkillAdmissionRecord(r209)).toBe(true);
+		expect(isSkillAdmissionRecord({ ...r209, digestMode: "body" })).toBe(true);
+		expect(isSkillAdmissionRecord({ ...r209, digestMode: "other" })).toBe(false);
+		expect(makeSkillAdmissionRecord("a", "d", "read", "admitted", "sa-2-d").digestMode).toBe("body");
+		const ledger = SkillAdmissionLedger.restore([r209 as SkillAdmissionRecord]);
+		expect(ledger.isFailedClosed).toBe(false);
+		expect(ledger.used).toBe(1);
+		expect(ledger.reserve("old", "d209")).toMatchObject({ ok: true, reused: true });
 	});
 });
