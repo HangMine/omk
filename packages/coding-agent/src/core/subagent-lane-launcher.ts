@@ -1,5 +1,6 @@
 import { assertLaneCap, snapshotLaneLaunchInput } from "./lane-input-snapshot.ts";
 import type { LaneOutcome } from "./subagent-lane-contract.ts";
+import { allLanesCompleted, createLaneFailureScope, laneFailureScopeEnabled } from "./subagent-lane-failure-scope.ts";
 import type { LaunchSubagentLanesInput } from "./subagent-lane-input.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 import { WorkloadPermitError } from "./workload-permit-pool.ts";
@@ -59,6 +60,8 @@ export interface LaunchSubagentLanesResult {
 	readonly outcomes: readonly LaneOutcome[];
 	readonly effectiveLaneWidth: number;
 	readonly maxObservedConcurrency: number;
+	/** True only when every lane completed (no false completion on partial progress). */
+	readonly allLanesCompleted: boolean;
 }
 
 /**
@@ -108,9 +111,11 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 	let hasUnsettled = false;
 	let active = 0;
 	let maxObservedConcurrency = 0;
+	const failureScope = createLaneFailureScope(input.plan, laneFailureScopeEnabled());
 
 	for (const batch of input.plan.batches) {
-		const blocked = outcomes.some((outcome) => outcome.status !== "completed");
+		const prior = [...outcomes];
+		const blocked = batch.laneIds.every((laneId) => failureScope.isBlocked(laneId, prior));
 		if (input.signal?.aborted || effectiveLaneWidth === 0 || blocked) {
 			for (const laneId of batch.laneIds) {
 				outcomes.push({
@@ -132,7 +137,7 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 			while (cursor < batch.laneIds.length) {
 				const laneId = batch.laneIds[cursor];
 				cursor += 1;
-				if (input.signal?.aborted || hasUnsettled) {
+				if (input.signal?.aborted || hasUnsettled || failureScope.isBlocked(laneId, prior)) {
 					outcomes.push({ laneId, status: input.signal?.aborted ? "skipped-abort" : "blocked-dependency" });
 					continue;
 				}
@@ -163,6 +168,7 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 		outcomes: outcomes.sort((a, b) => sourceOrder.get(a.laneId)! - sourceOrder.get(b.laneId)!),
 		effectiveLaneWidth,
 		maxObservedConcurrency,
+		allLanesCompleted: allLanesCompleted(outcomes),
 	};
 }
 
