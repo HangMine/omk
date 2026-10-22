@@ -39,19 +39,19 @@ All six SHA-256 values in doc §A.4 match main (files unchanged since 741ac1c4).
 
 ## 2. C1 — lane failure scope (implemented)
 
-- Rule (flag on): a settled `failed` lane whose grant has empty `scheduler.writeSet` and `parallelizable` blocks only its transitive dependents via `laneGrants[].dependsOn` (already includes receipt-consumer edges). Any other non-completed status (unsettled, cancelled, permit-rejected, admission-deferred, skipped-abort) or a failed writer ⇒ legacy global block.
-- `allLanesCompleted(outcomes)` — overall result is complete only if every lane completed; **DG1 asserts overall NOT complete**.
+- Rule (flag on; Tech Lead 2026-10-22): a settled `failed` lane is *non-writing* only if its declared `scheduler.writeSet` is empty AND its grant has no write-capable tool (`edit`, `write`, `bash`) AND it is `parallelizable`; a missing/unknown `writeSet` ⇒ writer. A non-writing failure blocks only its transitive dependents via `laneGrants[].dependsOn` (already includes receipt-consumer edges). Any other non-completed status (unsettled, cancelled, permit-rejected, admission-deferred, skipped-abort) or a failed writer ⇒ legacy global block. **Note:** every builtin loadout grants `edit/write/bash` (`loadouts.ts:218-300`), so real behavior barely changes today; the rule is the contract future read-only loadouts will use.
+- `LaunchSubagentLanesResult.allLanesCompleted: boolean` — true only if every lane completed; **DG1 asserts it is false** (no false completion). Additive field; flag-off outcomes unchanged.
 - Batches and `Promise.all` barrier unchanged (DG2 is a later PR).
 - Tests `test/subagent-lane-failure-scope.test.ts`: flag-off legacy, DG1 (doc counterexample: A→B, C→D, only A fails ⇒ B blocked, C and D complete, overall NOT complete), DG1 transitive, DG3 join, DG4 writer, unsettled keeps global block + permit, all-complete. Failing-first verified (DG1×2 fail without launcher change).
-- Bars: 7/7 new + 48/48 existing lane tests (0 writer-conflict / unsettled-permit regressions); flag-off outcomes identical on the legacy fixture.
+- Bars: 8/8 new (adds: empty writeSet + `bash` lane fails ⇒ next batch blocked) + 48/48 existing lane tests (0 writer-conflict / unsettled-permit regressions); flag-off outcomes identical on the legacy fixture.
 
 ## 3. A1 — skill admission
 
-- `SkillAdmissionLedger` (pure, owned by `AgentSession`, persisted as a session entry `skill_admission` v1):
+- `SkillAdmissionLedger` (pure, owned by `AgentSession`) persisted as a **new versioned session entry type** `skill_admission` (Tech Lead 2026-10-22), each record `{ schemaVersion: 1, policyRevision, skillId, digest (sha256 of body), source, status: "reserved"|"admitted"|"released" }` plus `origin` and `requestId`; session-level `cap: 10`, optional `legacyOverCap: true`:
   `{ schemaVersion: 1, policyRevision, cap: 10, entries: [{ skillId, source, digest(sha256 of body), origin: "settings"|"explicit"|"harness"|"steer"|"followUp"|"read"|"worker", state: "reserved"|"admitted", requestId }], legacyOverCap?: true }`.
 - `reserve(skillId, digest)` is synchronous (single JS turn ⇒ atomic): counts `reserved + admitted`; same `(skillId, source, digest)` ⇒ no new slot; new digest ⇒ new slot. Returns `{ok:false, reason:"cap"}` at 10.
 - `commit(requestId)` when the provider request is built; `release(requestId)` only when failure before send is certain.
-- Restored from session entries on resume; compaction/model switch never reset it. Missing ledger + history of >10 bodies ⇒ `legacyOverCap`, new admissions refused.
+- Restored from session entries after resume and compaction (and model switch); **never reset to 0 by any path** — pinned by SK1/SK2/SK5 tests. Missing ledger + history of >10 bodies ⇒ `legacyOverCap`, new admissions refused.
 - Cap-refused skill: body not injected, a counts-only trace line; required skill refused ⇒ explicit notice (never silent drop).
 - Settings: `defaultActiveSkills` stays ≤64 as *preferences*; admission picks ≤10.
 - Flag off ⇒ byte-identical provider requests to main.
@@ -73,11 +73,9 @@ PREREG bars: SK1–SK7 deterministic pass 100%; 0 cap violations across 200 rand
 - **Primary metric: false-completion rate** (reported complete, fails independent grading; both denominators). Secondary only: duplicate-confirmation count. A drop in confirmations with any rise in false completion = fail.
 - PREREG bar (paired, same model/budget, ≥20 tasks): false completion not higher than baseline (upper CI bound of difference ≤ 0); AU1–AU4 deterministic 100%.
 
-## 6. Open questions for Tech Lead
-1. "Non-writer" = empty declared `writeSet` (scheduler contract) though all loadouts carry edit/write/bash. Acceptable, or require a tool-level read-only grant (which no builtin loadout has today ⇒ isolation would never fire)?
-2. PR 1 ledger persisted as a new session entry type — OK vs. reusing an existing custom entry?
-3. Should `allLanesCompleted` be surfaced on `LaunchSubagentLanesResult` (API change) or stay a helper?
-4. C1 lands after #206 (pre-commit `npm run check` fails on main until then).
+## 6. Tech Lead rulings
+Resolved (Tech Lead, 2026-10-22 KST): (1) non-writing = empty writeSet AND no edit/write/bash, unknown ⇒ writer; (2) A1 ledger = new versioned session entry type; (3) `allLanesCompleted` on `LaunchSubagentLanesResult`.
+#206 merged; C1 is based on post-#206 main.
 
 ## Appendix — source doc §10 and §11.1, verbatim (fixed before measuring)
 
