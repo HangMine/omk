@@ -20,6 +20,7 @@ import { join } from "node:path";
 import type { AgentTool } from "omk-agent-core";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
+import { cacheStamp, pathFilter } from "./diagnostics-paths.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
 const diagnosticsSchema = Type.Object({
@@ -254,7 +255,7 @@ async function checkTypeScript(cwd: string, path: string | undefined, timeoutMs:
 	const config = existsSync(join(root, "tsconfig.json")) ? "tsconfig.json" : "tsconfig.build.json";
 	const { code, out } = await run(bin, ["--noEmit", "-p", config, "--pretty", "false"], root, timeoutMs);
 	if (code === null) return { lines: [], skippedReason: "tsc spawn failed" };
-	return { lines: parseTsc(out, "typescript").filter((d) => !path || d.path.includes(path)) };
+	return { lines: parseTsc(out, "typescript").filter(pathFilter(cwd, path, root)) };
 }
 
 async function checkPython(cwd: string, path: string | undefined, timeoutMs: number): Promise<LanguageResult> {
@@ -288,7 +289,7 @@ async function checkGo(cwd: string, path: string | undefined, timeoutMs: number)
 	if (!(await commandExists("go"))) return { lines: [], skippedReason: "go not installed" };
 	const { code, out } = await run("go", ["vet", "./..."], root, timeoutMs);
 	if (code === null) return { lines: [], skippedReason: "go vet spawn failed" };
-	return { lines: parseGoVet(out).filter((d) => !path || d.path.includes(path)) };
+	return { lines: parseGoVet(out).filter(pathFilter(cwd, path, root)) };
 }
 
 async function checkRust(cwd: string, path: string | undefined, timeoutMs: number): Promise<LanguageResult> {
@@ -297,7 +298,7 @@ async function checkRust(cwd: string, path: string | undefined, timeoutMs: numbe
 	if (!(await commandExists("cargo"))) return { lines: [], skippedReason: "cargo not installed" };
 	const { code, out } = await run("cargo", ["check", "--quiet", "--message-format", "short"], root, timeoutMs);
 	if (code === null) return { lines: [], skippedReason: "cargo spawn failed" };
-	return { lines: parseCargo(out).filter((d) => !path || d.path.includes(path)) };
+	return { lines: parseCargo(out).filter(pathFilter(cwd, path, root)) };
 }
 
 const CHECKERS = {
@@ -330,14 +331,12 @@ async function checkLanguage(
 	path: string | undefined,
 	timeoutMs: number,
 ): Promise<LanguageResult> {
-	const key = `${language}${cwd}${path ?? ""}`;
+	const key = `${language}\0${cwd}\0${path ?? ""}\0${cacheStamp(cwd, path)}`;
 	const cached = cache.get(key);
 	if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.result;
 	const result = await CHECKERS[language](cwd, path, timeoutMs);
-	if (cache.size >= 16) {
-		const oldest = cache.keys().next().value;
-		if (oldest !== undefined) cache.delete(oldest);
-	}
+	// size >= 16 guarantees a first key exists.
+	if (cache.size >= 16) cache.delete(cache.keys().next().value as string);
 	cache.set(key, { at: Date.now(), result });
 	return result;
 }
