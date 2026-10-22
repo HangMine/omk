@@ -1,3 +1,4 @@
+import { appendRunLog } from "./run-log.ts";
 import type { LaneOutcome } from "./subagent-lane-contract.ts";
 import type { LaneFailureScope } from "./subagent-lane-failure-scope.ts";
 import { laneGrantsConflict, type SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
@@ -37,7 +38,15 @@ export interface ReadyFrontierInput {
 	readonly hasUnsettled: () => boolean;
 }
 
-export function runReadyFrontier(input: ReadyFrontierInput): Promise<void> {
+export interface ReadyFrontierStats {
+	/**
+	 * Lanes never started because of a failure (C1 scope block, or left
+	 * unreachable after a non-completed outcome). Count only; A/B covariate.
+	 */
+	readonly notStartedDueToFailure: number;
+}
+
+export function runReadyFrontier(input: ReadyFrontierInput): Promise<ReadyFrontierStats> {
 	const order = input.plan.batches.flatMap((batch) => batch.laneIds);
 	const grants = new Map(input.plan.laneGrants.map((grant) => [grant.laneId, grant]));
 	const settled = new Map<string, LaneOutcome["status"]>();
@@ -47,6 +56,7 @@ export function runReadyFrontier(input: ReadyFrontierInput): Promise<void> {
 	// outcomes are excluded so a C1-isolated block does not escalate to a
 	// global one (the batch loop never fed same-batch blocks back either).
 	const ran: LaneOutcome[] = [];
+	let notStartedDueToFailure = 0;
 
 	const conflicts = (left: string, right: string): boolean => {
 		const a = grants.get(left);
@@ -57,7 +67,7 @@ export function runReadyFrontier(input: ReadyFrontierInput): Promise<void> {
 		return laneGrantsConflict(a, b);
 	};
 
-	return new Promise<void>((resolve) => {
+	return new Promise<ReadyFrontierStats>((resolve) => {
 		const finish = (laneId: string, outcome: LaneOutcome) => {
 			settled.set(laneId, outcome.status);
 			input.outcomes.push(outcome);
@@ -71,7 +81,9 @@ export function runReadyFrontier(input: ReadyFrontierInput): Promise<void> {
 					finish(laneId, { laneId, status: "skipped-abort" });
 					continue;
 				}
-				if (input.hasUnsettled() || input.failureScope.isBlocked(laneId, ran)) {
+				const unsettledBlock = input.hasUnsettled();
+				if (unsettledBlock || input.failureScope.isBlocked(laneId, ran)) {
+					if (!unsettledBlock) notStartedDueToFailure += 1;
 					pending.splice(index, 1);
 					finish(laneId, { laneId, status: "blocked-dependency" });
 					continue;
@@ -103,10 +115,22 @@ export function runReadyFrontier(input: ReadyFrontierInput): Promise<void> {
 			}
 			if (inFlight.size === 0) {
 				// Nothing running and nothing startable: remaining lanes can never become ready.
-				for (const laneId of pending.splice(0)) finish(laneId, { laneId, status: "blocked-dependency" });
-				resolve();
+				const failureSeen = ran.some((outcome) => outcome.status !== "completed");
+				for (const laneId of pending.splice(0)) {
+					if (failureSeen && !input.hasUnsettled()) notStartedDueToFailure += 1;
+					finish(laneId, { laneId, status: "blocked-dependency" });
+				}
+				resolve({ notStartedDueToFailure });
 			}
 		};
 		pump();
 	});
+}
+
+/** Run-log file name (`<OMK_RUN_LOG_DIR>/subagent-lane-frontier.jsonl`) for the DG2 A/B covariate. */
+export const LANE_FRONTIER_RUN_LOG = "subagent-lane-frontier";
+
+/** Spec 106 §2a: counts only (A/B covariate); no lane ids or text. */
+export function logReadyFrontier(stats: ReadyFrontierStats, lanes: number, failureScope: boolean): void {
+	appendRunLog(LANE_FRONTIER_RUN_LOG, { lanes, notStartedDueToFailure: stats.notStartedDueToFailure, failureScope });
 }

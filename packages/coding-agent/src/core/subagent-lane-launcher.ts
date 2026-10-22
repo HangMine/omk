@@ -2,7 +2,7 @@ import { assertLaneCap, snapshotLaneLaunchInput } from "./lane-input-snapshot.ts
 import type { LaneOutcome } from "./subagent-lane-contract.ts";
 import { allLanesCompleted, createLaneFailureScope, laneFailureScopeEnabled } from "./subagent-lane-failure-scope.ts";
 import type { LaunchSubagentLanesInput } from "./subagent-lane-input.ts";
-import { laneReadyFrontierEnabled, runReadyFrontier } from "./subagent-lane-ready-frontier.ts";
+import { laneReadyFrontierEnabled, logReadyFrontier, runReadyFrontier } from "./subagent-lane-ready-frontier.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 import { WorkloadPermitError } from "./workload-permit-pool.ts";
 
@@ -116,7 +116,7 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 
 	if (laneReadyFrontierEnabled() && effectiveLaneWidth > 0 && !input.signal?.aborted) {
 		// Spec 106 DG2: dependency-driven ready queue instead of the batch barrier.
-		await runReadyFrontier({
+		const stats = await runReadyFrontier({
 			plan: input.plan,
 			width: effectiveLaneWidth,
 			failureScope,
@@ -138,6 +138,7 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 				}),
 			hasUnsettled: () => hasUnsettled,
 		});
+		logReadyFrontier(stats, outcomes.length, laneFailureScopeEnabled());
 		return {
 			outcomes: outcomes.sort((a, b) => sourceOrder.get(a.laneId)! - sourceOrder.get(b.laneId)!),
 			effectiveLaneWidth,

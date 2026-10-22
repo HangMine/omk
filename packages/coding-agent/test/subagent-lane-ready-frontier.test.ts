@@ -3,11 +3,15 @@
  * Deterministic: lanes resolve only through manual deferreds; no wall clock.
  */
 
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityInventory, NamedResource } from "../src/core/loadouts.ts";
 import type { ResourceAdmissionDecision } from "../src/core/resource-admission.ts";
 import type { LaneOutcome } from "../src/core/subagent-lane-contract.ts";
 import { launchSubagentLanes, type SubagentLaneContext } from "../src/core/subagent-lane-launcher.ts";
+import { LANE_FRONTIER_RUN_LOG } from "../src/core/subagent-lane-ready-frontier.ts";
 import { buildSubagentOrchestrationPlan, type SubagentLaneSpec } from "../src/core/subagent-orchestration.ts";
 import { WorkloadPermitPool } from "../src/core/workload-permit-pool.ts";
 
@@ -331,5 +335,229 @@ describe("DG2 ready frontier", () => {
 			  ],
 			}
 		`);
+	});
+});
+
+describe("DG5/DG6 with frontier on, run-log covariate", () => {
+	it("DG5: timed-out child still alive (unsettled) keeps permit + child accounting and stops new starts", async () => {
+		vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
+		const lanes: SubagentLaneSpec[] = [
+			{ id: "A", role: "security", task: "A" },
+			{ id: "C", role: "security", task: "C" },
+			{ id: "B", role: "security", task: "B", dependsOn: ["A"] },
+			{ id: "D", role: "security", task: "D", dependsOn: ["C"] },
+		];
+		const plan = buildSubagentOrchestrationPlan({
+			runId: "frontier",
+			lanes,
+			inventory: readOnly,
+			spawnThreshold: 16,
+			maxParallelLanes: 2,
+		});
+		const pool = new WorkloadPermitPool({ capacity: 2 });
+		let settle!: () => void;
+		let releaseC!: () => void;
+		const started: string[] = [];
+		const pending = launchSubagentLanes({
+			plan,
+			promptRunId: "frontier",
+			decision: decisionWith(2),
+			permitPool: pool,
+			heavyLaneIds: new Set(["A", "C"]),
+			launchLane: ({ laneId }: SubagentLaneContext) => {
+				started.push(laneId);
+				if (laneId === "A")
+					// Timeout fired but the child cannot be proven dead.
+					return Promise.resolve({
+						status: "unsettled" as const,
+						settlement: new Promise<void>((r) => {
+							settle = r;
+						}),
+					});
+				return new Promise<void>((r) => {
+					releaseC = r;
+				});
+			},
+		});
+		await flush();
+		expect(started).toEqual(["A", "C"]);
+		expect(pool.snapshot().activeWeight).toBe(2);
+		releaseC();
+		const result = await pending;
+		expect(statusOf(result.outcomes)).toEqual({
+			A: "unsettled",
+			C: "completed",
+			B: "blocked-dependency",
+			D: "blocked-dependency",
+		});
+		expect(started).toEqual(["A", "C"]);
+		expect(result.allLanesCompleted).toBe(false);
+		// A's reservation is still held after the launcher returned.
+		expect(pool.snapshot().activeWeight).toBe(1);
+		settle();
+		await flush();
+		expect(pool.snapshot().activeWeight).toBe(0);
+	});
+
+	it("DG5: settlement reject never releases the permit and still blocks new starts", async () => {
+		vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
+		const plan = buildSubagentOrchestrationPlan({
+			runId: "frontier",
+			lanes: twoBranches,
+			inventory: readOnly,
+			spawnThreshold: 16,
+			maxParallelLanes: 2,
+		});
+		const pool = new WorkloadPermitPool({ capacity: 2 });
+		let reject!: () => void;
+		const started: string[] = [];
+		const result = await launchSubagentLanes({
+			plan,
+			promptRunId: "frontier",
+			decision: decisionWith(2),
+			permitPool: pool,
+			heavyLaneIds: new Set(["A"]),
+			launchLane: async ({ laneId }: SubagentLaneContext) => {
+				started.push(laneId);
+				if (laneId === "A")
+					return {
+						status: "unsettled" as const,
+						settlement: new Promise<void>((_, r) => {
+							reject = () => r(new Error("x"));
+						}),
+					};
+			},
+		});
+		expect(statusOf(result.outcomes).A).toBe("unsettled");
+		expect(started).not.toContain("B");
+		reject();
+		await flush();
+		expect(pool.snapshot().activeWeight).toBe(1);
+	});
+
+	it("DG6: a late result after abort is not reported as completed and starts nothing", async () => {
+		vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
+		const plan = buildSubagentOrchestrationPlan({
+			runId: "frontier",
+			lanes: twoBranches,
+			inventory: readOnly,
+			spawnThreshold: 16,
+			maxParallelLanes: 2,
+		});
+		const controller = new AbortController();
+		const finishers = new Map<string, () => void>();
+		const started: string[] = [];
+		const pending = launchSubagentLanes({
+			plan,
+			promptRunId: "frontier",
+			decision: decisionWith(2),
+			permitPool: new WorkloadPermitPool({ capacity: 2 }),
+			signal: controller.signal,
+			launchLane: ({ laneId }: SubagentLaneContext) => {
+				started.push(laneId);
+				return new Promise<void>((r) => finishers.set(laneId, r));
+			},
+		});
+		await flush();
+		expect(started).toEqual(["A", "C"]);
+		controller.abort();
+		// Old-generation results arrive after the abort.
+		finishers.get("A")!();
+		finishers.get("C")!();
+		const result = await pending;
+		expect(statusOf(result.outcomes)).toEqual({
+			A: "cancelled",
+			C: "cancelled",
+			B: "skipped-abort",
+			D: "skipped-abort",
+		});
+		expect(started).toEqual(["A", "C"]);
+		expect(result.allLanesCompleted).toBe(false);
+	});
+
+	it("DG6: an unsettled lane's late settlement does not rewrite outcomes or start lanes", async () => {
+		vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
+		const plan = buildSubagentOrchestrationPlan({
+			runId: "frontier",
+			lanes: twoBranches,
+			inventory: readOnly,
+			spawnThreshold: 16,
+			maxParallelLanes: 2,
+		});
+		let settle!: () => void;
+		const started: string[] = [];
+		const result = await launchSubagentLanes({
+			plan,
+			promptRunId: "frontier",
+			decision: decisionWith(2),
+			permitPool: new WorkloadPermitPool({ capacity: 2 }),
+			launchLane: async ({ laneId }: SubagentLaneContext) => {
+				started.push(laneId);
+				if (laneId === "A")
+					return {
+						status: "unsettled" as const,
+						settlement: new Promise<void>((r) => {
+							settle = r;
+						}),
+					};
+			},
+		});
+		const before = JSON.stringify(result);
+		settle();
+		await flush();
+		expect(JSON.stringify(result)).toBe(before);
+		expect(started).toEqual(["A", "C"]);
+		expect(statusOf(result.outcomes).B).toBe("blocked-dependency");
+	});
+
+	const readLog = (dir: string) =>
+		readFileSync(join(dir, `${LANE_FRONTIER_RUN_LOG}.jsonl`), "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line) as Record<string, unknown>);
+
+	it("run log counts lanes not started due to failure (counts only)", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "omk-frontier-log-"));
+		try {
+			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
+			vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+			const global = controlled(twoBranches);
+			await global.finish("A", "failed");
+			await global.finish("C");
+			await global.result;
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "1");
+			const scoped = controlled(twoBranches);
+			await scoped.finish("A", "failed");
+			await scoped.finish("C");
+			await scoped.finish("D");
+			await scoped.result;
+			const clean = controlled(twoBranches, { instant: true });
+			await clean.result;
+			const lines = readLog(dir);
+			expect(lines.map((l) => [l.notStartedDueToFailure, l.lanes, l.failureScope])).toEqual([
+				[2, 4, false],
+				[1, 4, true],
+				[0, 4, true],
+			]);
+			for (const line of lines)
+				expect(Object.keys(line).sort()).toEqual(
+					["elapsedFraction", "failureScope", "lanes", "notStartedDueToFailure", "pid", "role", "t"].sort(),
+				);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("run log: flag off writes nothing", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "omk-frontier-log-"));
+		try {
+			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
+			vi.stubEnv("OMK_LANE_READY_QUEUE", "");
+			await controlled(twoBranches, { instant: true }).result;
+			expect(() => readLog(dir)).toThrow();
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

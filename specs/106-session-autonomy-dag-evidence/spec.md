@@ -51,7 +51,12 @@ All six SHA-256 values in doc §A.4 match main (files unchanged since 741ac1c4).
 - Flag `OMK_LANE_READY_QUEUE=1` (name from §1); off ⇒ the batch loop runs unchanged (flag-off start order + result pinned by inline snapshot).
 - On: `subagent-lane-ready-frontier.ts` starts a lane, in plan source order, as soon as every effective dependency (`laneGrants[].dependsOn`) settled `completed`, at most `effectiveLaneWidth` in flight. Preserved: (a) a lane waits while any earlier-ordered lane it conflicts with is unsettled — conflict = read/write path intersection (`laneGrantsConflict`, the planner's own rule) or either lane not `parallelizable`, so writer serialization and conflict order equal the batches; (b) any retained `unsettled` lane blocks new starts and keeps its permit; (c) heavy permits unchanged (`runLane`); (d) C1 failure scope decides blocks from the outcomes of lanes that ran (frontier-made `blocked-dependency` outcomes do not escalate a C1-isolated block). Failure scope off ⇒ any non-completed outcome stops all new starts (slightly stricter than the batch loop, which let same-batch siblings start).
 - Tests `test/subagent-lane-ready-frontier.test.ts` (manual deferreds, no wall clock): DG2 counterexample flag off (B waits for C) and on (B starts while C runs), width cap, DG4 write-conflict serialization in plan order, DG1 with both flags, frontier-on/scope-off global block, DG3 join, unsettled reservation, flag-off snapshot.
-- Not yet: DG5/DG6 with frontier on; no real-run measurement.
+- DG5/DG6 with frontier on: timed-out child kept `unsettled` keeps its permit and child accounting and stops new starts; a rejected settlement never releases the permit; results arriving after abort are `cancelled` (dependents `skipped-abort`); an unsettled lane's late settlement rewrites no outcome and starts no lane.
+- Frontier-only on (C1 off) stops ALL new starts after any failure — stricter than the old batch loop, which still started same-batch siblings.
+- A/B: fix C1 (`OMK_LANE_FAILURE_SCOPE=1`) on in both arms and compare frontier on vs off, so scheduling is not confounded with the stop policy.
+- Covariate: `<OMK_RUN_LOG_DIR>/subagent-lane-frontier.jsonl` records per launch `notStartedDueToFailure` (count), `lanes`, `failureScope` — counts only, no lane ids or text; unsettled-reservation blocks are not counted.
+- Flag-off snapshot test verified against main `1c9dce39cb`'s launcher (temp worktree, test file only).
+- Not yet: real-run measurement.
 
 ## 3. A1 — skill admission
 
