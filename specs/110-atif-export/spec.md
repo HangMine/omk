@@ -78,16 +78,17 @@ validation date.
 ## Redaction
 
 - Before writing, scan every string value for: values of `TYPESAFE_API_KEY` and every
-  other env var whose name matches `/KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i`, plus each
-  env value of length >= 8 present in the exporter's env; replace with `[REDACTED:<NAME>]`.
+  other env var whose name matches `/KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i`; replace with
+  `[REDACTED:<NAME>]`. Other env values are not masked.
 - Pattern pass for common key shapes (`sk-`, `xai-`, `ghp_`, `Bearer ...`).
 - Never copy `process.env` into output; never log redacted values.
+- Masking is the only allowed lossy step in the export.
 - The exporter fails (exit 2) rather than writing, if a post-write rescan still finds a hit.
 
 ## Success criteria
 
 1. **Primary (Tech Lead done-criterion): lossless round-trip.** A test exports one committed
-   sample omk trial (fixture events + run-log dir) to ATIF, validates it against the
+   secret-free sample omk trial (fixture events + run-log dir) to ATIF, validates it against the
    schema, then reverses it (`extra.omk` + ATIF fields -> omk records) and asserts deep
    equality with the input: every run-log line and every event field is recovered,
    0 fields lost. The no-slot fields listed above are checked by name.
@@ -95,15 +96,16 @@ validation date.
    `Trajectory.model_validate`) accepts 100% of trajectories exported from the fixture set
    (>= 3 fixtures: plain, tool error, worker subagent). In omk CI, the exporter's output for
    the sample input must structurally match the checked-in validated sample ATIF file.
-3. Counts match the run log: ATIF agent steps == `llm-call` lead lines; total
+3. Counts match the run log: matched + unmatched (`extra.omk.unmatchedLlmCalls`) ==
+   total lead `llm-call` lines; total
    `tool_calls` == `tool_execution_start` events; observation results == `tool_execution_end`.
-4. Zero secret leakage: with fake `TYPESAFE_API_KEY` and other fake env values injected
+4. Zero secret leakage (separate masking test, not the round-trip fixture): with fake `TYPESAFE_API_KEY` and other fake env values injected
    into prompts, args and tool results, none appear in output bytes.
 
 ## Test plan
 
 - `scripts/bench/atif-export.test.mjs` (node:test): mapping, step_id order,
-  agent-only-field rule, round-trip deep-equality, counts, redaction with fake keys.
+  agent-only-field rule, round-trip deep-equality on the secret-free fixture, counts; a separate masking test with fake keys.
 - Unit test compares export output against the checked-in validated sample (same keys,
   step order, counts; volatile fields like timestamps normalized). No Python in omk CI.
 - Bench-env step (manual / bench scripts): run harbor validator on every export; refresh the
@@ -114,6 +116,18 @@ validation date.
 
 No uploads to Harbor Hub, no leaderboard PR, no paid runs, no runtime change to omk
 logging (if Q1 needs a new log field, that's a separate spec).
+
+## Decisions (Tech Lead review, PR #231)
+
+- **Q1 system prompt:** use the full system prompt text from the event stream as the first
+  step (`source:"system"`); the masking pass applies. If absent, emit a hash placeholder step
+  with the reason in `extra.omk`. The run log is unchanged.
+- **Q2 workers:** embedded in the same file as `subagent_trajectories`.
+- **Q4 tokens:** `prompt_tokens = input + cacheRead + cacheWrite`; `cached_tokens = cacheRead`.
+- **Q5 join:** by `responseId` first, else by order. Unmatched `llm-call` lines go to
+  `Trajectory.extra.omk.unmatchedLlmCalls`, never dropped.
+- **Q3, Q6:** to be confirmed from source before the implementation PR.
+- **Q7:** non-blocking.
 
 ## Open questions
 
