@@ -295,7 +295,7 @@ import {
 import type { SessionTurnAdmission } from "./session-turn-admission.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { SkillAdmissionSource } from "./skill-admission-ledger.ts";
-import { admitSkillBody, expandSkillCommand } from "./skill-admission-session.ts";
+import { admitSkillBody, expandSkillCommand, gateSkillRead } from "./skill-admission-session.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPromptPlan } from "./system-prompt.ts";
@@ -1259,10 +1259,14 @@ export class AgentSession {
 			}
 		};
 
-		this.agent.afterToolCall = async ({ toolCall, args, result, isError }) => {
+		this.agent.afterToolCall = async ({ toolCall, args, result: executed, isError }) => {
+			// Spec 106 SK3: a refused SKILL.md read is replaced by the admission notice before anyone sees it.
+			const skills = () => this.resourceLoader.getSkills().skills;
+			const gated = gateSkillRead(this.sessionManager, skills, this._cwd, toolCall.name, args, isError);
+			const result = gated ?? executed;
 			const runner = this._extensionRunner;
 			if (!runner.hasHandlers("tool_result")) {
-				return undefined;
+				return gated;
 			}
 
 			const hookResult = await runner.emitToolResult({
@@ -1276,7 +1280,7 @@ export class AgentSession {
 			});
 
 			if (!hookResult) {
-				return undefined;
+				return gated;
 			}
 
 			return {

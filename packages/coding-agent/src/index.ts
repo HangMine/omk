@@ -447,6 +447,7 @@ export {
 	type ToolSchedulerSetting,
 } from "./core/settings-manager.ts";
 // Skills
+export { admitWorkerSkills, type SkillAdmissionStore } from "./core/skill-admission-session.ts";
 export { formatSkillsForPrompt } from "./core/skills-prompt.ts";
 export {
 	type LoadSkillsFromDirOptions,

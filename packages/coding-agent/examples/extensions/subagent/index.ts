@@ -22,6 +22,7 @@ import type { Message } from "omk-ai";
 import { StringEnum } from "omk-ai";
 import { Container, Markdown, Spacer, Text } from "omk-tui";
 import {
+	admitWorkerSkills,
 	createSubagentLoopGuard,
 	type ExtensionAPI,
 	getAgentDir,
@@ -38,10 +39,11 @@ import {
 	type AgentCapabilities,
 	buildCapabilitiesPreamble,
 	buildCapabilityCatalog,
-	buildEnforcementArgs,
 	type CapabilityCatalog,
 	parseEmbeddedCapabilities,
 	validateCapabilities,
+	type WorkerSkillAdmit,
+	workerSkillArgs,
 } from "./capabilities.ts";
 import {
 	createExecutionBudget,
@@ -337,6 +339,9 @@ type ResultUpdateCallback = (partial: SingleResult) => void;
 /** Worker extension argv for a worker `--model` (spec 057): `--no-extensions` plus forwarded `-e` paths. */
 type WorkerExtensionArgsFn = (model: string | undefined) => string[];
 
+/** Spec 106 SK6: the parent session's admission store for one subagent tool call, keyed by its args closure. */
+const workerSkillAdmission = new WeakMap<WorkerExtensionArgsFn, WorkerSkillAdmit>();
+
 async function runSingleAgentAttempt(
 	defaultCwd: string,
 	agents: AgentConfig[],
@@ -388,13 +393,15 @@ async function runSingleAgentAttempt(
 			console.warn(`[subagent] agent "${agentName}" declares unknown capabilities: ${unknowns.join(", ")}`);
 		}
 	}
-	// Opt-in hard enforcement: restrict the subprocess to the declared skills only, via the
-	// existing --no-skills + --skill <path> flags (no core change). Off by default.
-	if (agent.enforceCapabilities && validatedCapabilities) {
-		for (const arg of buildEnforcementArgs(validatedCapabilities, getCapabilityCatalog())) {
-			args.push(arg);
-		}
-	}
+	// Spec 106 SK6 (OMK_SKILL_ADMISSION): see workerSkillArgs; flag off keeps the legacy args byte-identical.
+	const skillArgs = workerSkillArgs(
+		validatedCapabilities,
+		getCapabilityCatalog,
+		agent.enforceCapabilities === true,
+		workerSkillAdmission.get(workerExtensionArgs),
+	);
+	args.push(...skillArgs.args);
+	if (skillArgs.notices.length > 0) task = `${skillArgs.notices.join("\n")}\n\n${task}`;
 
 	let tmpPromptDir: string | null = null;
 	let tmpPromptPath: string | null = null;
@@ -681,6 +688,11 @@ export default function (omk: ExtensionAPI) {
 			);
 			const workerExtensionArgs: WorkerExtensionArgsFn = (model) =>
 				workerExtensions.argsFor(model, ctx.modelRegistry);
+			const parentLedger = {
+				getEntries: () => ctx.sessionManager.getEntries(),
+				appendCustomEntry: (customType: string, data?: unknown) => omk.appendEntry(customType, data),
+			};
+			workerSkillAdmission.set(workerExtensionArgs, (granted) => admitWorkerSkills(parentLedger, granted));
 			const confirmProjectAgents = params.confirmProjectAgents ?? true;
 			const executionPolicy = resolveSubagentExecutionPolicy(
 				ctx.thinkingLevel,
