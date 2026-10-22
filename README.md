@@ -37,6 +37,25 @@
 
 ---
 
+A lightweight, MIT-licensed coding agent for your terminal. Switch models in
+one session, add subagents when you need them, and mark a goal done only when
+your own check passes.
+
+Requires Node.js 22.19 or newer:
+
+```bash
+npm install -g open-multi-agent-kit --ignore-scripts
+cd your-project
+omk
+```
+
+The first run opens `/login` (subscription, API key, or local model). To try it
+without a global install: `npx --ignore-scripts open-multi-agent-kit`.
+Details in [Quick start](#quick-start).
+
+<!-- TODO: terminal demo GIF goes here (install, `omk`, a `/goal verify` run passing).
+     Record a real session; do not use a mock-up. -->
+
 ## Why OMK
 
 An AI saying “done” is not an acceptance check. With `/goal verify`, you choose
@@ -86,18 +105,19 @@ flowchart LR
 
 ## Quick start
 
-Install the standalone binary (no Node.js needed; the installer verifies the
-release's `SHA256SUMS` and refuses a mismatch), then start in your repository:
+Install from npm (Node.js 22.19 or newer), then start in your repository:
 
 ```bash
-curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+npm install -g open-multi-agent-kit --ignore-scripts
 cd your-project
 omk
 ```
 
-With Node.js 22.19 or newer you can use npm instead:
-`npm install -g open-multi-agent-kit --ignore-scripts`, or run
-`npx --ignore-scripts open-multi-agent-kit` without a global install.
+Or run `npx --ignore-scripts open-multi-agent-kit` without a global install.
+
+<!-- TODO: a standalone binary installer (install.sh with SHA256SUMS) is planned,
+     but the latest release has no install.sh asset yet. Add it back here once
+     https://github.com/dmae97/omk/releases/latest/download/install.sh resolves. -->
 
 1. On a first run OMK opens `/login` for you: sign in with a subscription or an
    API key. An existing Claude Code or Codex CLI login can be reused with
@@ -236,7 +256,7 @@ rather than the published npm package. It is not an official leaderboard result.
   to start in that task's working directory. Two transient provider errors were
   retried; no trial was excluded.
 - OMK failed all three `pytorch-model-recovery` trials because the CLI rejected
-  an instruction starting with `- ` (fixed in #84). Without that
+  an instruction starting with a dash and a space (fixed in #84). Without that
   task the difference is +5.4 pp [0.0, +10.7].
 - Not a leaderboard run: 3 trials instead of the official 5, our own network
   allowlist and apt cache proxy, and OMK alone had 150 s extra for a workspace
@@ -408,34 +428,6 @@ unless a review binds to its exact digest. The default is off, and with the
 setting off the prompt is byte-identical to one built without a corpus.
 
 </details>
-
-## OMK + AdaptOrch
-
-<a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk">
-  <img
-    src="readmeasset/adaptorch/omk-adaptorch-banner.svg"
-    alt="OMK writes and runs code. AdaptOrch checks what it wrote. correctness_claim: false — it ran, and this is what happened."
-    width="100%"
-  />
-</a>
-
-OMK is this local, MIT-licensed coding agent. AdaptOrch is a separate
-proprietary evidence service. Neither requires the other: installing OMK does
-not create an AdaptOrch account or make calls to it by default.
-
-For an optional integration, see the [WPL package and clients](packages/adaptorch-wpl/README.md)
-and [MCP setup](packages/coding-agent/docs/mcp.md). The WPL package exposes
-state, client, and adjudication primitives, not an automatic verification loop
-for every CLI prompt.
-
-AdaptOrch's reports carry `correctness_claim=false`; they are not semantic
-correctness proofs or OMK harness benchmark results.
-[Review AdaptOrch plans](https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk#pricing)
-· [Claim boundary](https://adaptorch.com/claim-boundary?utm_source=github&utm_medium=readme&utm_campaign=omk)
-
-<sub>The AdaptOrch name and marks identify that separate proprietary product
-and appear here with permission. They are excluded from this repository's MIT
-grant — see [TRADEMARKS.md](TRADEMARKS.md).</sub>
 
 ## Prior art
 
@@ -664,6 +656,12 @@ MIT-licensed coding-agent harness — and began from the
 removed in this release line; OMK `0.9x` is OMK-native (see
 [`specs/constitution.md`](specs/constitution.md)), and the design debt to both
 projects stands. Thank you.
+
+## OMK + AdaptOrch
+
+AdaptOrch is a separate, optional product and is not called by default. See
+[OMK + AdaptOrch](packages/coding-agent/docs/omk-adaptorch.md) for the optional integration and
+[TRADEMARKS.md](TRADEMARKS.md) for the name and marks.
 
 ## License
 
