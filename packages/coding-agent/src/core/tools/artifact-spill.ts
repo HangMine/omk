@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { registerEvidenceArtifact } from "../evidence-lifecycle.ts";
 import { formatSize } from "./truncate.ts";
 
 export interface SpillInput {
@@ -29,6 +30,11 @@ export function spillTruncatedOutput(input: SpillInput): SpillResult {
 		rmSync(directory, { recursive: true, force: true });
 		throw error;
 	}
+	registerEvidenceArtifact({
+		producer: input.kind === "read" ? "read-spill" : "bash-spill",
+		path: spillPath,
+		content: input.full,
+	});
 	const size = formatSize(Buffer.byteLength(input.full, "utf-8"));
 	return {
 		preview: `${input.preview}\n\n[Full ${input.kind} output spilled to ${spillPath} (${size}).]`,

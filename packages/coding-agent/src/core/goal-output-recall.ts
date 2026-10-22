@@ -9,7 +9,7 @@
  * hold secrets the check printed, verbatim. Files live under `<cwd>/.omk/goals/recall/` (0700 dir, 0600
  * files, a `*` .gitignore) so the `read` tool's workspace/loadout policy can open them.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
 	chmodSync,
 	closeSync,
@@ -25,6 +25,8 @@ import {
 	writeSync,
 } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { evidenceLifecycleObserveEnabled, noteEvidenceRemovedByExistingPolicy } from "./evidence-lifecycle.ts";
+import { registerRecallEvidence } from "./goal-output-recall-evidence.ts";
 import { formatSize } from "./tools/truncate.ts";
 
 export const OUTPUT_RECALL_MAX_BYTES = 4 * 1024 * 1024;
@@ -94,13 +96,16 @@ function keepNewest(files: readonly string[], keep: number): void {
 		}
 	});
 	dated.sort((a, b) => a.mtime - b.mtime || a.file.localeCompare(b.file));
-	for (const { file } of dated.slice(0, Math.max(0, dated.length - keep))) removeQuietly(file);
+	for (const { file } of dated.slice(0, Math.max(0, dated.length - keep))) {
+		noteEvidenceRemovedByExistingPolicy(file);
+		removeQuietly(file);
+	}
 }
 
 /** Exactly `acceptance-<id>-<round>-<rev>-<attempt>.log` for this goal id; `a` never matches `a-1`'s files. */
 function goalFilePattern(goalId: string): RegExp {
 	const id = safeName(goalId).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-	return new RegExp(`^acceptance-${id}-\\d+-\\d+-\\d+\\.log$`, "u");
+	return new RegExp(`^acceptance-${id}-\\d+-\\d+-\\d+(?:-[0-9a-f]{8})?\\.log$`, "u");
 }
 
 function enforceCaps(dir: string, goalId: string): void {
@@ -118,7 +123,9 @@ function enforceCaps(dir: string, goalId: string): void {
 function nextAttempt(dir: string, stem: string): number {
 	let last = 0;
 	for (const name of readdirSync(dir)) {
-		const match = name.startsWith(`${stem}-`) ? /^(\d+)\.log$/u.exec(name.slice(stem.length + 1)) : null;
+		const match = name.startsWith(`${stem}-`)
+			? /^(\d+)(?:-[0-9a-f]{8})?\.log$/u.exec(name.slice(stem.length + 1))
+			: null;
 		if (match) last = Math.max(last, Number(match[1]));
 	}
 	return last + 1;
@@ -166,8 +173,10 @@ export class OutputArtifactWriter {
 			// A re-run in the same round and revision gets the next attempt number; earlier output is kept.
 			// Numbers only grow, so a file removed by the count cap is never reused.
 			const first = nextAttempt(dir, stem);
+			// Spec 106 EV11 (flag `observe`): a nonce so a path whose files were all pruned is never reused.
+			const nonce = evidenceLifecycleObserveEnabled() ? `-${randomBytes(4).toString("hex")}` : "";
 			for (let attempt = first; attempt < first + MAX_ATTEMPTS; attempt++) {
-				const file = join(dir, `${stem}-${attempt}.log`);
+				const file = join(dir, `${stem}-${attempt}${nonce}.log`);
 				try {
 					return new OutputArtifactWriter(file, openSync(file, "wx", 0o600), target, dir);
 				} catch (error) {
@@ -232,11 +241,13 @@ export class OutputArtifactWriter {
 			this.fd = undefined;
 			this.tail = [];
 			const content = readFileSync(this.file);
+			const sha256 = createHash("sha256").update(content).digest("hex");
+			registerRecallEvidence(this.file, this.target.goalId, content.byteLength, sha256);
 			enforceCaps(this.dir, this.target.goalId);
 			return {
 				displayPath: this.displayPath,
 				absolutePath: this.file,
-				sha256: createHash("sha256").update(content).digest("hex"),
+				sha256,
 				bytes: content.byteLength,
 				lines: countLines(content),
 				complete: elidedBytes === 0,
@@ -274,7 +285,9 @@ export function deleteGoalRecallFiles(cwd: string, goalId: string): void {
 	const pattern = goalFilePattern(goalId);
 	try {
 		for (const name of readdirSync(dir)) {
-			if (pattern.test(name)) removeQuietly(join(dir, name));
+			if (!pattern.test(name)) continue;
+			noteEvidenceRemovedByExistingPolicy(join(dir, name));
+			removeQuietly(join(dir, name));
 		}
 	} catch {
 		// No recall dir: nothing to delete.
