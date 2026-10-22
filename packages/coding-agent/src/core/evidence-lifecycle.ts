@@ -12,6 +12,7 @@
  */
 import { createHash } from "node:crypto";
 import { statSync } from "node:fs";
+import { currentEvidenceSession, EVIDENCE_UNATTRIBUTED } from "./evidence-lifecycle-scope.ts";
 
 export type EvidenceProducer = "goal-recall" | "read-spill" | "bash-spill" | "tool-output-log" | "bash-executor-log";
 
@@ -66,10 +67,13 @@ export interface EvidenceLifecycleReport {
 	readonly wouldDelete: { readonly count: number; readonly bytes: number; readonly artifactIds: readonly string[] };
 	/** Always 0 in observe mode; kept in the report so a trace proves it. */
 	readonly deletes: 0;
-	/** Registrations dropped once the registry hit its bound (counts only). */
+	/** Registrations dropped once this session's registry hit its bound (counts only). */
 	readonly overflow: number;
+	/** Artifacts registered with no session context (explicit bucket, not part of this report's counts). */
+	readonly unattributed: number;
 }
 
+/** Per session. */
 export const EVIDENCE_REGISTRY_MAX = 4096;
 
 export function evidenceLifecycleObserveEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -93,9 +97,23 @@ interface MutableRecord {
 	status: EvidenceArtifactStatus;
 }
 
-const records = new Map<string, MutableRecord>();
-let sequence = 0;
-let overflow = 0;
+interface SessionRegistry {
+	readonly records: Map<string, MutableRecord>;
+	sequence: number;
+	overflow: number;
+}
+
+/** Keyed by session id (or `unattributed`); a key is dropped when its session is disposed. */
+const sessions = new Map<string, SessionRegistry>();
+
+function registryOf(sessionId: string, create: boolean): SessionRegistry | undefined {
+	let registry = sessions.get(sessionId);
+	if (registry === undefined && create) {
+		registry = { records: new Map(), sequence: 0, overflow: 0 };
+		sessions.set(sessionId, registry);
+	}
+	return registry;
+}
 
 function sha256(text: string | Buffer): string {
 	return createHash("sha256").update(text).digest("hex");
@@ -136,15 +154,16 @@ export interface RegisterEvidenceInput {
 export function registerEvidenceArtifact(input: RegisterEvidenceInput): string | undefined {
 	if (!evidenceLifecycleObserveEnabled()) return undefined;
 	try {
+		const registry = registryOf(currentEvidenceSession(), true) as SessionRegistry;
+		const { records } = registry;
 		const pathSha256 = sha256(input.path);
-		const existing = records.get(pathSha256);
-		if (existing === undefined && records.size >= EVIDENCE_REGISTRY_MAX) {
-			overflow += 1;
+		if (!records.has(pathSha256) && records.size >= EVIDENCE_REGISTRY_MAX) {
+			registry.overflow += 1;
 			return undefined;
 		}
-		sequence += 1;
+		registry.sequence += 1;
 		const record: MutableRecord = {
-			artifactId: `ev-${sequence}`,
+			artifactId: `ev-${registry.sequence}`,
 			producer: input.producer,
 			pathSha256,
 			...(input.owner !== undefined ? { ownerSha256: sha256(input.owner) } : {}),
@@ -187,24 +206,27 @@ function applyUpdate(record: MutableRecord, update: EvidenceUpdate): void {
 
 export function updateEvidenceArtifact(path: string, update: EvidenceUpdate): void {
 	if (!evidenceLifecycleObserveEnabled()) return;
-	const record = records.get(sha256(path));
+	const record = registryOf(currentEvidenceSession(), false)?.records.get(sha256(path));
 	if (record !== undefined) applyUpdate(record, update);
 }
 
-/** Applies `update` to every present artifact registered under `owner`. */
+/** Applies `update` to every present artifact of the current session registered under `owner`. */
 export function updateEvidenceArtifactsByOwner(owner: string, update: EvidenceUpdate): void {
 	if (!evidenceLifecycleObserveEnabled()) return;
 	const ownerSha256 = sha256(owner);
-	for (const record of records.values()) {
+	for (const record of registryOf(currentEvidenceSession(), false)?.records.values() ?? []) {
 		if (record.ownerSha256 === ownerSha256 && record.status === "present") applyUpdate(record, update);
 	}
 }
 
-/** An existing pruner removed (or is about to remove) this path. Observation only. */
+/** An existing pruner removed (or is about to remove) this path, whichever session owns it. Observation only. */
 export function noteEvidenceRemovedByExistingPolicy(path: string): void {
 	if (!evidenceLifecycleObserveEnabled()) return;
-	const record = records.get(sha256(path));
-	if (record !== undefined) record.status = "removed-by-existing-policy";
+	const pathSha256 = sha256(path);
+	for (const registry of sessions.values()) {
+		const record = registry.records.get(pathSha256);
+		if (record !== undefined) record.status = "removed-by-existing-policy";
+	}
 }
 
 function freeze(record: MutableRecord): EvidenceArtifactRecord {
@@ -226,79 +248,28 @@ function freeze(record: MutableRecord): EvidenceArtifactRecord {
 	};
 }
 
-export function listEvidenceArtifacts(): EvidenceArtifactRecord[] {
-	return [...records.values()].map(freeze);
+export function listEvidenceArtifacts(sessionId: string = currentEvidenceSession()): EvidenceArtifactRecord[] {
+	return [...(registryOf(sessionId, false)?.records.values() ?? [])].map(freeze);
 }
 
-const PRODUCER_GROUP: Readonly<Record<EvidenceProducer, EvidenceProducerGroup>> = {
-	"goal-recall": "recall",
-	"read-spill": "spill",
-	"bash-spill": "spill",
-	"tool-output-log": "bash",
-	"bash-executor-log": "executor",
-};
-
-function share(unknown: number, present: number): number {
-	return present === 0 ? 0 : Math.round((unknown / present) * 10_000) / 10_000;
+export function evidenceRegistryStats(sessionId: string): { readonly registered: number; readonly overflow: number } {
+	const registry = registryOf(sessionId, false);
+	return { registered: registry?.records.size ?? 0, overflow: registry?.overflow ?? 0 };
 }
 
-export function evidenceLifecycleReport(): EvidenceLifecycleReport {
-	const groups: Record<EvidenceProducerGroup, { present: number; unknown: number }> = {
-		recall: { present: 0, unknown: 0 },
-		spill: { present: 0, unknown: 0 },
-		bash: { present: 0, unknown: 0 },
-		executor: { present: 0, unknown: 0 },
-	};
-	let blockedExhausted = 0;
-	const byProducer: Partial<Record<EvidenceProducer, number>> = {};
-	const holdReasons: Partial<Record<EvidenceHoldReason, number>> = {};
-	let present = 0;
-	let presentBytes = 0;
-	let removed = 0;
-	let unknown = 0;
-	const would: EvidenceArtifactRecord[] = [];
-	for (const record of listEvidenceArtifacts()) {
-		byProducer[record.producer] = (byProducer[record.producer] ?? 0) + 1;
-		if (record.status !== "present") {
-			removed += 1;
-			continue;
-		}
-		present += 1;
-		presentBytes += record.bytes;
-		const group = groups[PRODUCER_GROUP[record.producer]];
-		group.present += 1;
-		if (record.holds.includes("unknown")) group.unknown += 1;
-		if (record.blockedExhausted) blockedExhausted += 1;
-		for (const hold of record.holds) holdReasons[hold] = (holdReasons[hold] ?? 0) + 1;
-		if (record.holds.includes("unknown")) unknown += 1;
-		if (record.holds.length === 0) would.push(record);
-	}
-	return {
-		mode: "observe",
-		registered: records.size,
-		present,
-		presentBytes,
-		removedByExistingPolicy: removed,
-		byProducer,
-		holdReasons,
-		unknownHoldShare: share(unknown, present),
-		unknownHoldShareByProducer: Object.fromEntries(
-			Object.entries(groups).map(([name, g]) => [name, { ...g, share: share(g.unknown, g.present) }]),
-		) as Record<EvidenceProducerGroup, UnknownHoldShare>,
-		blockedExhausted,
-		wouldDelete: {
-			count: would.length,
-			bytes: would.reduce((sum, record) => sum + record.bytes, 0),
-			artifactIds: would.map((record) => record.artifactId),
-		},
-		deletes: 0,
-		overflow,
-	};
+/** Number of session keys (including `unattributed`) currently held. */
+export function evidenceRegistrySessionCount(): number {
+	return sessions.size;
 }
+
+/** Session disposed: forget its artifacts (records only; files are untouched). */
+export function dropEvidenceSession(sessionId: string): void {
+	sessions.delete(sessionId);
+}
+
+export { EVIDENCE_UNATTRIBUTED };
 
 /** Test seam. */
 export function resetEvidenceLifecycleForTest(): void {
-	records.clear();
-	sequence = 0;
-	overflow = 0;
+	sessions.clear();
 }

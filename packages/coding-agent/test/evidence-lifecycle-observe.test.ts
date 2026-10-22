@@ -9,11 +9,12 @@ import { DurableGoalStore } from "../src/core/durable-goal-store.ts";
 import {
 	EVIDENCE_REGISTRY_MAX,
 	evidenceLifecycleObserveEnabled,
-	evidenceLifecycleReport,
 	listEvidenceArtifacts,
 	registerEvidenceArtifact,
 	resetEvidenceLifecycleForTest,
 } from "../src/core/evidence-lifecycle.ts";
+import { evidenceLifecycleReport } from "../src/core/evidence-lifecycle-report.ts";
+import { EVIDENCE_UNATTRIBUTED, withEvidenceSession } from "../src/core/evidence-lifecycle-scope.ts";
 import goalController from "../src/core/extensions/builtin/goal-controller.ts";
 import type { ExtensionAPI, ExtensionCommandContext, RegisteredCommand } from "../src/core/extensions/types.ts";
 import { deleteGoalRecallFiles, OutputArtifactWriter, outputRecallDir } from "../src/core/goal-output-recall.ts";
@@ -209,6 +210,21 @@ describe("spec 106 D1 observe", () => {
 		expect(report.wouldDelete.count).toBe(0);
 	});
 
+	it("artifacts are scoped by owning session; no context goes to the explicit unattributed bucket", () => {
+		withEvidenceSession("s-a", () => spill());
+		withEvidenceSession("s-b", () => {
+			spill();
+			spill();
+		});
+		spill();
+		expect(listEvidenceArtifacts("s-a")).toHaveLength(1);
+		expect(listEvidenceArtifacts("s-b").map((r) => r.artifactId)).toEqual(["ev-1", "ev-2"]);
+		expect(evidenceLifecycleReport("s-a")).toMatchObject({ registered: 1, present: 1, unattributed: 1 });
+		expect(evidenceLifecycleReport("s-b")).toMatchObject({ registered: 2, unattributed: 1 });
+		expect(evidenceLifecycleReport(EVIDENCE_UNATTRIBUTED)).toMatchObject({ registered: 1, unattributed: 0 });
+		expect(withEvidenceSession("s-a", () => evidenceLifecycleReport().registered)).toBe(1);
+	});
+
 	it("registry is bounded and counts overflow", () => {
 		for (let i = 0; i < EVIDENCE_REGISTRY_MAX + 2; i++) {
 			registerEvidenceArtifact({ producer: "bash-spill", path: `/none/${i}`, bytes: 1 });
@@ -227,6 +243,8 @@ function gitRepo(): string {
 	git("commit", "-q", "--allow-empty", "-m", "init");
 	return root;
 }
+
+const GOAL_SESSION = "goal-session";
 
 async function failingGoalRound(maxRounds = 3, settles = 1) {
 	const cwd = gitRepo();
@@ -250,11 +268,15 @@ async function failingGoalRound(maxRounds = 3, settles = 1) {
 		ui: { notify: () => {}, confirm: async () => false },
 		isIdle: () => true,
 		hasPendingMessages: () => false,
+		sessionManager: { getSessionId: () => GOAL_SESSION },
 	} as unknown as ExtensionCommandContext;
-	await commands.get("goal")?.handler(`verify printf '${SECRET}\\n'; exit 4`, ctx);
-	for (let i = 0; i < settles; i++) {
-		await handlers.get("agent_settled")?.({ type: "agent_settled", messages: [] } as never, ctx as never);
-	}
+	// AgentSession runs prompts (and so the goal handlers) inside the owning session's evidence scope.
+	await withEvidenceSession(GOAL_SESSION, async () => {
+		await commands.get("goal")?.handler(`verify printf '${SECRET}\\n'; exit 4`, ctx);
+		for (let i = 0; i < settles; i++) {
+			await handlers.get("agent_settled")?.({ type: "agent_settled", messages: [] } as never, ctx as never);
+		}
+	});
 	return { cwd, entries };
 }
 
@@ -273,7 +295,7 @@ describe("spec 106 D1 goal trace", () => {
 		const last = entries.at(-1)?.data.evidenceLifecycle as ReturnType<typeof evidenceLifecycleReport>;
 		expect(last).toMatchObject({ mode: "observe", deletes: 0 });
 		// The second run consumed the first recall; both are still on disk and still goal-held.
-		expect(listEvidenceArtifacts().map((r) => r.holds)).toEqual([
+		expect(listEvidenceArtifacts(GOAL_SESSION).map((r) => r.holds)).toEqual([
 			["goal-active"],
 			["goal-active", "awaiting-consumer"],
 		]);
@@ -285,10 +307,10 @@ describe("spec 106 D1 goal trace", () => {
 		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
 		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
 		await failingGoalRound(1, 3);
-		const records = listEvidenceArtifacts().filter((r) => r.status === "present");
+		const records = listEvidenceArtifacts(GOAL_SESSION).filter((r) => r.status === "present");
 		expect(records.length).toBeGreaterThan(0);
 		expect(records.every((r) => r.blockedExhausted && r.holds.includes("goal-active"))).toBe(true);
-		expect(evidenceLifecycleReport().blockedExhausted).toBe(records.length);
+		expect(evidenceLifecycleReport(GOAL_SESSION).blockedExhausted).toBe(records.length);
 	});
 });
 

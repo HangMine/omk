@@ -98,7 +98,7 @@ import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-ca
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
-import { appendEvidenceLifecycleEntry } from "./evidence-lifecycle-session.ts";
+import { appendEvidenceLifecycleEntry, dropSessionEvidence, evidenceScope } from "./evidence-lifecycle-session.ts";
 import type { ToolHtmlRenderer } from "./export-html/index.ts";
 import {
 	type ContextUsage,
@@ -1711,6 +1711,7 @@ export class AgentSession {
 	}
 
 	private _disposeNow(): void {
+		dropSessionEvidence(this.sessionManager);
 		this._memory.close();
 		this._promptLifecycle.dispose();
 		this._runBudget.close();
@@ -2454,7 +2455,7 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	prompt(text: string, options?: PromptOptions): Promise<void> {
-		return this._shutdown.run(() => {
+		return evidenceScope(this.sessionManager, this._shutdown, () => {
 			const command = options?.expandPromptTemplates !== false && isSessionCommand(text, this._extensionRunner);
 			if (routesOutsideScope(command, options, this._runOwnsSession, this._runBudget.active))
 				return this._prompt(text, options, true);
@@ -5074,7 +5075,8 @@ export class AgentSession {
 		onChunk?: (chunk: string) => void,
 		options?: ExecuteBashOptions,
 	): Promise<BashResult> {
-		return this._shutdown.run(() => this._bashService.executeBash(command, onChunk, options));
+		const run = () => this._bashService.executeBash(command, onChunk, options);
+		return evidenceScope(this.sessionManager, this._shutdown, run);
 	}
 
 	/**

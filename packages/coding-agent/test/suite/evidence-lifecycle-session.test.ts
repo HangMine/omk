@@ -6,7 +6,12 @@ import { rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { fauxAssistantMessage } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resetEvidenceLifecycleForTest } from "../../src/core/evidence-lifecycle.ts";
+import {
+	evidenceRegistrySessionCount,
+	evidenceRegistryStats,
+	resetEvidenceLifecycleForTest,
+} from "../../src/core/evidence-lifecycle.ts";
+import { withEvidenceSession } from "../../src/core/evidence-lifecycle-scope.ts";
 import { EVIDENCE_LIFECYCLE_ENTRY_TYPE } from "../../src/core/evidence-lifecycle-session.ts";
 import type { SessionManager } from "../../src/core/session-manager.ts";
 import { spillTruncatedOutput } from "../../src/core/tools/artifact-spill.ts";
@@ -28,7 +33,9 @@ function entries(sm: SessionManager) {
 	return sm.getEntries().filter((e) => e.type === "custom" && e.customType === EVIDENCE_LIFECYCLE_ENTRY_TYPE);
 }
 
-function spill(): string {
+/** A spill produced by this session (as the read tool would inside its prompt). */
+function spill(harness?: Harness): string {
+	if (harness) return withEvidenceSession(harness.sessionManager.getSessionId(), () => spill());
 	const { path } = spillTruncatedOutput({ kind: "read", preview: "p", full: SECRET, truncated: true, path: "/x" });
 	spills.push(dirname(path));
 	return path;
@@ -50,7 +57,7 @@ describe("spec 106 D1 session sink", () => {
 		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const path = spill();
+		const path = spill(harness);
 		harness.setResponses([fauxAssistantMessage("ok")]);
 		await harness.session.prompt("hello");
 		const written = entries(harness.sessionManager);
@@ -81,7 +88,7 @@ describe("spec 106 D1 session sink", () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
 		for (const text of ["a", "b"]) {
-			spill();
+			spill(harness);
 			harness.setResponses([fauxAssistantMessage("ok")]);
 			await harness.session.prompt(text);
 		}
@@ -100,5 +107,41 @@ describe("spec 106 D1 session sink", () => {
 		for (const key of ["registered", "present", "presentBytes"]) {
 			expect(last?.report[key] ?? 0).toBeGreaterThanOrEqual(first?.report[key] ?? 0);
 		}
+	});
+
+	it("two sessions in one process: each entry holds only its own artifacts; dispose drops the key", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
+		vi.stubEnv("OMK_BASH_SANDBOX", "off");
+		const a = await createHarness();
+		const b = await createHarness();
+		harnesses.push(a, b);
+		const big = "head -c 120000 /dev/zero | tr '\\0' a";
+		const outputs: string[] = [];
+		for (const [harness, runs] of [
+			[a, 1],
+			[b, 2],
+		] as const) {
+			for (let i = 0; i < runs; i++) {
+				const result = await harness.session.executeBash(big);
+				if (result.fullOutputPath) outputs.push(result.fullOutputPath);
+			}
+			harness.setResponses([fauxAssistantMessage("ok")]);
+			await harness.session.prompt("go");
+		}
+		for (const path of outputs) rmSync(path, { force: true });
+		const report = (h: Harness) =>
+			(entries(h.sessionManager).at(-1) as { data: { report: Record<string, unknown> } }).data.report;
+		expect(report(a)).toMatchObject({ registered: 1, byProducer: { "bash-executor-log": 1 }, unattributed: 0 });
+		expect(report(b)).toMatchObject({ registered: 2, byProducer: { "bash-executor-log": 2 }, unattributed: 0 });
+		const idA = a.sessionManager.getSessionId();
+		const idB = b.sessionManager.getSessionId();
+		expect(idA).not.toBe(idB);
+		expect(evidenceRegistryStats(idA).registered).toBe(1);
+		a.session.dispose();
+		expect(evidenceRegistryStats(idA).registered).toBe(0);
+		expect(evidenceRegistryStats(idB).registered).toBe(2);
+		b.session.dispose();
+		expect(evidenceRegistryStats(idB).registered).toBe(0);
+		expect(evidenceRegistrySessionCount()).toBe(0);
 	});
 });

@@ -4,10 +4,12 @@
  * never sent to the model. Digests and counts only; flag off writes nothing.
  */
 import {
+	dropEvidenceSession,
 	type EvidenceLifecycleReport,
 	evidenceLifecycleObserveEnabled,
-	evidenceLifecycleReport,
 } from "./evidence-lifecycle.ts";
+import { evidenceLifecycleReport } from "./evidence-lifecycle-report.ts";
+import { withEvidenceSession } from "./evidence-lifecycle-scope.ts";
 
 export const EVIDENCE_LIFECYCLE_ENTRY_TYPE = "evidence_lifecycle";
 
@@ -23,6 +25,7 @@ export interface EvidenceLifecycleEntryData {
 export function appendEvidenceLifecycleEntry(sink: {
 	appendCustomEntry(customType: string, data?: unknown): string;
 	getEntries(): readonly { type: string; customType?: string }[];
+	getSessionId(): string;
 }): void {
 	if (!evidenceLifecycleObserveEnabled()) return;
 	try {
@@ -33,10 +36,31 @@ export function appendEvidenceLifecycleEntry(sink: {
 			schemaVersion: 1,
 			aggregation: "cumulative",
 			settleIndex,
-			report: evidenceLifecycleReport(),
+			report: evidenceLifecycleReport(sink.getSessionId()),
 		};
 		sink.appendCustomEntry(EVIDENCE_LIFECYCLE_ENTRY_TYPE, data);
 	} catch {
 		// Observation must never fail the prompt.
 	}
+}
+
+interface SessionIdSource {
+	getSessionId(): string;
+}
+
+interface OperationRunner {
+	run<T>(operation: () => Promise<T>): Promise<T>;
+}
+
+/**
+ * `runner.run(fn)` with `source`'s session as the owner of artifacts produced inside it.
+ * Flag off: exactly `runner.run(fn)`.
+ */
+export function evidenceScope<T>(source: SessionIdSource, runner: OperationRunner, fn: () => Promise<T>): Promise<T> {
+	return withEvidenceSession(source.getSessionId(), () => runner.run(fn));
+}
+
+/** Session disposed: drop its registry key (records only; files untouched). */
+export function dropSessionEvidence(source: SessionIdSource): void {
+	dropEvidenceSession(source.getSessionId());
 }

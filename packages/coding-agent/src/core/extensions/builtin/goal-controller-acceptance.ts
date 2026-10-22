@@ -1,6 +1,5 @@
 import { DurableGoalError, type DurableGoalSnapshot, nextDurableGoalTimestamp } from "../../durable-goal.ts";
 import type { DurableGoalStore } from "../../durable-goal-store.ts";
-import { evidenceLifecycleObserveEnabled, evidenceLifecycleReport } from "../../evidence-lifecycle.ts";
 import type { GoalAcceptance, GoalCheckOutcome } from "../../goal-acceptance.ts";
 import type { GoalContinuationDecision } from "../../goal-continuation.ts";
 import {
@@ -11,7 +10,7 @@ import {
 	summarizeArtifact,
 } from "../../goal-output-recall.ts";
 import { RecallAccessTracker } from "../../goal-output-recall-access.ts";
-import { observeRecallBlockedExhausted, observeRecallRecheck } from "../../goal-output-recall-evidence.ts";
+import * as recallEvidence from "../../goal-output-recall-evidence.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
 import { type GoalAcceptanceTestHooks, GoalTaskFacts } from "./goal-acceptance-task-facts.ts";
@@ -167,7 +166,7 @@ export class GoalAcceptanceFlow {
 		// A message queued while the check ran drives the next turn; the check runs again when it settles.
 		if (ctx.hasPendingMessages()) return;
 		if (!decision.continue) {
-			observeRecallBlockedExhausted(outcome.goal.ref.id);
+			recallEvidence.observeRecallBlockedExhausted(outcome.goal.ref.id);
 			await this.block(
 				store,
 				`acceptance check still fails after ${current.completedRounds} of ${current.maxRounds} rounds (${failureText(result)})`,
@@ -220,7 +219,7 @@ export class GoalAcceptanceFlow {
 		const { result } = outcome;
 		const recall = this.recallAccess.take();
 		let artifact: OutputArtifact | undefined;
-		if (result.status !== "aborted") observeRecallRecheck(outcome.goal.ref.id, result.passed);
+		if (result.status !== "aborted") recallEvidence.observeRecallRecheck(outcome.goal.ref.id, result.passed);
 		if (writer !== undefined) {
 			if (result.status === "aborted" || result.passed) writer.discard();
 			else artifact = writer.finish();
@@ -237,7 +236,7 @@ export class GoalAcceptanceFlow {
 			...(artifact !== undefined ? { outputArtifact: summarizeArtifact(artifact) } : {}),
 			...(recall !== undefined ? { priorRecall: recall } : {}),
 			// Spec 106 D1: counts, digests and would-delete ids only; absent when the flag is off.
-			...(evidenceLifecycleObserveEnabled() ? { evidenceLifecycle: evidenceLifecycleReport() } : {}),
+			...recallEvidence.evidenceReportField(ctx.sessionManager.getSessionId()),
 		});
 		// Spec 096/100: hand the host receipt to the task-result projection (flag on only), with the
 		// workspace state at publish, the runner's counts and the check identity.

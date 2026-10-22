@@ -1,5 +1,11 @@
 /** Spec 106 D1 (observe only): lifecycle hooks for goal recall files. Records state; deletes nothing. */
-import { registerEvidenceArtifact, updateEvidenceArtifactsByOwner } from "./evidence-lifecycle.ts";
+import {
+	type EvidenceLifecycleReport,
+	evidenceLifecycleObserveEnabled,
+	registerEvidenceArtifact,
+	updateEvidenceArtifactsByOwner,
+} from "./evidence-lifecycle.ts";
+import { evidenceLifecycleReport } from "./evidence-lifecycle-report.ts";
 
 /** The repair turn that reads the file and the re-run check that verifies the fix. */
 export const RECALL_CONSUMERS = ["repair-turn", "acceptance-recheck"] as const;
@@ -31,4 +37,9 @@ export function observeRecallRecheck(goalId: string, passed: boolean): void {
 /** The goal was blocked with rounds exhausted: classify its recall files; holds stay (no state change). */
 export function observeRecallBlockedExhausted(goalId: string): void {
 	updateEvidenceArtifactsByOwner(goalId, { blockedExhausted: true });
+}
+
+/** The `goal_verification` field: this session's counts-only report, absent when the flag is off. */
+export function evidenceReportField(sessionId: string): { evidenceLifecycle?: EvidenceLifecycleReport } {
+	return evidenceLifecycleObserveEnabled() ? { evidenceLifecycle: evidenceLifecycleReport(sessionId) } : {};
 }
