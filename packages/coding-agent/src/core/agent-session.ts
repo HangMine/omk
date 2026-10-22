@@ -98,7 +98,7 @@ import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-ca
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
-import { appendEvidenceLifecycleEntry, dropSessionEvidence, evidenceScope } from "./evidence-lifecycle-session.ts";
+import { EvidenceSessionShutdown } from "./evidence-lifecycle-session.ts";
 import type { ToolHtmlRenderer } from "./export-html/index.ts";
 import {
 	type ContextUsage,
@@ -285,7 +285,6 @@ import { acquireSessionOwnerLeaseSync, type SessionOwnerLease } from "./session-
 import { PromptExecutionBusyError, SessionPromptLifecycle } from "./session-prompt-lifecycle.ts";
 import { SessionRunBudget } from "./session-run-budget.ts";
 import { classifyRunTermination } from "./session-run-termination.ts";
-import { SessionShutdown } from "./session-shutdown.ts";
 import * as promptAssembly from "./session-system-prompt.ts";
 import {
 	classifySessionTermination,
@@ -624,9 +623,8 @@ export class AgentSession {
 	private _unsubscribeAgent?: () => void;
 	private _eventListeners: AgentSessionEventListener[] = [];
 	private readonly _runBudget: SessionRunBudget;
-	private readonly _shutdown = new SessionShutdown();
-	/** Spec 106 D1: `_shutdown.run(fn)` in this session's evidence scope; every agent-loop start goes through it. */
-	private readonly _evRun = <T>(fn: () => Promise<T>) => evidenceScope(this.sessionManager, this._shutdown, fn);
+	/** Spec 106 D1: agent-loop starts go through `runEvidence` (this session's evidence scope). */
+	private readonly _shutdown = new EvidenceSessionShutdown(() => this.sessionManager);
 	private readonly _memory: SessionMemory;
 	private readonly _turnAdmission: SessionTurnAdmission;
 	private _control: Promise<SessionControlServer> | undefined;
@@ -1483,7 +1481,7 @@ export class AgentSession {
 			// state need the boundary no retry follows, so mark it explicitly.
 			if (!this._willRetryAfterAgentEnd(event)) {
 				await this._extensionRunner.emit({ type: "agent_settled", messages: event.messages });
-				appendEvidenceLifecycleEntry(this.sessionManager);
+				this._shutdown.settled();
 			}
 		} else if (event.type === "turn_start") {
 			this._turnMetricsState = {
@@ -1717,7 +1715,6 @@ export class AgentSession {
 	}
 
 	private _disposeNow(): void {
-		dropSessionEvidence(this.sessionManager);
 		this._memory.close();
 		this._promptLifecycle.dispose();
 		this._runBudget.close();
@@ -1928,7 +1925,7 @@ export class AgentSession {
 			const next = this._deferredTurnInput.next();
 			// prompt() and _runAgentPrompt publish their own failures; nothing else awaits this run.
 			if (next && "prompt" in next) this.prompt(next.prompt.text, next.prompt.options).catch(() => undefined);
-			else if (next) this._evRun(() => this._runAgentPrompt(next.messages)).catch(() => undefined);
+			else if (next) this._shutdown.runEvidence(() => this._runAgentPrompt(next.messages)).catch(() => undefined);
 		}, 0);
 	}
 
@@ -2461,7 +2458,7 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	prompt(text: string, options?: PromptOptions): Promise<void> {
-		return this._evRun(() => {
+		return this._shutdown.runEvidence(() => {
 			const command = options?.expandPromptTemplates !== false && isSessionCommand(text, this._extensionRunner);
 			if (routesOutsideScope(command, options, this._runOwnsSession, this._runBudget.active))
 				return this._prompt(text, options, true);
@@ -2841,7 +2838,7 @@ export class AgentSession {
 			// A top-level run started now would be refused, or would race the busy work on stale context.
 			this._deferredTurnInput.defer(appMessage, options.deliverAs);
 		} else if (options?.triggerTurn) {
-			await this._evRun(() => this._runAgentPrompt(appMessage));
+			await this._shutdown.runEvidence(() => this._runAgentPrompt(appMessage));
 		} else {
 			this.agent.state.messages.push(appMessage);
 			this.sessionManager.appendCustomMessageEntry(
@@ -5081,7 +5078,7 @@ export class AgentSession {
 		onChunk?: (chunk: string) => void,
 		options?: ExecuteBashOptions,
 	): Promise<BashResult> {
-		return this._evRun(() => this._bashService.executeBash(command, onChunk, options));
+		return this._shutdown.runEvidence(() => this._bashService.executeBash(command, onChunk, options));
 	}
 
 	/**

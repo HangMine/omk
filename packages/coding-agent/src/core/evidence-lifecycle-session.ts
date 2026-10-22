@@ -10,6 +10,7 @@ import {
 } from "./evidence-lifecycle.ts";
 import { evidenceLifecycleReport } from "./evidence-lifecycle-report.ts";
 import { withEvidenceSession } from "./evidence-lifecycle-scope.ts";
+import { SessionShutdown } from "./session-shutdown.ts";
 
 export const EVIDENCE_LIFECYCLE_ENTRY_TYPE = "evidence_lifecycle";
 
@@ -64,4 +65,44 @@ export function evidenceScope<T>(source: SessionIdSource, runner: OperationRunne
 /** Session disposed: drop its registry key (records only; files untouched). */
 export function dropSessionEvidence(source: SessionIdSource): void {
 	dropEvidenceSession(source.getSessionId());
+}
+
+type EvidenceSink = Parameters<typeof appendEvidenceLifecycleEntry>[0];
+
+/**
+ * `SessionShutdown` bound to one session's D1 evidence: `runEvidence` starts agent loops in the session's
+ * evidence scope, `settled` appends the observe entry, and both finalize paths drop the registry key first.
+ * Flag off: `runEvidence` is exactly `run`, `settled` writes nothing.
+ */
+export class EvidenceSessionShutdown extends SessionShutdown {
+	private readonly sink: () => EvidenceSink;
+
+	constructor(sink: () => EvidenceSink) {
+		super();
+		this.sink = sink;
+	}
+
+	runEvidence<T>(fn: () => Promise<T>): Promise<T> {
+		return evidenceScope(this.sink(), this, fn);
+	}
+
+	settled(): void {
+		appendEvidenceLifecycleEntry(this.sink());
+	}
+
+	private dropThen(finalize: () => void): () => void {
+		return () => {
+			dropSessionEvidence(this.sink());
+			finalize();
+		};
+	}
+
+	override closeSession(...args: Parameters<SessionShutdown["closeSession"]>): Promise<void> {
+		const [source, owned, finalize] = args;
+		return super.closeSession(source, owned, this.dropThen(finalize));
+	}
+
+	override disposeIdle(finalize: () => void): void {
+		super.disposeIdle(this.dropThen(finalize));
+	}
 }
