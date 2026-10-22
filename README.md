@@ -470,7 +470,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.5](.github/RELEASE_NOTES_v1.5.5.md)
+- [Release notes for v1.5.6](.github/RELEASE_NOTES_v1.5.6.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -561,6 +561,28 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.6
+
+### Added
+
+- Lane ready frontier behind `OMK_LANE_READY_QUEUE=1` (default off). A lane starts as soon as its dependencies finish, up to the lane-width limit. Frontier counts are logged to `subagent-lane-frontier.jsonl` (#212).
+- Lane failure scope behind `OMK_LANE_FAILURE_SCOPE=1` (default off). A lane that fails without writing anything blocks only its descendants. Adds `allLanesCompleted` (#208).
+- Session skill admission behind `OMK_SKILL_ADMISSION` (`1`, `true` or `on`; default off). A session admits at most 10 unique skill bodies, and the count survives resume and compaction. It covers explicit, steer and follow-up skill loads, `SKILL.md` reads through the `read` tool, and skills handed to workers; workers start with `--no-skills` and get only admitted skills (#209, #210). Not gated yet: reading `SKILL.md` through bash, and `SKILL.md` reads inside a worker.
+- Evidence lifecycle observe-only mode behind `OMK_EVIDENCE_LIFECYCLE=observe` (default off). It reports what would be deleted and deletes nothing; the trace stores only hashes and counts (#211).
+
+With all four flags off, behavior is the same as 1.5.5.
+
+### Fixed
+
+- The required-tools contract listener no longer leaks or fires twice on dispose and re-install (#204).
+- `npm run check` exits 0 again (#206).
+
+### Changed
+
+- The trademark notice moved out of `LICENSE`, so GitHub detects the MIT license. AdaptOrch logo files moved to `readmeasset/adaptorch/` with a `NOTICE` saying they are not MIT-licensed (#205).
+
+Release notes live in [RELEASE_NOTES_v1.5.6.md](.github/RELEASE_NOTES_v1.5.6.md).
+
 ## Release v1.5.5
 
 ### Behavior change (security)
@@ -607,24 +629,6 @@ Release notes live in [RELEASE_NOTES_v1.5.5.md](.github/RELEASE_NOTES_v1.5.5.md)
 - `test.sh` removes every variable whose name contains `KEY`, `SECRET`, `TOKEN`, `PASSWORD`, or `CREDENTIAL` (any case), plus a short list of credential-bearing names the pattern misses, so a release test run cannot reach a live provider with the operator's key.
 
 Release notes live in [RELEASE_NOTES_v1.5.4.md](.github/RELEASE_NOTES_v1.5.4.md).
-
-## Release v1.5.3
-
-### Fixed
-
-- Skill search now passes the active TODO kind to metacon ranking. The `phase` input existed in the ranker and run log but `SkillSearchGate` never supplied it, so ranking and `phaseSource` always reported the `task` default.
-- Concurrent attachment previews now share one in-flight Photon decode. A second repaint of the same active attachment no longer allocates another full-resolution image and resized RGBA buffer; a dropped draft still releases its entry through the existing `WeakMap`.
-- Reading a run journal now retries a torn tail as a concurrent change instead of reporting `integrity`. A live writer appending one record can be observed between its size/ctime check and the read, so a reader could see a partial final line; `readRunJournal` retries that bounded window and still fails with `journal_truncated` once the retries are exhausted. Middle-file corruption keeps reporting `integrity`.
-
-### Tests
-
-- Two compaction tests pin a 1 ms retry backoff instead of inheriting the default 5-attempt, 2 s-base policy. The retry path and assertions are unchanged; without the pin they waited about 62 s for a 503 and exceeded the 30 s Vitest timeout, which failed CI on every run since the default changed in 1.5.1.
-- `verified-run.test.ts` gives its fixture 30 s of work and verify budget and derives the "past the work deadline" clock from that budget. The old 3 s budget also bounded process spawn, so a loaded host spent it before the writer ran and the suite reported `deadline`; the timeout behavior keeps its own test with `workMs: 100`.
-- `verified-run-authority-restart.test.ts` uses a 60 s grant TTL. Its fixtures assert restart quarantine, not expiry, and a 1 s TTL let a loaded host expire the grant before `dispatchIntent()` committed. Expiry stays pinned deterministically in `verified-run-authority-store.test.ts`.
-- `memory-factorial` waits up to 30 s for the host clock instead of 5 s. A WSL2 time resync can hold `Date.now()` for seconds while `performance.now()` advances; the store's real-clock guard and the test's future-dated-memory assertions are unchanged.
-- The `journal-read-retry` mutator writes each record with one `pwrite` call, so the fixture only produces the two valid journal states it claims to produce. The reader-side retry above is what makes the live-writer assertions hold without weakening them.
-
-Release notes live in [RELEASE_NOTES_v1.5.3.md](.github/RELEASE_NOTES_v1.5.3.md).
 
 <!-- releases:end -->
 
