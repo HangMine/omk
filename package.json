@@ -53,7 +53,9 @@
 		"harness-graph": "bash .omk/harness-graph/run.sh",
 		"harness-graph:compact-index": "node .omk/harness-graph/compact-skills-index.mjs",
 		"prepare": "husky",
-		"check:abort-signal-any": "node scripts/check-abort-signal-any.mjs"
+		"check:abort-signal-any": "node scripts/check-abort-signal-any.mjs",
+		"inventory:pi": "node scripts/pi-inventory.mjs",
+		"check:pi-inventory": "node scripts/pi-inventory.mjs --check"
 	},
 	"knip": {
 		"ignore": [
