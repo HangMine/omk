@@ -62,12 +62,23 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
 
 - **Primary:** paired resolve rate on the same task set, arm ON (`OMK_EDIT_DIAGNOSTICS=1`) vs OFF. Ship-default-on only if ON − OFF ≥ **+δ pp** with the paired 95% CI (McNemar / paired bootstrap) excluding 0. δ = 2 pp (fixed, Q4). Otherwise stays default-off.
 - **δ = 2 pp (Q4, decided).**
-- **n = TBD-by-Bench-Analyst — BLOCKING: no measurement run may start until n from Bench Analyst's power calculation (for δ = 2 pp, paired, α = 0.05) is written here in a commit.** If the required n exceeds the free-run budget, we run what the budget allows and report the result as **NOISE / SMALL**; **n is never increased after seeing results.**
+- **n = TBD — fixed after pilot. BLOCKING: no main measurement run may start until n is written here in a commit.**
+  - Power calc (Bench Analyst, 2026-10-22 KST, relayed by OMK): paired McNemar, α = 0.05 two-sided, power 0.8, δ = 2 pp. Required pairs by discordant-pair rate p_d:
+    | p_d | required pairs |
+    |---|---|
+    | 0.05 | 979 |
+    | 0.10 | 1,960 |
+    | 0.15 | 2,941 |
+    | 0.20 | 3,922 |
+  - Default assumption p_d = 0.10 (≈ 89 tasks × ≈ 22 reps) is **unmeasured**. A **pilot measures p_d first**; n is then fixed in this spec (commit) before the main run and **never increased afterwards**.
+  - Free runs likely cannot reach 1,000+ pairs, so δ = 2 pp is likely **undetectable**; per pre-registration the result is then reported as **NOISE / SMALL**. Once the free-run budget is known, Bench Analyst states the **minimum detectable δ** at that n, written here before the main run.
+  - **Clustering (Agent Researcher):** ≈ 89 tasks × ≈ 22 reps makes pairs within a task non-independent, violating McNemar's independence assumption. The **verdict uses task-clustered analysis**: per-task resolve-rate difference with a task-level cluster bootstrap, or GEE with task as cluster. Effective sample size is below 1,960 pairs; **Bench Analyst recomputes power under clustering** before n is fixed.
+  - **Pilot hold-out:** pilot data used to estimate p_d is held out and **never reused** for the main-run verdict.
 - Task set: frozen list (ids + hash committed before first run), tasks in TS/Python only (where checkers exist).
 - **Verdict is on resolve rate only.** Default-on requires a resolve-rate PASS; mechanism metrics below cannot rescue a failed or NOISE result.
-- **Supporting mechanism metrics (pre-registered, not verdict):**
-  1. Count of new errors (vs the task's starting state) still present at session end, per task; ON vs OFF, median and mean.
-  2. Share of reported errors that are gone after the very next `edit`/`write` to any file (ON arm only; OFF arm computed shadow-mode from logs for comparison where possible).
+- **Supporting mechanism metrics (pre-registered; mechanism-only — never evidence for resolve-rate claims):**
+  1. **New errors remaining at end:** diagnostics are run **outside the tool-call record**, identically for both arms, at session end. Counted as the **net increase vs the pre-edit baseline** (task starting state), **paired per task** (ON vs OFF). Tasks in languages without a diagnostics checker are **excluded from the denominator**, and the excluded count is reported.
+  2. **Next-edit fix rate:** denominator = edits that produced new diagnostics. *Fixed* = after the next edit, the diagnostic with the **same file + same rule** is gone. Disappearance due to **file deletion is counted separately** (not as fixed). The OFF arm is computed the same way with diagnostics run but **hidden** from the model.
 - **Arms pinned** to the same `origin/main` SHA that contains `e4cefedb15` (bash truncation fix) once merged; the only difference is the env flag.
 - **Equal-path-length build dirs** for both arms (e.g. `/workspace/omk-ab-on` / `/workspace/omk-ab-of`… same length) so prompt bytes do not differ by path.
 - **Diff the first request payload** of ON vs OFF on one task: must be byte-identical (flag changes only tool results, never the system prompt/tool schema). Any diff ⇒ stop, fix, re-pin.
@@ -109,7 +120,7 @@ Gates: `npm run check`, targeted vitest, existing `test/diagnostics-tool.test.ts
 - Q1 Report-only; never reject/revert. Reject = future third arm, own spec.
 - Q2 Include other files' NEW errors vs pre-edit; edited file first; cap 5 files / 20 entries total.
 - Q3 10 s per check, 20 s per edit; timeout ⇒ show nothing + `appendRunLog("edit-diag-timeout")`; edit result never fails.
-- Q4 δ = 2 pp; n from Bench Analyst power calc, written here before measuring (currently TBD, blocking); over budget ⇒ NOISE/SMALL, never grow n.
+- Q4 δ = 2 pp; power calc in §4 (979–3,922 pairs by p_d); n fixed after pilot measures p_d, written here before the main run (blocking); over budget ⇒ NOISE/SMALL, never grow n.
 - Q5 Errors only.
 - Q6 Snapshot, release mutation lock, then check; compare mtime/hash before reporting; skip if changed.
 - `diagnostics.ts` TTL-cache bypass and exact-path fixes ship as a separate bug-fix PR (`fix/diagnostics-cache-path`).
