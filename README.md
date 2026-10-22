@@ -41,14 +41,16 @@ A lightweight, MIT-licensed coding agent for your terminal. Switch models in
 one session, add subagents when you need them, and mark a goal done only when
 your own check passes.
 
+Requires Node.js 22.19 or newer:
+
 ```bash
-curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+npm install -g open-multi-agent-kit --ignore-scripts
 cd your-project
 omk
 ```
 
-The first run opens `/login` (subscription, API key, or local model). With
-Node.js 22.19 or newer: `npx --ignore-scripts open-multi-agent-kit`.
+The first run opens `/login` (subscription, API key, or local model). To try it
+without a global install: `npx --ignore-scripts open-multi-agent-kit`.
 Details in [Quick start](#quick-start).
 
 <!-- TODO: terminal demo GIF goes here (install, `omk`, a `/goal verify` run passing).
@@ -103,18 +105,19 @@ flowchart LR
 
 ## Quick start
 
-Install the standalone binary (no Node.js needed; the installer verifies the
-release's `SHA256SUMS` and refuses a mismatch), then start in your repository:
+Install from npm (Node.js 22.19 or newer), then start in your repository:
 
 ```bash
-curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+npm install -g open-multi-agent-kit --ignore-scripts
 cd your-project
 omk
 ```
 
-With Node.js 22.19 or newer you can use npm instead:
-`npm install -g open-multi-agent-kit --ignore-scripts`, or run
-`npx --ignore-scripts open-multi-agent-kit` without a global install.
+Or run `npx --ignore-scripts open-multi-agent-kit` without a global install.
+
+<!-- TODO: a standalone binary installer (install.sh with SHA256SUMS) is planned,
+     but the latest release has no install.sh asset yet. Add it back here once
+     https://github.com/dmae97/omk/releases/latest/download/install.sh resolves. -->
 
 1. On a first run OMK opens `/login` for you: sign in with a subscription or an
    API key. An existing Claude Code or Codex CLI login can be reused with
