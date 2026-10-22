@@ -2,6 +2,7 @@ import { assertLaneCap, snapshotLaneLaunchInput } from "./lane-input-snapshot.ts
 import type { LaneOutcome } from "./subagent-lane-contract.ts";
 import { allLanesCompleted, createLaneFailureScope, laneFailureScopeEnabled } from "./subagent-lane-failure-scope.ts";
 import type { LaunchSubagentLanesInput } from "./subagent-lane-input.ts";
+import { laneReadyFrontierEnabled, runReadyFrontier } from "./subagent-lane-ready-frontier.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 import { WorkloadPermitError } from "./workload-permit-pool.ts";
 
@@ -112,6 +113,38 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 	let active = 0;
 	let maxObservedConcurrency = 0;
 	const failureScope = createLaneFailureScope(input.plan, laneFailureScopeEnabled());
+
+	if (laneReadyFrontierEnabled() && effectiveLaneWidth > 0 && !input.signal?.aborted) {
+		// Spec 106 DG2: dependency-driven ready queue instead of the batch barrier.
+		await runReadyFrontier({
+			plan: input.plan,
+			width: effectiveLaneWidth,
+			failureScope,
+			signal: input.signal,
+			outcomes,
+			runLane: (laneId) =>
+				runLane(input, laneId, effectiveLaneWidth, {
+					blocked: () => hasUnsettled,
+					markUnsettled: () => {
+						hasUnsettled = true;
+					},
+					enter: () => {
+						active += 1;
+						maxObservedConcurrency = Math.max(maxObservedConcurrency, active);
+					},
+					exit: () => {
+						active -= 1;
+					},
+				}),
+			hasUnsettled: () => hasUnsettled,
+		});
+		return {
+			outcomes: outcomes.sort((a, b) => sourceOrder.get(a.laneId)! - sourceOrder.get(b.laneId)!),
+			effectiveLaneWidth,
+			maxObservedConcurrency,
+			allLanesCompleted: allLanesCompleted(outcomes),
+		};
+	}
 
 	for (const batch of input.plan.batches) {
 		const prior = [...outcomes];
