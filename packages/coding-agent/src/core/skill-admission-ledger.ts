@@ -28,7 +28,7 @@ export interface SkillAdmissionRecord {
 
 export type SkillAdmissionDecision =
 	| { readonly ok: true; readonly requestId: string; readonly reused: boolean }
-	| { readonly ok: false; readonly reason: "cap" | "legacy_over_cap" };
+	| { readonly ok: false; readonly reason: "cap" | "legacy_over_cap" | "unknown_record" };
 
 export function isSkillAdmissionEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 	const value = env.OMK_SKILL_ADMISSION?.trim().toLowerCase();
@@ -48,6 +48,7 @@ export function isSkillAdmissionRecord(value: unknown): value is SkillAdmissionR
 	const r = value as Record<string, unknown>;
 	return (
 		r.schemaVersion === SKILL_ADMISSION_SCHEMA_VERSION &&
+		r.policyRevision === SKILL_ADMISSION_POLICY_REVISION &&
 		typeof r.skillId === "string" &&
 		typeof r.digest === "string" &&
 		typeof r.requestId === "string" &&
@@ -62,6 +63,7 @@ export class SkillAdmissionLedger {
 	private readonly slots = new Map<string, { requestId: string; status: "reserved" | "admitted" }>();
 	private readonly byRequest = new Map<string, string>();
 	private legacyOverCap = false;
+	private unknownRecord = false;
 	private seq = 0;
 
 	constructor(cap: number = SKILL_ADMISSION_CAP) {
@@ -78,6 +80,15 @@ export class SkillAdmissionLedger {
 	/** SK7: a session with no ledger but more than `cap` delivered bodies refuses new admissions. */
 	markLegacy(deliveredUniqueBodies: number): void {
 		if (deliveredUniqueBodies > this.cap) this.legacyOverCap = true;
+	}
+
+	/** A record with an unknown schemaVersion/policyRevision was seen: fail closed, refuse every new admission. */
+	markUnknownRecord(): void {
+		this.unknownRecord = true;
+	}
+
+	get isFailedClosed(): boolean {
+		return this.unknownRecord;
 	}
 
 	get isLegacyOverCap(): boolean {
@@ -99,6 +110,7 @@ export class SkillAdmissionLedger {
 		const key = slotKey(skillId, digest);
 		const existing = this.slots.get(key);
 		if (existing) return { ok: true, requestId: existing.requestId, reused: true };
+		if (this.unknownRecord) return { ok: false, reason: "unknown_record" };
 		if (this.legacyOverCap) return { ok: false, reason: "legacy_over_cap" };
 		if (this.slots.size >= this.cap) return { ok: false, reason: "cap" };
 		this.seq++;

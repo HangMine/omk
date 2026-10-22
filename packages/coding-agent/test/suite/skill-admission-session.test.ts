@@ -127,4 +127,25 @@ describe("spec 106 A1 session skill admission", () => {
 		vi.stubEnv("OMK_SKILL_ADMISSION", "1");
 		expect(harness.session.admitSkillBody("skill-11", "x", "explicit")).toMatch(/legacy/);
 	});
+
+	it("fail closed: an unknown schemaVersion or policyRevision record refuses every new skill (no restart from 0)", async () => {
+		for (const bad of [{ schemaVersion: 2 }, { policyRevision: "106-a1-r999" }]) {
+			const { harness } = await harnessWithSkills(2);
+			vi.stubEnv("OMK_SKILL_ADMISSION", "1");
+			harness.sessionManager.appendCustomEntry("skill_admission", {
+				schemaVersion: 1,
+				policyRevision: "106-a1-r1",
+				skillId: "old",
+				digest: "x",
+				source: "explicit",
+				status: "admitted",
+				requestId: "sa-1-x",
+				...bad,
+			});
+			expect(harness.session.admitSkillBody("skill-0", "fresh body", "explicit")).toMatch(/fail closed/);
+			harness.setResponses([fauxAssistantMessage("ok")]);
+			await harness.session.prompt("/skill:skill-1 go");
+			expect(getUserTexts(harness).at(-1)).toContain('"skill-1" was not loaded');
+		}
+	});
 });

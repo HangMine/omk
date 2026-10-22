@@ -25,9 +25,11 @@ const SKILL_BLOCK = /^<skill name="([^"]+)" location="[^"]+">\n([\s\S]*?)\n<\/sk
 export function restoreSkillAdmissionLedger(entries: readonly SessionEntry[]): SkillAdmissionLedger {
 	const records: SkillAdmissionRecord[] = [];
 	const legacyBodies = new Set<string>();
+	let unknownRecord = false;
 	for (const entry of entries) {
 		if (entry.type === "custom" && entry.customType === SKILL_ADMISSION_ENTRY_TYPE) {
 			if (isSkillAdmissionRecord(entry.data)) records.push(entry.data);
+			else unknownRecord = true;
 			continue;
 		}
 		if (entry.type !== "message" || entry.message.role !== "user") continue;
@@ -40,8 +42,10 @@ export function restoreSkillAdmissionLedger(entries: readonly SessionEntry[]): S
 		}
 	}
 	const ledger = SkillAdmissionLedger.restore(records);
+	// Unknown schemaVersion/policyRevision: fail closed (refuse new admissions), never restart from 0.
+	if (unknownRecord) ledger.markUnknownRecord();
 	// SK7: only a session that never wrote a ledger is reconstructed from history.
-	if (records.length === 0) ledger.markLegacy(legacyBodies.size);
+	if (records.length === 0 && !unknownRecord) ledger.markLegacy(legacyBodies.size);
 	return ledger;
 }
 
@@ -58,9 +62,10 @@ export function admitSkillBody(
 	const digest = skillBodyDigest(body);
 	const decision = ledger.reserve(skillId, digest);
 	if (!decision.ok) {
-		return decision.reason === "cap"
-			? `session skill cap ${SKILL_ADMISSION_CAP} reached`
-			: `session already holds more than ${SKILL_ADMISSION_CAP} skill bodies (legacy)`;
+		if (decision.reason === "cap") return `session skill cap ${SKILL_ADMISSION_CAP} reached`;
+		if (decision.reason === "unknown_record")
+			return "session has skill admission records of an unknown version (fail closed)";
+		return `session already holds more than ${SKILL_ADMISSION_CAP} skill bodies (legacy)`;
 	}
 	if (decision.reused) return true;
 	// reserve and commit run in one synchronous turn; the expanded text is handed straight to the request.
