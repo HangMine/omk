@@ -59,6 +59,10 @@ All six SHA-256 values in doc §A.4 match main (files unchanged since 741ac1c4).
 Tests (`test/suite/` because it is session code): SK1 6+3+5 ⇒ 10 admitted + reasons; **SK2** 9 admitted, two concurrent new reads ⇒ exactly 1 ok; SK3 cross-path; SK4 dedupe/alias/new digest; **SK5** resume + compaction + model switch keep count; SK7 legacy; flag-off byte equality.
 PREREG bars: SK1–SK7 deterministic pass 100%; flag-off request bytes identical. **Invariant check** (not a reliability claim): 200 seeded randomized reserve/commit/release interleavings must show 0 cap violations; 0/200 only bounds the per-interleaving violation rate at ≈1.5% (95% upper, rule of three), so it is a regression guard, not evidence of correctness.
 
+**A1 status: partially satisfied.** PR1 enforces <=10 unique skill bodies only on explicit invocation, steer and followUp paths. Model read of SKILL.md (SK3) and worker hand-off (SK6) are not gated yet; until they land, no claim of a session-wide <=10 guarantee and no measurement may treat the cap as session-wide.
+
+A1 notes: reserve+commit are synchronous at expansion, so a failed request still counts (over-count, safe direction); two-step commit is a follow-up. Partial application: no default-on until SK3/SK6 land.
+
 ## 4. D1 — evidence lifecycle, observe-only
 
 - `OMK_EVIDENCE_LIFECYCLE=observe`: register managed artifacts (recall, read spill, tool-bash log, executor `fullOutputPath`) with `{artifactId, producer, bytes, holds[]}`; emit counts/bytes/hold reasons only (0 raw bytes in trace). **No deletes**, existing pruners untouched.
@@ -92,7 +96,7 @@ Promotion requires 0 cap violations, 0 permission widening and 0 required-eviden
 
 ## 7. Decisions (recorded; were open questions Q1–Q3)
 - **D-Q1** (Tech Lead, 2026-10-22 KST): a lane is non-writing only if declared `scheduler.writeSet` is empty AND its grant has no `edit`/`write`/`bash`; unknown/missing `writeSet` ⇒ writer. Builtin loadouts all have these tools ⇒ C1 does not fire for them until a read-only grant exists. Pinned by the empty-writeSet + `bash` test.
-- **D-Q2**: A1 ledger = new versioned session entry `skill_admission` v1; restored on resume; never reset by compaction or model switch.
+- **D-Q2**: A1 ledger = versioned `type:"custom"`, `customType:"skill_admission"` session entries (not a new `SessionEntry` union member); restored on resume; never reset by compaction or model switch. Unknown `schemaVersion`/`policyRevision` => fail closed (refuse all new admissions, never restart from 0).
 - **D-Q3**: `allLanesCompleted` is a field on `LaunchSubagentLanesResult`; DG1 asserts overall incomplete.
 - #205/#206 merged; both branches merged `origin/main` @ `f1920f4dad` (merge commits, no rebase).
 

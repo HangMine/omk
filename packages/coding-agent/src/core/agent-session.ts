@@ -40,7 +40,6 @@ import {
 } from "../metacognition/index.ts";
 import { theme } from "../modes/interactive/theme/theme.ts";
 import type { ReplayEventType } from "../types/evidence.ts";
-import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { getShellConfig } from "../utils/shell.ts";
 import { sleep } from "../utils/sleep.ts";
@@ -295,6 +294,8 @@ import {
 } from "./session-termination.ts";
 import type { SessionTurnAdmission } from "./session-turn-admission.ts";
 import type { SettingsManager } from "./settings-manager.ts";
+import type { SkillAdmissionSource } from "./skill-admission-ledger.ts";
+import { admitSkillBody, expandSkillCommand } from "./skill-admission-session.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPromptPlan } from "./system-prompt.ts";
@@ -2690,30 +2691,24 @@ export class AgentSession {
 	 * Returns the expanded text, or the original text if not a skill command or skill not found.
 	 * Emits errors via extension runner if file read fails.
 	 */
-	private _expandSkillCommand(text: string): string {
-		if (!text.startsWith("/skill:")) return text;
+	private _expandSkillCommand(text: string, source: SkillAdmissionSource = "explicit"): string {
+		return expandSkillCommand(
+			text,
+			this.resourceLoader.getSkills().skills,
+			this.sessionManager,
+			source,
+			(skill, err) =>
+				this._extensionRunner.emitError({
+					extensionPath: skill.filePath,
+					event: "skill_expansion",
+					error: err instanceof Error ? err.message : String(err),
+				}),
+		);
+	}
 
-		const spaceIndex = text.indexOf(" ");
-		const skillName = spaceIndex === -1 ? text.slice(7) : text.slice(7, spaceIndex);
-		const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
-
-		const skill = this.resourceLoader.getSkills().skills.find((s) => s.name === skillName);
-		if (!skill) return text; // Unknown skill, pass through
-
-		try {
-			const content = readFileSync(skill.filePath, "utf-8");
-			const body = stripFrontmatter(content).trim();
-			const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
-			return args ? `${skillBlock}\n\n${args}` : skillBlock;
-		} catch (err) {
-			// Emit error like extension commands do
-			this._extensionRunner.emitError({
-				extensionPath: skill.filePath,
-				event: "skill_expansion",
-				error: err instanceof Error ? err.message : String(err),
-			});
-			return text; // Return original on error
-		}
+	/** Spec 106 A1 (`OMK_SKILL_ADMISSION`): the host's admission decision for one skill body; true or a refusal reason. */
+	admitSkillBody(skillId: string, body: string, source: SkillAdmissionSource): true | string {
+		return admitSkillBody(this.sessionManager, skillId, body, source);
 	}
 
 	/**
@@ -2734,7 +2729,7 @@ export class AgentSession {
 		}
 
 		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(inputText);
+		let expandedText = this._expandSkillCommand(inputText, "steer");
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueSteer(expandedText, images);
@@ -2757,7 +2752,7 @@ export class AgentSession {
 		}
 
 		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(inputText);
+		let expandedText = this._expandSkillCommand(inputText, "followUp");
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueFollowUp(expandedText, images);

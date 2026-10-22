@@ -68,6 +68,8 @@ export interface HarnessOptions {
 	extensionFactories?: Array<ExtensionFactory | CreateTestExtensionsResultInput>;
 	withConfiguredAuth?: boolean;
 	persistSession?: boolean;
+	/** Reuse an existing session manager (e.g. `SessionManager.open(file)` to resume). */
+	sessionManager?: SessionManager;
 }
 
 export interface Harness {
@@ -106,9 +108,11 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 	const withConfiguredAuth = options.withConfiguredAuth ?? true;
 	const extensionRunnerRef: { current?: ExtensionRunner } = {};
 
-	const sessionManager = options.persistSession
-		? SessionManager.create(tempDir, join(tempDir, "sessions"))
-		: SessionManager.inMemory();
+	const sessionManager = options.sessionManager
+		? options.sessionManager
+		: options.persistSession
+			? SessionManager.create(tempDir, join(tempDir, "sessions"))
+			: SessionManager.inMemory();
 	const settingsManager = SettingsManager.inMemory(options.settings);
 
 	const authStorage = AuthStorage.inMemory();
