@@ -8,20 +8,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityInventory, NamedResource } from "../src/core/loadouts.ts";
 import type { ResourceAdmissionDecision } from "../src/core/resource-admission.ts";
-import { allLanesCompleted } from "../src/core/subagent-lane-failure-scope.ts";
 import { launchSubagentLanes, type SubagentLaneContext } from "../src/core/subagent-lane-launcher.ts";
 import { buildSubagentOrchestrationPlan, type SubagentLaneSpec } from "../src/core/subagent-orchestration.ts";
 import { WorkloadPermitPool } from "../src/core/workload-permit-pool.ts";
 
 const resource = (kind: NamedResource["kind"], name: string): NamedResource => ({ kind, name });
-const inventory: CapabilityInventory = {
-	tools: ["read", "grep", "find", "ls", "bash", "edit", "write", "report_finding"].map((name) =>
-		resource("tool", name),
-	),
+const inventoryWith = (tools: readonly string[]): CapabilityInventory => ({
+	tools: tools.map((name) => resource("tool", name)),
 	skills: ["coding-standards", "debugging", "testing-guide"].map((name) => resource("skill", name)),
 	mcp: [],
 	hooks: [],
-};
+});
+/** Read-only tools: lanes built from this inventory are non-writing. */
+const readOnlyInventory = inventoryWith(["read", "grep", "find", "ls", "report_finding"]);
 const decision: ResourceAdmissionDecision = {
 	schemaVersion: 1,
 	decisionId: "res-adm-isolation",
@@ -35,11 +34,11 @@ const decision: ResourceAdmissionDecision = {
 	decidedAt: "2026-10-22T00:00:00.000Z",
 };
 
-async function run(lanes: SubagentLaneSpec[], fail: ReadonlySet<string>) {
+async function run(lanes: SubagentLaneSpec[], fail: ReadonlySet<string>, tools = readOnlyInventory) {
 	const plan = buildSubagentOrchestrationPlan({
 		runId: "iso",
 		lanes,
-		inventory,
+		inventory: tools,
 		spawnThreshold: 16,
 		maxParallelLanes: 2,
 	});
@@ -56,7 +55,7 @@ async function run(lanes: SubagentLaneSpec[], fail: ReadonlySet<string>) {
 		},
 	});
 	const status = Object.fromEntries(result.outcomes.map((outcome) => [outcome.laneId, outcome.status]));
-	return { status, started, complete: allLanesCompleted(result.outcomes) };
+	return { status, started, complete: result.allLanesCompleted };
 }
 
 const twoBranches: SubagentLaneSpec[] = [
@@ -123,12 +122,24 @@ describe("lane failure isolation — flag on", () => {
 		expect(started).not.toContain("D");
 	});
 
+	it("write-capable tool (bash) with empty writeSet is a writer: its failure blocks the next batch", async () => {
+		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "1");
+		const { status, started, complete } = await run(
+			twoBranches,
+			new Set(["A"]),
+			inventoryWith(["read", "grep", "bash"]),
+		);
+		expect(status).toEqual({ A: "failed", B: "blocked-dependency", C: "completed", D: "blocked-dependency" });
+		expect(started).not.toContain("D");
+		expect(complete).toBe(false);
+	});
+
 	it("unsettled lane keeps the global block and its permit until settlement", async () => {
 		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "1");
 		const plan = buildSubagentOrchestrationPlan({
 			runId: "iso",
 			lanes: twoBranches,
-			inventory,
+			inventory: readOnlyInventory,
 			spawnThreshold: 16,
 			maxParallelLanes: 2,
 		});

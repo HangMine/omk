@@ -1,6 +1,6 @@
 import { assertLaneCap, snapshotLaneLaunchInput } from "./lane-input-snapshot.ts";
 import type { LaneOutcome } from "./subagent-lane-contract.ts";
-import { createLaneFailureScope, laneFailureScopeEnabled } from "./subagent-lane-failure-scope.ts";
+import { allLanesCompleted, createLaneFailureScope, laneFailureScopeEnabled } from "./subagent-lane-failure-scope.ts";
 import type { LaunchSubagentLanesInput } from "./subagent-lane-input.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 import { WorkloadPermitError } from "./workload-permit-pool.ts";
@@ -60,6 +60,8 @@ export interface LaunchSubagentLanesResult {
 	readonly outcomes: readonly LaneOutcome[];
 	readonly effectiveLaneWidth: number;
 	readonly maxObservedConcurrency: number;
+	/** True only when every lane completed (no false completion on partial progress). */
+	readonly allLanesCompleted: boolean;
 }
 
 /**
@@ -166,6 +168,7 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 		outcomes: outcomes.sort((a, b) => sourceOrder.get(a.laneId)! - sourceOrder.get(b.laneId)!),
 		effectiveLaneWidth,
 		maxObservedConcurrency,
+		allLanesCompleted: allLanesCompleted(outcomes),
 	};
 }
 
