@@ -63,6 +63,9 @@ export async function executeBashWithOperations(
 	let tempFilePath: string | undefined;
 	let tempFileStream: WriteStream | undefined;
 	let totalBytes = 0;
+	// Set once the rolling buffer drops a leading chunk: the buffer is then no longer the full output,
+	// even when what remains is small enough that truncateTail alone would report "not truncated".
+	let droppedLeadingOutput = false;
 
 	const ensureTempFile = () => {
 		if (tempFilePath) {
@@ -121,6 +124,7 @@ export async function executeBashWithOperations(
 		while (outputBytes > maxOutputBytes && outputChunks.length > 1) {
 			const removed = outputChunks.shift()!;
 			outputBytes -= removed.length;
+			droppedLeadingOutput = true;
 		}
 
 		// Stream to callback
@@ -138,7 +142,8 @@ export async function executeBashWithOperations(
 
 		const fullOutput = outputChunks.join("");
 		const truncationResult = truncateTail(fullOutput);
-		if (truncationResult.truncated) {
+		const truncated = truncationResult.truncated || droppedLeadingOutput;
+		if (truncated) {
 			ensureTempFile();
 		} else {
 			// fullOutputPath is only surfaced when output is truncated; don't leave the spill file behind.
@@ -158,7 +163,7 @@ export async function executeBashWithOperations(
 			output: truncationResult.truncated ? truncationResult.content : fullOutput,
 			exitCode: cancelled ? undefined : (result.exitCode ?? undefined),
 			cancelled,
-			truncated: truncationResult.truncated,
+			truncated,
 			fullOutputPath: tempFilePath,
 		};
 	} catch (err) {
@@ -166,7 +171,8 @@ export async function executeBashWithOperations(
 		if (options?.signal?.aborted) {
 			const fullOutput = outputChunks.join("");
 			const truncationResult = truncateTail(fullOutput);
-			if (truncationResult.truncated) {
+			const truncated = truncationResult.truncated || droppedLeadingOutput;
+			if (truncated) {
 				ensureTempFile();
 			} else {
 				// fullOutputPath is only surfaced when output is truncated; don't leave the spill file behind.
@@ -182,7 +188,7 @@ export async function executeBashWithOperations(
 				output: truncationResult.truncated ? truncationResult.content : fullOutput,
 				exitCode: undefined,
 				cancelled: true,
-				truncated: truncationResult.truncated,
+				truncated,
 				fullOutputPath: tempFilePath,
 			};
 		}
