@@ -35,7 +35,8 @@ const { createEditToolDefinition } = await import("../src/core/tools/edit.ts");
 const { createWriteToolDefinition } = await import("../src/core/tools/write.ts");
 const { collectFileDiagnostics } = await import("../src/core/tools/diagnostics-checkers.ts");
 const diagModule = await import("../src/core/tools/edit-diagnostics.ts");
-const { diffNewDiagnostics, formatNewDiagnostics, setEditDiagnosticsCollectorForTest } = diagModule;
+const { diffNewDiagnostics, formatNewDiagnostics, normalizeDiagnosticMessage, setEditDiagnosticsCollectorForTest } =
+	diagModule;
 type DiagnosticLine = import("../src/core/tools/diagnostics-checkers.ts").DiagnosticLine;
 type FileDiagnosticsResult = import("../src/core/tools/diagnostics-checkers.ts").FileDiagnosticsResult;
 
@@ -331,5 +332,98 @@ describe("flag on", () => {
 			{} as never,
 		);
 		expect(textOf(next)).toContain("Successfully replaced");
+	});
+});
+
+describe("message normalization (Tech Lead ruling 3)", () => {
+	it("strips line/column numbers and position notations", () => {
+		const forms = ["a.ts(12,5): Cannot find name 'foo'.", "a.ts(40,1): Cannot find name 'foo'."];
+		expect(normalizeDiagnosticMessage(forms[0])).toBe(normalizeDiagnosticMessage(forms[1]));
+		expect(normalizeDiagnosticMessage("see a.ts:12:5 for foo")).toBe(
+			normalizeDiagnosticMessage("see a.ts:99:2 for foo"),
+		);
+		expect(normalizeDiagnosticMessage("unused at line 12, col 5")).toBe(
+			normalizeDiagnosticMessage("unused at line 30, col 8"),
+		);
+		expect(normalizeDiagnosticMessage("Type 'string' is not assignable")).toBe("Type 'string' is not assignable");
+	});
+
+	it("inserting lines above an existing error reports 0 new errors", async () => {
+		writeFileSync(join(root, "a.ts"), "const x: number = 'bad';\n");
+		const before = err(
+			"a.ts",
+			1,
+			"Declared at a.ts(1,7): Type 'string' is not assignable to type 'number'. (line 1, col 7)",
+		);
+		const after = {
+			...err("a.ts", 4, "Declared at a.ts(4,7): Type 'string' is not assignable to type 'number'. (line 4, col 7)"),
+			column: 7,
+		};
+		fake([{ lines: [before] }, { lines: [after] }]);
+		const r = await edit("a.ts", "const x", "// one\n// two\n// three\nconst x");
+		expect(textOf(r)).toBe("Successfully replaced 1 block(s) in a.ts.");
+		expect(r.details?.newDiagnostics?.outcome).toBe("none");
+		expect(r.details?.newDiagnostics?.total).toBe(0);
+		expect(readLog("edit-diag")[0]).toMatchObject({ outcome: "none", newErrors: 0 });
+	});
+
+	it("log keys hash the normalized message, so a shifted error keeps its key", () => {
+		const a = diffNewDiagnostics([], [err("a.ts", 1, "x at line 3")], join(root, "a.ts"));
+		const b = diffNewDiagnostics(
+			[err("a.ts", 9, "x at line 9")],
+			[err("a.ts", 1, "x at line 3")],
+			join(root, "a.ts"),
+		);
+		expect(a).toHaveLength(1);
+		expect(b).toHaveLength(0);
+	});
+});
+
+describe("new file without baseline (Tech Lead ruling 2)", () => {
+	it("counts only errors inside the new file; other files are excluded", async () => {
+		fake([{ lines: [err("n.ts", 1, "bad"), err("other.ts", 2, "pre-existing elsewhere")] }]);
+		const r = await write("n.ts", "let = ;\n");
+		expect(textOf(r)).toBe(
+			"Successfully wrote 8 bytes to n.ts\nNew diagnostics after this edit (1, vs pre-edit baseline):\nERROR n.ts:1:1 bad",
+		);
+		expect(readLog("edit-diag")[0]).toMatchObject({ newErrors: 1, files: 1 });
+	});
+});
+
+describe("shadow mode (Tech Lead ruling 1)", () => {
+	it("runs the checker, logs mode/diagMs, and returns results byte-identical to OFF", async () => {
+		const results = () => [{ lines: [] }, { lines: [err("a.ts", 1, "brand new error")] }];
+		const arms: Record<string, { edit: string; write: string; calls: number }> = {};
+		for (const mode of ["off", "shadow"] as const) {
+			if (mode === "off") delete process.env.OMK_EDIT_DIAGNOSTICS;
+			else process.env.OMK_EDIT_DIAGNOSTICS = "shadow";
+			writeFileSync(join(root, "a.ts"), "const x = 1;\n");
+			writeFileSync(join(root, "b.ts"), "let y = 1;\n");
+			let calls = fake([...results(), { lines: [] }, { lines: [err("b.ts", 1, "also new")] }]);
+			const e = await edit("a.ts", "1", "2");
+			const w = await write("b.ts", "let y = 2;\n");
+			arms[mode] = { edit: JSON.stringify(e), write: JSON.stringify(w), calls: calls.length };
+			calls = [];
+			restore?.();
+			restore = undefined;
+		}
+		expect(arms.shadow.edit).toBe(arms.off.edit);
+		expect(arms.shadow.write).toBe(arms.off.write);
+		expect(arms.off.calls).toBe(0);
+		expect(arms.shadow.calls).toBe(4);
+		const log = readLog("edit-diag");
+		expect(log).toHaveLength(2);
+		for (const line of log) {
+			expect(line).toMatchObject({ mode: "shadow", outcome: "reported", newErrors: 1 });
+			expect(typeof line.diagMs).toBe("number");
+			expect(line.diagMs).toBe((line.baselineMs as number) + (line.postMs as number));
+		}
+	});
+
+	it("ON logs mode: on with diagMs", async () => {
+		fake([{ lines: [] }, { lines: [] }]);
+		await edit("a.ts", "1", "2");
+		expect(readLog("edit-diag")[0]).toMatchObject({ mode: "on", outcome: "none" });
+		expect(typeof readLog("edit-diag")[0].diagMs).toBe("number");
 	});
 });

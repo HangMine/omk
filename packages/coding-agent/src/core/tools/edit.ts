@@ -3,7 +3,12 @@ import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } 
 import type { AgentTool } from "omk-agent-core";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
-import { EditDiagnosticsRun, isEditDiagnosticsEnabled, type NewDiagnosticsDetails } from "./edit-diagnostics.ts";
+import {
+	EditDiagnosticsRun,
+	isEditDiagnosticsEnabled,
+	isEditDiagnosticsReported,
+	type NewDiagnosticsDetails,
+} from "./edit-diagnostics.ts";
 import {
 	applyEditsToNormalizedContent,
 	detectLineEnding,
@@ -214,6 +219,8 @@ export function createEditToolDefinition(
 			// Post-check runs outside the mutation queue (spec 107 Q6).
 			const report = await diag.report();
 			if (signal?.aborted) throw new Error("Operation aborted");
+			// Shadow: results went to the run log only; the model sees exactly the OFF result.
+			if (!isEditDiagnosticsReported()) return result;
 			const text = report.text ? `${result.content[0].text}\n${report.text}` : result.content[0].text;
 			return {
 				content: [{ type: "text" as const, text }],

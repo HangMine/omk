@@ -33,8 +33,27 @@ const PER_EDIT_TIMEOUT_MS = 20_000;
 const MAX_FILES = 5;
 const MAX_ENTRIES = 20;
 
+export type EditDiagnosticsMode = "off" | "on" | "shadow";
+
+/**
+ * `1` = on (report to the model), `shadow` = run the checker but write results only to
+ * the run log (model-facing output byte-identical to off), anything else = off.
+ */
+export function editDiagnosticsMode(env: NodeJS.ProcessEnv = process.env): EditDiagnosticsMode {
+	const raw = env[EDIT_DIAGNOSTICS_ENV];
+	if (raw === "1") return "on";
+	if (raw === "shadow") return "shadow";
+	return "off";
+}
+
+/** True when the checker runs at all (on or shadow). */
 export function isEditDiagnosticsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	return env[EDIT_DIAGNOSTICS_ENV] === "1";
+	return editDiagnosticsMode(env) !== "off";
+}
+
+/** True only when results go to the model (`OMK_EDIT_DIAGNOSTICS=1`). */
+export function isEditDiagnosticsReported(env: NodeJS.ProcessEnv = process.env): boolean {
+	return editDiagnosticsMode(env) === "on";
 }
 
 let collector: CollectFileDiagnostics = collectFileDiagnostics;
@@ -55,13 +74,30 @@ export interface NewDiagnosticsDetails {
 	readonly skipped?: string;
 }
 
+/**
+ * Strip line/column numbers and position notations from a checker message so an
+ * existing error that only moved (lines inserted above it) keeps the same key.
+ * Covers `(12,5)`, `:12:5`, `:12`, `line 12`, `col 5`, `column 5`, `L12`, `[12:5]`.
+ */
+export function normalizeDiagnosticMessage(message: string): string {
+	return message
+		.replace(/\(\s*\d+\s*,\s*\d+\s*\)/g, "(#)")
+		.replace(/\[\s*\d+\s*[:,]\s*\d+\s*\]/g, "[#]")
+		.replace(/:\d+(?::\d+)?\b/g, ":#")
+		.replace(/\b(lines?|ln|columns?|cols?)\s*[:.]?\s*\d+/gi, "$1 #")
+		.replace(/\bL\d+(?:C\d+)?\b/g, "L#")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
 function keyOf(d: DiagnosticLine): string {
-	return `${d.path}\0${d.severity}\0${d.message}`;
+	return `${d.path}\0${d.severity}\0${normalizeDiagnosticMessage(d.message)}`;
 }
 
 /**
- * Errors in `after` that are not in `before`, keyed by (path, severity, message) with
- * multiset counts. Line/column are excluded so shifted errors are not "new". Warnings
+ * Errors in `after` that are not in `before`, keyed by (path, severity, normalized
+ * message) with multiset counts. Line/column fields are excluded and position
+ * notations are stripped from the message, so shifted errors are not "new". Warnings
  * and info are dropped. Order: edited file first, then other files by first appearance.
  */
 export function diffNewDiagnostics(
@@ -124,7 +160,7 @@ async function snapshotFile(absolutePath: string): Promise<Snapshot | undefined>
 }
 
 function hashMessage(message: string): string {
-	return createHash("sha256").update(message).digest("hex").slice(0, 16);
+	return createHash("sha256").update(normalizeDiagnosticMessage(message)).digest("hex").slice(0, 16);
 }
 
 /**
@@ -136,6 +172,9 @@ export class EditDiagnosticsRun {
 	private readonly perCheck = perCheckTimeoutMs();
 	private base: FileDiagnosticsResult | undefined;
 	private baseMs = 0;
+	private postMs = 0;
+	private newFile = false;
+	private readonly mode: EditDiagnosticsMode = editDiagnosticsMode();
 	private snap: Snapshot | undefined;
 
 	private readonly tool: "edit" | "write";
@@ -177,8 +216,13 @@ export class EditDiagnosticsRun {
 		}
 	}
 
-	/** `fileExisted === false` (write to a new file) ⇒ empty baseline, no checker run. */
+	/**
+	 * `fileExisted === false` (write to a new file) ⇒ empty baseline, no checker run, and
+	 * only errors inside the new file are counted (spec 107 decision: other files have no
+	 * baseline, so their existing errors would all look new).
+	 */
 	async baseline(fileExisted = true): Promise<void> {
+		this.newFile = !fileExisted;
 		const t = Date.now();
 		this.base = fileExisted ? await this.check() : { lines: [] };
 		this.baseMs = Date.now() - t;
@@ -197,7 +241,11 @@ export class EditDiagnosticsRun {
 			path: this.path,
 			language: languageForFile(this.path) ?? null,
 			outcome,
+			mode: this.mode === "shadow" ? "shadow" : "on",
 			baselineMs: this.baseMs,
+			postMs: this.postMs,
+			// Checker time only (baseline + post), so the wall-time guardrail can subtract it.
+			diagMs: this.baseMs + this.postMs,
 			totalMs: Date.now() - this.started,
 			...extra,
 		});
@@ -229,7 +277,9 @@ export class EditDiagnosticsRun {
 		if (!base) return this.skip("baseline unavailable");
 		if (base.timedOut) return this.timeout("baseline");
 		if (base.skipped) return this.skip(`baseline unavailable: ${base.skipped}`);
+		const tPost = Date.now();
 		const post = await this.check();
+		this.postMs = Date.now() - tPost;
 		if (post.timedOut) return this.timeout("post");
 		if (post.skipped) return this.skip(post.skipped);
 		const now = await snapshotFile(this.absolutePath);
@@ -237,7 +287,9 @@ export class EditDiagnosticsRun {
 			this.log("stale", {});
 			return { text: undefined, details: { outcome: "stale", diagnostics: [], total: 0, skipped: "stale" } };
 		}
-		const fresh = diffNewDiagnostics(base.lines, post.lines, resolve(this.absolutePath));
+		const edited = resolve(this.absolutePath);
+		const diffed = diffNewDiagnostics(base.lines, post.lines, edited);
+		const fresh = this.newFile ? diffed.filter((d) => d.path === edited) : diffed;
 		const text = formatNewDiagnostics(this.cwd, fresh);
 		const files = new Set(fresh.map((d) => d.path)).size;
 		this.log(fresh.length > 0 ? "reported" : "none", {

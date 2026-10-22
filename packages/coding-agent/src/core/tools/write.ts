@@ -4,7 +4,12 @@ import type { AgentTool } from "omk-agent-core";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
-import { EditDiagnosticsRun, isEditDiagnosticsEnabled, type NewDiagnosticsDetails } from "./edit-diagnostics.ts";
+import {
+	EditDiagnosticsRun,
+	isEditDiagnosticsEnabled,
+	isEditDiagnosticsReported,
+	type NewDiagnosticsDetails,
+} from "./edit-diagnostics.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -118,6 +123,8 @@ export function createWriteToolDefinition(
 			// Post-check runs outside the mutation queue (spec 107 Q6).
 			const report = await diag.report();
 			if (signal?.aborted) throw new Error("Operation aborted");
+			// Shadow: results went to the run log only; the model sees exactly the OFF result.
+			if (!isEditDiagnosticsReported()) return result;
 			const text = report.text ? `${result.content[0].text}\n${report.text}` : result.content[0].text;
 			return { content: [{ type: "text" as const, text }], details: { newDiagnostics: report.details } };
 		},

@@ -22,7 +22,9 @@ afterEach(() => {
 	while (harnesses.length > 0) harnesses.pop()?.cleanup();
 });
 
-async function runArm(flag: "1" | undefined): Promise<{ first: string; toolResult: string }> {
+async function runArm(
+	flag: "1" | "shadow" | undefined,
+): Promise<{ first: string; toolResult: string; toolDetails: string; calls: number }> {
 	if (flag) process.env.OMK_EDIT_DIAGNOSTICS = flag;
 	else delete process.env.OMK_EDIT_DIAGNOSTICS;
 	const harness = await createHarness();
@@ -66,13 +68,17 @@ async function runArm(flag: "1" | undefined): Promise<{ first: string; toolResul
 	await harness.session.prompt("Change x to the string one.");
 	expect(contexts).toHaveLength(2);
 	const toolMessage = contexts[1].messages.find((m) => m.role === "toolResult");
-	const toolResult = JSON.stringify(toolMessage?.content ?? null);
+	const toolResult = JSON.stringify(toolMessage?.content ?? null).replaceAll(dir, "<cwd>");
+	const toolDetails = JSON.stringify((toolMessage as { details?: unknown } | undefined)?.details ?? null).replaceAll(
+		dir,
+		"<cwd>",
+	);
 	const first = JSON.stringify({
 		systemPrompt: contexts[0].systemPrompt,
 		tools: contexts[0].tools,
 		messages: contexts[0].messages.map((m) => ("timestamp" in m ? { ...m, timestamp: 0 } : m)),
 	}).replaceAll(dir, "<cwd>");
-	return { first, toolResult };
+	return { first, toolResult, toolDetails, calls };
 }
 
 describe("spec 107 OMK_EDIT_DIAGNOSTICS in a session", () => {
@@ -84,5 +90,16 @@ describe("spec 107 OMK_EDIT_DIAGNOSTICS in a session", () => {
 		expect(off.toolResult).toContain("Successfully replaced 1 block(s) in a.ts.");
 		expect(off.toolResult).not.toContain("New diagnostics");
 		expect(on.first).toBe(off.first);
+	});
+
+	it("shadow: tool result text, details and first request byte-identical to OFF; checker still ran", async () => {
+		const shadow = await runArm("shadow");
+		const off = await runArm(undefined);
+		expect(shadow.calls).toBe(2);
+		expect(off.calls).toBe(0);
+		expect(shadow.toolResult).toBe(off.toolResult);
+		expect(shadow.toolDetails).toBe(off.toolDetails);
+		expect(shadow.toolDetails).not.toContain("newDiagnostics");
+		expect(shadow.first).toBe(off.first);
 	});
 });
