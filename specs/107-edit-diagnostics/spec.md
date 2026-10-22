@@ -104,6 +104,7 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
 
 ## 5. Guardrails (must not regress, judged on the same pairs)
 - tokens/turn (median, p90): ON ≤ OFF × 1.10.
+- **Pre-registration (checker coverage):** before any measurement, pin the exact `tsc`, `pyright` and `ruff` versions in the bench image (recorded in the run manifest), and log a per-task `checkerRan` (boolean) in the run log. The verdict uses all tasks; the `checkerRan=true` subset is report-only.
 - wall time/task (median, p90): ON ≤ OFF × 1.25, measured as-is on pure OFF vs ON arms (no subtraction, no shadow in the control arm); per-edit diagnostics latency (`diagMs`) p90 reported separately.
 - turns/task: report; no hard gate.
 - edit/write tool error rate: must be unchanged (report-only must never turn a success into an error).
