@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.5.6] - 2026-10-22
+
+### Added
+
+- Lane ready frontier behind `OMK_LANE_READY_QUEUE=1` (default off). A lane starts as soon as its dependencies finish, up to the lane-width limit. Frontier counts are logged to `subagent-lane-frontier.jsonl` (#212).
+- Lane failure scope behind `OMK_LANE_FAILURE_SCOPE=1` (default off). A lane that fails without writing anything blocks only its descendants. Adds `allLanesCompleted` (#208).
+- Session skill admission behind `OMK_SKILL_ADMISSION` (`1`, `true` or `on`; default off). A session admits at most 10 unique skill bodies, and the count survives resume and compaction. It covers explicit, steer and follow-up skill loads, `SKILL.md` reads through the `read` tool, and skills handed to workers; workers start with `--no-skills` and get only admitted skills (#209, #210). Not gated yet: reading `SKILL.md` through bash, and `SKILL.md` reads inside a worker.
+- Evidence lifecycle observe-only mode behind `OMK_EVIDENCE_LIFECYCLE=observe` (default off). It reports what would be deleted and deletes nothing; the trace stores only hashes and counts (#211).
+
+With all four flags off, behavior is the same as 1.5.5.
+
+### Fixed
+
+- The required-tools contract listener no longer leaks or fires twice on dispose and re-install (#204).
+- `npm run check` exits 0 again (#206).
+
+### Changed
+
+- The trademark notice moved out of `LICENSE`, so GitHub detects the MIT license. AdaptOrch logo files moved to `readmeasset/adaptorch/` with a `NOTICE` saying they are not MIT-licensed (#205).
+
 ## [1.5.5] - 2026-10-21
 
 ### Behavior change (security)
