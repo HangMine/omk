@@ -593,6 +593,57 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 		}
 	});
 
+	it("run log: abort- or unsettled-held lanes count 0 in both arms", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "omk-frontier-log-"));
+		try {
+			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "1");
+			const plan = buildSubagentOrchestrationPlan({
+				runId: "frontier",
+				lanes: twoBranches,
+				inventory: readOnly,
+				spawnThreshold: 16,
+				maxParallelLanes: 2,
+			});
+			for (const frontier of ["1", ""]) {
+				vi.stubEnv("OMK_LANE_READY_QUEUE", frontier);
+				const controller = new AbortController();
+				const finishers: (() => void)[] = [];
+				const aborted = launchSubagentLanes({
+					plan,
+					promptRunId: "frontier",
+					decision: decisionWith(2),
+					permitPool: new WorkloadPermitPool({ capacity: 2 }),
+					signal: controller.signal,
+					launchLane: () => new Promise<void>((r) => finishers.push(r)),
+				});
+				await flush();
+				controller.abort();
+				for (const finish of finishers) finish();
+				await aborted;
+				await launchSubagentLanes({
+					plan,
+					promptRunId: "frontier",
+					decision: decisionWith(2),
+					permitPool: new WorkloadPermitPool({ capacity: 2 }),
+					launchLane: async ({ laneId }: SubagentLaneContext) =>
+						laneId === "A"
+							? { status: "unsettled" as const, settlement: new Promise<void>(() => {}) }
+							: undefined,
+				});
+			}
+			const lines = readLog(dir);
+			expect(lines.map((l) => [l.notStartedDueToFailure, l.frontier])).toEqual([
+				[0, true],
+				[0, true],
+				[0, false],
+				[0, false],
+			]);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("run log: both flags off writes nothing", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "omk-frontier-log-"));
 		try {

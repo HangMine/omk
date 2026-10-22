@@ -55,6 +55,7 @@ All six SHA-256 values in doc §A.4 match main (files unchanged since 741ac1c4).
 - Frontier-only on (C1 off) stops ALL new starts after any failure — stricter than the old batch loop, which still started same-batch siblings.
 - A/B: fix C1 (`OMK_LANE_FAILURE_SCOPE=1`) on in both arms and compare frontier on vs off, so scheduling is not confounded with the stop policy.
 - Covariate: `<OMK_RUN_LOG_DIR>/subagent-lane-frontier.jsonl` records per launch `notStartedDueToFailure` (count), `lanes`, `failureScope`, `frontier` — counts only, no lane ids or text; unsettled-reservation blocks are not counted. Written whenever the frontier or C1 is on, so both A/B arms (C1 on, frontier on/off) log it; batch arm counts lanes C1 kept from starting; both flags off ⇒ no file.
+- `notStartedDueToFailure` = in both arms, the number of lanes not started because of a failure; lanes held only by unsettled or abort are not counted.
 - Flag-off snapshot test verified against main `1c9dce39cb`'s launcher (temp worktree, test file only).
 - Not yet: real-run measurement.
 

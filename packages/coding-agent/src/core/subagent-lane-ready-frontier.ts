@@ -46,6 +46,13 @@ export interface ReadyFrontierStats {
 	readonly notStartedDueToFailure: number;
 }
 
+const NOT_FAILURE: ReadonlySet<LaneOutcome["status"]> = new Set([
+	"completed",
+	"cancelled",
+	"skipped-abort",
+	"unsettled",
+]);
+
 export function runReadyFrontier(input: ReadyFrontierInput): Promise<ReadyFrontierStats> {
 	const order = input.plan.batches.flatMap((batch) => batch.laneIds);
 	const grants = new Map(input.plan.laneGrants.map((grant) => [grant.laneId, grant]));
@@ -115,7 +122,8 @@ export function runReadyFrontier(input: ReadyFrontierInput): Promise<ReadyFronti
 			}
 			if (inFlight.size === 0) {
 				// Nothing running and nothing startable: remaining lanes can never become ready.
-				const failureSeen = ran.some((outcome) => outcome.status !== "completed");
+				// Same rule as the batch arm: abort- and unsettled-held lanes are not failures.
+				const failureSeen = !input.signal?.aborted && ran.some((outcome) => !NOT_FAILURE.has(outcome.status));
 				for (const laneId of pending.splice(0)) {
 					if (failureSeen && !input.hasUnsettled()) notStartedDueToFailure += 1;
 					finish(laneId, { laneId, status: "blocked-dependency" });

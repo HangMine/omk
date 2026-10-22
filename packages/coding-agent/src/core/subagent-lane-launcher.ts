@@ -147,12 +147,12 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 		};
 	}
 
-	let notStartedDueToFailure = 0;
+	let failSkips = 0; // lanes C1 kept from starting (not abort/unsettled holds)
 	for (const batch of input.plan.batches) {
 		const prior = [...outcomes];
 		const blocked = batch.laneIds.every((laneId) => failureScope.isBlocked(laneId, prior));
-		if (blocked && !input.signal?.aborted && effectiveLaneWidth > 0) notStartedDueToFailure += batch.laneIds.length;
 		if (input.signal?.aborted || effectiveLaneWidth === 0 || blocked) {
+			if (!input.signal?.aborted && effectiveLaneWidth && !hasUnsettled) failSkips += batch.laneIds.length;
 			for (const laneId of batch.laneIds) {
 				outcomes.push({
 					laneId,
@@ -174,7 +174,7 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 				const laneId = batch.laneIds[cursor];
 				cursor += 1;
 				const failureBlocked = failureScope.isBlocked(laneId, prior);
-				if (failureBlocked && !input.signal?.aborted && !hasUnsettled) notStartedDueToFailure += 1;
+				if (failureBlocked && !input.signal?.aborted && !hasUnsettled) failSkips += 1;
 				if (input.signal?.aborted || hasUnsettled || failureBlocked) {
 					outcomes.push({ laneId, status: input.signal?.aborted ? "skipped-abort" : "blocked-dependency" });
 					continue;
@@ -203,7 +203,7 @@ export async function launchSubagentLanes(request: LaunchSubagentLanesInput): Pr
 		await Promise.all(runners);
 	}
 	// Spec 106 §2a: batch arm of the A/B covariate; written only with C1 on.
-	if (laneFailureScopeEnabled()) logReadyFrontier(notStartedDueToFailure, outcomes.length, true, false);
+	if (laneFailureScopeEnabled()) logReadyFrontier(failSkips, outcomes.length, true, false);
 	return {
 		outcomes: outcomes.sort((a, b) => sourceOrder.get(a.laneId)! - sourceOrder.get(b.laneId)!),
 		effectiveLaneWidth,
