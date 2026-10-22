@@ -25,6 +25,8 @@ import {
 	writeSync,
 } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { noteEvidenceRemovedByExistingPolicy } from "./evidence-lifecycle.ts";
+import { registerRecallEvidence } from "./goal-output-recall-evidence.ts";
 import { formatSize } from "./tools/truncate.ts";
 
 export const OUTPUT_RECALL_MAX_BYTES = 4 * 1024 * 1024;
@@ -94,7 +96,10 @@ function keepNewest(files: readonly string[], keep: number): void {
 		}
 	});
 	dated.sort((a, b) => a.mtime - b.mtime || a.file.localeCompare(b.file));
-	for (const { file } of dated.slice(0, Math.max(0, dated.length - keep))) removeQuietly(file);
+	for (const { file } of dated.slice(0, Math.max(0, dated.length - keep))) {
+		noteEvidenceRemovedByExistingPolicy(file);
+		removeQuietly(file);
+	}
 }
 
 /** Exactly `acceptance-<id>-<round>-<rev>-<attempt>.log` for this goal id; `a` never matches `a-1`'s files. */
@@ -232,11 +237,13 @@ export class OutputArtifactWriter {
 			this.fd = undefined;
 			this.tail = [];
 			const content = readFileSync(this.file);
+			const sha256 = createHash("sha256").update(content).digest("hex");
+			registerRecallEvidence(this.file, this.target.goalId, content.byteLength, sha256);
 			enforceCaps(this.dir, this.target.goalId);
 			return {
 				displayPath: this.displayPath,
 				absolutePath: this.file,
-				sha256: createHash("sha256").update(content).digest("hex"),
+				sha256,
 				bytes: content.byteLength,
 				lines: countLines(content),
 				complete: elidedBytes === 0,
@@ -274,7 +281,9 @@ export function deleteGoalRecallFiles(cwd: string, goalId: string): void {
 	const pattern = goalFilePattern(goalId);
 	try {
 		for (const name of readdirSync(dir)) {
-			if (pattern.test(name)) removeQuietly(join(dir, name));
+			if (!pattern.test(name)) continue;
+			noteEvidenceRemovedByExistingPolicy(join(dir, name));
+			removeQuietly(join(dir, name));
 		}
 	} catch {
 		// No recall dir: nothing to delete.
