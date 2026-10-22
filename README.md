@@ -256,7 +256,7 @@ rather than the published npm package. It is not an official leaderboard result.
   to start in that task's working directory. Two transient provider errors were
   retried; no trial was excluded.
 - OMK failed all three `pytorch-model-recovery` trials because the CLI rejected
-  an instruction starting with `- ` (fixed in #84). Without that
+  an instruction starting with a dash and a space (fixed in #84). Without that
   task the difference is +5.4 pp [0.0, +10.7].
 - Not a leaderboard run: 3 trials instead of the official 5, our own network
   allowlist and apt cache proxy, and OMK alone had 150 s extra for a workspace
