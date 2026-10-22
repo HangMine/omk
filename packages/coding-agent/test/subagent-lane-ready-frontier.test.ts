@@ -535,25 +535,74 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 			const clean = controlled(twoBranches, { instant: true });
 			await clean.result;
 			const lines = readLog(dir);
-			expect(lines.map((l) => [l.notStartedDueToFailure, l.lanes, l.failureScope])).toEqual([
-				[2, 4, false],
-				[1, 4, true],
-				[0, 4, true],
+			expect(lines.map((l) => [l.notStartedDueToFailure, l.lanes, l.failureScope, l.frontier])).toEqual([
+				[2, 4, false, true],
+				[1, 4, true, true],
+				[0, 4, true, true],
 			]);
 			for (const line of lines)
 				expect(Object.keys(line).sort()).toEqual(
-					["elapsedFraction", "failureScope", "lanes", "notStartedDueToFailure", "pid", "role", "t"].sort(),
+					[
+						"elapsedFraction",
+						"failureScope",
+						"frontier",
+						"lanes",
+						"notStartedDueToFailure",
+						"pid",
+						"role",
+						"t",
+					].sort(),
 				);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});
 
-	it("run log: flag off writes nothing", async () => {
+	it("run log: batch arm (frontier off, C1 on) counts lanes C1 kept from starting", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "omk-frontier-log-"));
 		try {
 			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
 			vi.stubEnv("OMK_LANE_READY_QUEUE", "");
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "1");
+			const failed = controlled(twoBranches);
+			await failed.finish("A", "failed");
+			await failed.finish("C");
+			await failed.finish("D");
+			expect(statusOf((await failed.result).outcomes).B).toBe("blocked-dependency");
+			await controlled(twoBranches, { instant: true }).result;
+			const lines = readLog(dir);
+			expect(lines.map((l) => [l.notStartedDueToFailure, l.lanes, l.failureScope, l.frontier])).toEqual([
+				[1, 4, true, false],
+				[0, 4, true, false],
+			]);
+			for (const line of lines)
+				expect(Object.keys(line).sort()).toEqual(
+					[
+						"elapsedFraction",
+						"failureScope",
+						"frontier",
+						"lanes",
+						"notStartedDueToFailure",
+						"pid",
+						"role",
+						"t",
+					].sort(),
+				);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("run log: both flags off writes nothing", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "omk-frontier-log-"));
+		try {
+			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
+			vi.stubEnv("OMK_LANE_READY_QUEUE", "");
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+			const failed = controlled(twoBranches);
+			await failed.finish("A", "failed");
+			await failed.finish("C");
+			await failed.result;
 			await controlled(twoBranches, { instant: true }).result;
 			expect(() => readLog(dir)).toThrow();
 		} finally {

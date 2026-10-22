@@ -130,7 +130,15 @@ export function runReadyFrontier(input: ReadyFrontierInput): Promise<ReadyFronti
 /** Run-log file name (`<OMK_RUN_LOG_DIR>/subagent-lane-frontier.jsonl`) for the DG2 A/B covariate. */
 export const LANE_FRONTIER_RUN_LOG = "subagent-lane-frontier";
 
-/** Spec 106 §2a: counts only (A/B covariate); no lane ids or text. */
-export function logReadyFrontier(stats: ReadyFrontierStats, lanes: number, failureScope: boolean): void {
-	appendRunLog(LANE_FRONTIER_RUN_LOG, { lanes, notStartedDueToFailure: stats.notStartedDueToFailure, failureScope });
+/**
+ * Spec 106 §2a: counts only (A/B covariate); no lane ids or text. Written by
+ * the frontier (`frontier: true`) and, with C1 on, by the batch loop.
+ */
+export function logReadyFrontier(
+	notStartedDueToFailure: number,
+	lanes: number,
+	failureScope: boolean,
+	frontier: boolean,
+): void {
+	appendRunLog(LANE_FRONTIER_RUN_LOG, { lanes, notStartedDueToFailure, failureScope, frontier });
 }
