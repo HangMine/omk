@@ -1456,7 +1456,7 @@ The SDK cannot prove that a callback or injected runner executed what it reporte
 - retains a rolling 128 KiB combined-output tail, applies OMK's high-confidence text redaction, then keeps the final 64 KiB, and
 - records the combined `BashOperations` stream as receipt `stdout`; receipt `stderr` is empty because that interface does not expose separate channels.
 
-The policy is best-effort masking, not DLP. A credential spanning the rolling-window cut may lose matching context, although receipts persist only the resulting digest and byte count. The runner, declared shell identity, environment, remote execution behavior, and any runner-owned spill files remain caller trust boundaries. The script is stored in the receipt after credential-shaped preflight, so keep secrets out of command strings.
+The policy is best-effort masking, not DLP. A credential spanning the rolling-window cut may lose matching context, although receipts persist only the resulting digest and byte count. The runner, declared shell identity, environment, remote execution behavior, and any runner-owned spill files remain caller trust boundaries. The script is stored in the receipt exactly as supplied; command credential redaction is not applied, so keep secrets out of command strings.
 
 Injected runners must follow the built-in terminal protocol: return an integer exit code, throw `Error("aborted")` for abort, or throw an error whose message starts with `timeout:`. Other failures propagate without a receipt; `null` or non-integer exit codes fail closed with `VerifiedBashAdapterError`.
 
@@ -1709,13 +1709,8 @@ executeVerifiedBash
 executeVerifiedLocalBash
 VERIFIED_BASH_REDACTION_POLICY_ID
 VerifiedBashAdapterError
-redactCommandDescriptor
 createCommandHmacBinder
-EVIDENCE_COMMAND_REDACTION_POLICY_ID
-MAX_COMMAND_REDACTION_PLACEHOLDERS
-parseCommandHmacBinding
-parseCommandRedactionSummary
-CommandRedactionError
+type CommandHmacBinder
 
 // Types
 type CreateAgentSessionOptions
@@ -1756,8 +1751,6 @@ type EvidenceReceiptMode
 type TaskContract
 type EvidenceCommandDescriptor
 type WorkspaceScope
-type CommandRedactionPlaceholder
-type CommandRedactionSummary
 type EvidenceReceipt
 type EvidenceReceiptLedgerBinding
 type ReplayEvent

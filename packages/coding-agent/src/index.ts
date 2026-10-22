@@ -539,17 +539,7 @@ export { isVerifiedBashEnabled, resolveSessionWorkspaceScope } from "./core/veri
 export { resolveSessionWorkspaceScopeReport } from "./core/verified-bash-runtime.ts";
 export type { SessionScopeCompleteness, SessionWorkspaceScopeReport } from "./core/verified-bash-runtime.ts";
 // Execution-bound evidence
-export {
-	type CommandHmacBinder,
-	CommandRedactionError,
-	createCommandHmacBinder,
-	EVIDENCE_COMMAND_REDACTION_POLICY_ID,
-	MAX_COMMAND_REDACTION_PLACEHOLDERS,
-	parseCommandHmacBinding,
-	parseCommandRedactionSummary,
-	type RedactedCommandDescriptor,
-	redactCommandDescriptor,
-} from "./guardrails/command-redaction.ts";
+export { type CommandHmacBinder, createCommandHmacBinder } from "./guardrails/evidence-attestation.ts";
 export { evidenceReceiptToObservation } from "./guardrails/evidence-protocol.ts";
 export {
 	computeEvidenceCommandSha256,
@@ -664,9 +654,6 @@ export type {
 	ArtifactSetWorkspaceFingerprint,
 	ArtifactState,
 	CommandHmacBinding,
-	CommandRedactionPlaceholder,
-	CommandRedactionPlaceholderType,
-	CommandRedactionSummary,
 	EvidenceCommandDescriptor,
 	EvidenceExecutor,
 	EvidenceItem,

@@ -177,7 +177,7 @@ describe("executeVerifiedBash", () => {
 		expect(result.receipt.core).toMatchObject({ status: "aborted", exitCode: null });
 	});
 
-	it("executes the original secret-bearing script and persists only the redacted representation", async () => {
+	it("executes a secret-bearing script and persists it without command redaction", async () => {
 		// Given: a script containing an inline credential and an observing runner.
 		const secretScript =
 			"curl -H 'Authorization: Bearer synthetic-adapter-secret-token' https://example.invalid && mkdir -p dist"; // gitleaks:allow -- intentional fake credential fixture
@@ -195,38 +195,13 @@ describe("executeVerifiedBash", () => {
 			script: secretScript,
 		});
 
-		// Then: the runner received the original while the receipt persisted the tokenized form.
+		// Then: the runner and the receipt both carry the original script.
 		expect(observedScript).toBe(secretScript);
-		expect(result.receipt.core.command).toEqual({
-			kind: "shell",
-			shell: SHELL,
-			script: "curl -H 'Authorization: Bearer [REDACTED]' https://example.invalid && mkdir -p dist",
-		});
-		expect(result.receipt.core.commandRedaction?.placeholders).toEqual([{ type: "authorization-header", count: 1 }]);
-		expect(result.receipt.core.commandBinding?.algorithm).toBe("hmac-sha256");
+		expect(result.receipt.core.command).toEqual({ kind: "shell", shell: SHELL, script: secretScript });
+		expect(result.receipt.core.commandRedaction).toBeUndefined();
+		expect(result.receipt.core.commandBinding).toBeUndefined();
 		expect(new ReplayLedgerManager(GOAL_ID, ledgerPath).getEvents()).toHaveLength(1);
-		expect(readFileSync(result.receiptPath, "utf8")).not.toContain("synthetic-adapter-secret-token");
-	});
-
-	it("fails closed before the runner when redaction metadata would be oversize", async () => {
-		// Given: a script with more inline secrets than the placeholder metadata bound allows.
-		let executions = 0;
-		const operations: BashOperations = {
-			exec: async () => {
-				executions++;
-				return { exitCode: 0 };
-			},
-		};
-
-		// When/Then: redaction fails before the runner side effect and no ledger event exists.
-		await expect(
-			executeVerifiedBash({
-				...request(createExecutor("verified-bash-oversize"), operations),
-				script: Array.from({ length: 300 }, (_, index) => `tool --token synthetic-oversize-${index}`).join("; "),
-			}),
-		).rejects.toThrow(/placeholder/i);
-		expect(executions).toBe(0);
-		expect(new ReplayLedgerManager(GOAL_ID, ledgerPath).getEvents()).toHaveLength(0);
+		expect(readFileSync(result.receiptPath, "utf8")).toContain("synthetic-adapter-secret-token");
 	});
 
 	it.each([null, Number.NaN, 1.5])("rejects invalid runner exit code %s without a ledger event", async (exitCode) => {

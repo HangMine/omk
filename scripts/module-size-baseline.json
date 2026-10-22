@@ -93,7 +93,6 @@
 	"packages/coding-agent/src/core/verified-run/authority-events.ts": 559,
 	"packages/coding-agent/src/core/verified-run/authority-store.ts": 810,
 	"packages/coding-agent/src/core/verified-run/run-status.ts": 274,
-	"packages/coding-agent/src/guardrails/command-redaction.ts": 788,
 	"packages/coding-agent/src/guardrails/evidence-receipt-store.ts": 498,
 	"packages/coding-agent/src/guardrails/evidence-receipt.ts": 437,
 	"packages/coding-agent/src/guardrails/evidence-system.ts": 684,

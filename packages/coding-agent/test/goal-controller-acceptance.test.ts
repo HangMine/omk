@@ -304,18 +304,13 @@ describe("/goal acceptance checks", () => {
 		expect(h.messages).toEqual([]);
 	});
 
-	it("does not approve a command the receipt path cannot run", async () => {
+	it("approves a dynamic shell check now that command redaction is removed", async () => {
 		const cwd = gitRepo();
 		const h = harness(cwd);
 		await h.goal("Ship the app");
 
 		await h.goal('verify test "$(cat app.txt)" = v1');
-		expect(lastNotice(h)).toContain(
-			"acceptance check could not run, so it was not approved: shell command is dynamic or malformed",
-		);
-		await h.goal("verify");
-
-		expect(lastNotice(h)).toContain("no acceptance check is approved in this session");
+		expect(lastNotice(h)).toContain("acceptance check passed");
 		expect((await store(cwd).current())?.status).toBe("active");
 	});
 
