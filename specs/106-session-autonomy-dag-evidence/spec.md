@@ -1,7 +1,7 @@
 # Spec 106 — session skill admission, goal autonomy, lane failure isolation, evidence lifecycle
 
 Status: draft (spec; C1 implemented on `feat/lane-failure-isolation`)
-Base: `origin/main` @ `ba1499e377` (after #206; claims re-checked, cited files unchanged since 741ac1c473). Refs under `packages/coding-agent/src/core/` unless noted.
+Base: `origin/main` @ `ba1499e377` (after #206). Verified: `git diff 741ac1c473 ba1499e377` is empty for every file cited below (only change in range: `.omk/extensions/atelier/test/cost-history.test.ts`, #206), so all `file:line` refs hold on both. Launcher refs are main, not the C1 branch. Refs under `packages/coding-agent/src/core/` unless noted.
 Source: 인호's v1.5.5 improvement doc (A–D). Freeze 10/23 12:00 KST ⇒ every behavior change default-off.
 
 ## 0. Doc claims re-checked against current main
