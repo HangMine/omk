@@ -35,8 +35,14 @@ const { createEditToolDefinition } = await import("../src/core/tools/edit.ts");
 const { createWriteToolDefinition } = await import("../src/core/tools/write.ts");
 const { collectFileDiagnostics } = await import("../src/core/tools/diagnostics-checkers.ts");
 const diagModule = await import("../src/core/tools/edit-diagnostics.ts");
-const { diffNewDiagnostics, formatNewDiagnostics, normalizeDiagnosticMessage, setEditDiagnosticsCollectorForTest } =
-	diagModule;
+const {
+	diffNewDiagnostics,
+	flushEditDiagnosticsSession,
+	formatNewDiagnostics,
+	normalizeDiagnosticMessage,
+	setCheckerVersionProbeForTest,
+	setEditDiagnosticsCollectorForTest,
+} = diagModule;
 type DiagnosticLine = import("../src/core/tools/diagnostics-checkers.ts").DiagnosticLine;
 type FileDiagnosticsResult = import("../src/core/tools/diagnostics-checkers.ts").FileDiagnosticsResult;
 
@@ -101,6 +107,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	flushEditDiagnosticsSession();
 	restore?.();
 	restore = undefined;
 	process.env = { ...savedEnv };
@@ -425,5 +432,81 @@ describe("shadow mode (Tech Lead ruling 1)", () => {
 		await edit("a.ts", "1", "2");
 		expect(readLog("edit-diag")[0]).toMatchObject({ mode: "on", outcome: "none" });
 		expect(typeof readLog("edit-diag")[0].diagMs).toBe("number");
+	});
+});
+
+describe("checkerRan and checker versions (spec 107 pre-registration)", () => {
+	const versions = { tsc: "Version 5.9.3", pyright: null, ruff: "ruff 0.6.9" };
+
+	it("checkerRan true when the checker executed; versions probed once per session", async () => {
+		let probes = 0;
+		const restoreProbe = setCheckerVersionProbeForTest(async () => {
+			probes++;
+			return versions;
+		});
+		try {
+			fake([{ lines: [] }, { lines: [] }, { lines: [] }, { lines: [] }]);
+			await edit("a.ts", "1", "2");
+			await edit("a.ts", "2", "3");
+			await new Promise((r) => setTimeout(r, 0));
+			expect(probes).toBe(1);
+			expect(readLog("edit-diag").map((l) => l.checkerRan)).toEqual([true, true]);
+			expect(readLog("edit-diag-checkers")).toHaveLength(1);
+			expect(readLog("edit-diag-checkers")[0]).toMatchObject({ mode: "on", ...versions });
+			expect(flushEditDiagnosticsSession()).toMatchObject({ checkerRan: true, checks: 4, checkerRuns: 4 });
+			expect(readLog("edit-diag-session")).toEqual([
+				expect.objectContaining({ mode: "on", checkerRan: true, checkerVersions: versions }),
+			]);
+		} finally {
+			restoreProbe();
+		}
+	});
+
+	it("checker missing: checkerRan false, no version probe, edit text unchanged", async () => {
+		let probes = 0;
+		const restoreProbe = setCheckerVersionProbeForTest(async () => {
+			probes++;
+			return versions;
+		});
+		try {
+			fake([{ lines: [], skipped: "no tsconfig found" }]);
+			const result = await edit("a.ts", "1", "2");
+			expect(textOf(result)).toBe("Successfully replaced 1 block(s) in a.ts.");
+			expect(readLog("edit-diag")[0]).toMatchObject({ outcome: "skipped", checkerRan: false });
+			expect(probes).toBe(0);
+			expect(flushEditDiagnosticsSession()).toMatchObject({ checkerRan: false, checks: 1, checkerRuns: 0 });
+			expect(readLog("edit-diag-checkers")).toEqual([]);
+		} finally {
+			restoreProbe();
+		}
+	});
+
+	it("a timed-out checker counts as executed", async () => {
+		fake([{ lines: [], skipped: "tsc timed out", timedOut: true }]);
+		await edit("a.ts", "1", "2");
+		expect(readLog("edit-diag")[0]).toMatchObject({ outcome: "timeout", checkerRan: true });
+	});
+
+	it("a version probe that rejects never fails the edit", async () => {
+		const restoreProbe = setCheckerVersionProbeForTest(async () => {
+			throw new Error("boom");
+		});
+		try {
+			fake([{ lines: [] }, { lines: [] }]);
+			const result = await edit("a.ts", "1", "2");
+			await new Promise((r) => setTimeout(r, 0));
+			expect(textOf(result)).toBe("Successfully replaced 1 block(s) in a.ts.");
+			expect(readLog("edit-diag-checkers")).toEqual([]);
+		} finally {
+			restoreProbe();
+		}
+	});
+
+	it("OFF: no session state, no session/checkers lines", async () => {
+		delete process.env.OMK_EDIT_DIAGNOSTICS;
+		fake([]);
+		await edit("a.ts", "1", "2");
+		expect(flushEditDiagnosticsSession()).toBeUndefined();
+		expect(existsSync(logDir)).toBe(false);
 	});
 });

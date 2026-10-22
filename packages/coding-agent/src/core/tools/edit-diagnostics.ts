@@ -21,6 +21,14 @@ import {
 	type FileDiagnosticsResult,
 	languageForFile,
 } from "./diagnostics-checkers.ts";
+import { recordCheck } from "./edit-diagnostics-session.ts";
+
+export {
+	EDIT_DIAG_CHECKERS_LOG,
+	EDIT_DIAG_SESSION_LOG,
+	flushEditDiagnosticsSession,
+	setCheckerVersionProbeForTest,
+} from "./edit-diagnostics-session.ts";
 
 export const EDIT_DIAGNOSTICS_ENV = "OMK_EDIT_DIAGNOSTICS";
 export const EDIT_DIAGNOSTICS_TIMEOUT_ENV = "OMK_EDIT_DIAGNOSTICS_TIMEOUT_MS";
@@ -33,7 +41,8 @@ const PER_EDIT_TIMEOUT_MS = 20_000;
 const MAX_FILES = 5;
 const MAX_ENTRIES = 20;
 
-export type EditDiagnosticsMode = "off" | "on" | "shadow";
+import type { EditDiagnosticsMode } from "./edit-diagnostics-session.ts";
+export type { EditDiagnosticsMode };
 
 /**
  * `1` = on (report to the model), `shadow` = run the checker but write results only to
@@ -176,6 +185,7 @@ export class EditDiagnosticsRun {
 	private newFile = false;
 	private readonly mode: EditDiagnosticsMode = editDiagnosticsMode();
 	private snap: Snapshot | undefined;
+	private ran = false;
 
 	private readonly tool: "edit" | "write";
 	private readonly cwd: string;
@@ -209,11 +219,14 @@ export class EditDiagnosticsRun {
 	private async check(): Promise<FileDiagnosticsResult> {
 		const timeoutMs = this.budget();
 		if (timeoutMs <= 0) return { lines: [], skipped: "edit deadline exhausted", timedOut: true };
+		let result: FileDiagnosticsResult;
 		try {
-			return await collector(this.cwd, this.path, { timeoutMs, signal: this.signal, bypassCache: true });
+			result = await collector(this.cwd, this.path, { timeoutMs, signal: this.signal, bypassCache: true });
 		} catch {
-			return { lines: [], skipped: "checker failed" };
+			result = { lines: [], skipped: "checker failed" };
 		}
+		if (recordCheck(this.mode, result, this.cwd, collector === collectFileDiagnostics)) this.ran = true;
+		return result;
 	}
 
 	/**
@@ -247,6 +260,7 @@ export class EditDiagnosticsRun {
 			// Checker time only (baseline + post), so the wall-time guardrail can subtract it.
 			diagMs: this.baseMs + this.postMs,
 			totalMs: Date.now() - this.started,
+			checkerRan: this.ran,
 			...extra,
 		});
 	}

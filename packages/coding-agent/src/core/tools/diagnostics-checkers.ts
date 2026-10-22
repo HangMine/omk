@@ -221,3 +221,30 @@ export const collectFileDiagnostics: CollectFileDiagnostics = async (cwd, path, 
 	const dir = result.dir ?? cwd;
 	return { lines: result.lines.map((d) => ({ ...d, path: resolve(dir, d.path) })) };
 };
+
+export type CheckerName = "tsc" | "pyright" | "ruff";
+/** `null` = not installed, failed or timed out. First output line only, capped at 80 chars. */
+export type CheckerVersions = Readonly<Record<CheckerName, string | null>>;
+
+/**
+ * Spec 107 pre-registration: `--version` of each checker the bench image must pin.
+ * Never throws; each probe is bounded by `timeoutMs`.
+ */
+export async function probeCheckerVersions(cwd: string, timeoutMs = 5_000): Promise<CheckerVersions> {
+	const root = nearestMarker(cwd, ["tsconfig.json", "tsconfig.build.json", "package.json"]) ?? cwd;
+	const local = [join(cwd, "node_modules", ".bin", "tsc"), join(root, "node_modules", ".bin", "tsc")].find((p) =>
+		existsSync(p),
+	);
+	const one = async (bin: string): Promise<string | null> => {
+		try {
+			const { code, out, timedOut } = await run(bin, ["--version"], cwd, timeoutMs);
+			if (code !== 0 || timedOut) return null;
+			const line = out.trim().split("\n")[0]?.trim() ?? "";
+			return line ? line.slice(0, 80) : null;
+		} catch {
+			return null;
+		}
+	};
+	const [tsc, pyright, ruff] = await Promise.all([one(local ?? "tsc"), one("pyright"), one("ruff")]);
+	return { tsc, pyright, ruff };
+}

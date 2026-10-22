@@ -3,11 +3,16 @@
  * an edit carries the new diagnostic; with the flag off it does not; and the first request
  * (system prompt, tool schema, messages) is identical in both arms. Fake checker, no tsc.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Context, fauxAssistantMessage, fauxToolCall } from "omk-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import { setEditDiagnosticsCollectorForTest } from "../../src/core/tools/edit-diagnostics.ts";
+import {
+	flushEditDiagnosticsSession,
+	setCheckerVersionProbeForTest,
+	setEditDiagnosticsCollectorForTest,
+} from "../../src/core/tools/edit-diagnostics.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
 const harnesses: Harness[] = [];
@@ -15,6 +20,7 @@ const savedFlag = process.env.OMK_EDIT_DIAGNOSTICS;
 let restore: (() => void) | undefined;
 
 afterEach(() => {
+	flushEditDiagnosticsSession();
 	restore?.();
 	restore = undefined;
 	if (savedFlag === undefined) delete process.env.OMK_EDIT_DIAGNOSTICS;
@@ -101,5 +107,70 @@ describe("spec 107 OMK_EDIT_DIAGNOSTICS in a session", () => {
 		expect(shadow.toolDetails).toBe(off.toolDetails);
 		expect(shadow.toolDetails).not.toContain("newDiagnostics");
 		expect(shadow.first).toBe(off.first);
+	});
+});
+
+describe("spec 107 checkerRan per session (pre-registration)", () => {
+	const savedLogDir = process.env.OMK_RUN_LOG_DIR;
+	let logDir: string | undefined;
+	afterEach(() => {
+		if (savedLogDir === undefined) delete process.env.OMK_RUN_LOG_DIR;
+		else process.env.OMK_RUN_LOG_DIR = savedLogDir;
+		if (logDir) rmSync(logDir, { recursive: true, force: true });
+		logDir = undefined;
+	});
+
+	async function sessionLine(flag: "1" | "shadow" | undefined, missing: boolean) {
+		logDir = mkdtempSync(join(tmpdir(), "omk-edit-diag-session-"));
+		process.env.OMK_RUN_LOG_DIR = logDir;
+		if (flag) process.env.OMK_EDIT_DIAGNOSTICS = flag;
+		else delete process.env.OMK_EDIT_DIAGNOSTICS;
+		const harness = await createHarness();
+		harnesses.push(harness);
+		writeFileSync(join(harness.tempDir, "a.ts"), "export const x: number = 1;\n");
+		restore = setEditDiagnosticsCollectorForTest(async () =>
+			missing ? { lines: [], skipped: "no tsconfig found" } : { lines: [] },
+		);
+		const restoreProbe = setCheckerVersionProbeForTest(async () => ({
+			tsc: "Version 5.9.3",
+			pyright: null,
+			ruff: null,
+		}));
+		harness.setResponses([
+			fauxAssistantMessage([fauxToolCall("edit", { path: "a.ts", edits: [{ oldText: "= 1", newText: "= 2" }] })], {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage("done"),
+		]);
+		try {
+			await harness.session.prompt("Change x to 2.");
+			await new Promise((r) => setTimeout(r, 0));
+		} finally {
+			restoreProbe();
+		}
+		const record = flushEditDiagnosticsSession();
+		const file = join(logDir, "edit-diag-session.jsonl");
+		const lines = existsSync(file) ? readFileSync(file, "utf8").trim().split("\n") : [];
+		return { record, lines };
+	}
+
+	it("ON and shadow: checkerRan true when the checker runs", async () => {
+		for (const flag of ["1", "shadow"] as const) {
+			const { record, lines } = await sessionLine(flag, false);
+			expect(record).toMatchObject({ checkerRan: true, checkerRuns: 2 });
+			expect(lines).toHaveLength(1);
+			expect(JSON.parse(lines[0])).toMatchObject({ checkerRan: true, checkerVersions: { tsc: "Version 5.9.3" } });
+		}
+	});
+
+	it("checkerRan false when the checker is missing", async () => {
+		const { record } = await sessionLine("1", true);
+		expect(record).toMatchObject({ checkerRan: false, checkerRuns: 0, checkerVersions: null });
+	});
+
+	it("OFF: no session record, nothing written", async () => {
+		const { record, lines } = await sessionLine(undefined, false);
+		expect(record).toBeUndefined();
+		expect(lines).toEqual([]);
 	});
 });
