@@ -11,7 +11,7 @@ import {
 	summarizeArtifact,
 } from "../../goal-output-recall.ts";
 import { RecallAccessTracker } from "../../goal-output-recall-access.ts";
-import { observeRecallRecheck } from "../../goal-output-recall-evidence.ts";
+import { observeRecallBlockedExhausted, observeRecallRecheck } from "../../goal-output-recall-evidence.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
 import { type GoalAcceptanceTestHooks, GoalTaskFacts } from "./goal-acceptance-task-facts.ts";
@@ -167,6 +167,7 @@ export class GoalAcceptanceFlow {
 		// A message queued while the check ran drives the next turn; the check runs again when it settles.
 		if (ctx.hasPendingMessages()) return;
 		if (!decision.continue) {
+			observeRecallBlockedExhausted(outcome.goal.ref.id);
 			await this.block(
 				store,
 				`acceptance check still fails after ${current.completedRounds} of ${current.maxRounds} rounds (${failureText(result)})`,

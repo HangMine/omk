@@ -27,3 +27,8 @@ export function observeRecallRecheck(goalId: string, passed: boolean): void {
 		...(passed ? { goalActive: false } : {}),
 	});
 }
+
+/** The goal was blocked with rounds exhausted: classify its recall files; holds stay (no state change). */
+export function observeRecallBlockedExhausted(goalId: string): void {
+	updateEvidenceArtifactsByOwner(goalId, { blockedExhausted: true });
+}

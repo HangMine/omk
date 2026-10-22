@@ -38,6 +38,16 @@ export interface EvidenceArtifactRecord {
 	readonly recoveryHold: boolean;
 	readonly holds: readonly EvidenceHoldReason[];
 	readonly status: EvidenceArtifactStatus;
+	/** Classification only: the owning goal was blocked with rounds exhausted. Holds are NOT released. */
+	readonly blockedExhausted: boolean;
+}
+
+export type EvidenceProducerGroup = "recall" | "spill" | "bash" | "executor";
+
+export interface UnknownHoldShare {
+	readonly present: number;
+	readonly unknown: number;
+	readonly share: number;
 }
 
 export interface EvidenceLifecycleReport {
@@ -50,6 +60,9 @@ export interface EvidenceLifecycleReport {
 	readonly holdReasons: Readonly<Partial<Record<EvidenceHoldReason, number>>>;
 	/** Present artifacts with an `unknown` hold over present artifacts; 0 when none are present. */
 	readonly unknownHoldShare: number;
+	readonly unknownHoldShareByProducer: Readonly<Record<EvidenceProducerGroup, UnknownHoldShare>>;
+	/** Present artifacts whose goal was blocked with rounds exhausted (still held; counted separately). */
+	readonly blockedExhausted: number;
 	readonly wouldDelete: { readonly count: number; readonly bytes: number; readonly artifactIds: readonly string[] };
 	/** Always 0 in observe mode; kept in the report so a trace proves it. */
 	readonly deletes: 0;
@@ -76,6 +89,7 @@ interface MutableRecord {
 	retryHold: boolean;
 	recoveryHold: boolean;
 	goalActive: boolean;
+	blockedExhausted: boolean;
 	status: EvidenceArtifactStatus;
 }
 
@@ -141,6 +155,7 @@ export function registerEvidenceArtifact(input: RegisterEvidenceInput): string |
 			retryHold: input.retryHold ?? false,
 			recoveryHold: input.recoveryHold ?? false,
 			goalActive: input.goalActive ?? false,
+			blockedExhausted: false,
 			status: "present",
 		};
 		// A path written again is a new artifact (new id); the old record is superseded, not deleted.
@@ -158,6 +173,7 @@ export interface EvidenceUpdate {
 	readonly goalActive?: boolean;
 	readonly retryHold?: boolean;
 	readonly recoveryHold?: boolean;
+	readonly blockedExhausted?: boolean;
 }
 
 function applyUpdate(record: MutableRecord, update: EvidenceUpdate): void {
@@ -166,6 +182,7 @@ function applyUpdate(record: MutableRecord, update: EvidenceUpdate): void {
 	if (update.goalActive !== undefined) record.goalActive = update.goalActive;
 	if (update.retryHold !== undefined) record.retryHold = update.retryHold;
 	if (update.recoveryHold !== undefined) record.recoveryHold = update.recoveryHold;
+	if (update.blockedExhausted !== undefined) record.blockedExhausted = update.blockedExhausted;
 }
 
 export function updateEvidenceArtifact(path: string, update: EvidenceUpdate): void {
@@ -205,6 +222,7 @@ function freeze(record: MutableRecord): EvidenceArtifactRecord {
 		recoveryHold: record.recoveryHold,
 		holds: holdsOf(record),
 		status: record.status,
+		blockedExhausted: record.blockedExhausted,
 	};
 }
 
@@ -212,7 +230,26 @@ export function listEvidenceArtifacts(): EvidenceArtifactRecord[] {
 	return [...records.values()].map(freeze);
 }
 
+const PRODUCER_GROUP: Readonly<Record<EvidenceProducer, EvidenceProducerGroup>> = {
+	"goal-recall": "recall",
+	"read-spill": "spill",
+	"bash-spill": "spill",
+	"tool-output-log": "bash",
+	"bash-executor-log": "executor",
+};
+
+function share(unknown: number, present: number): number {
+	return present === 0 ? 0 : Math.round((unknown / present) * 10_000) / 10_000;
+}
+
 export function evidenceLifecycleReport(): EvidenceLifecycleReport {
+	const groups: Record<EvidenceProducerGroup, { present: number; unknown: number }> = {
+		recall: { present: 0, unknown: 0 },
+		spill: { present: 0, unknown: 0 },
+		bash: { present: 0, unknown: 0 },
+		executor: { present: 0, unknown: 0 },
+	};
+	let blockedExhausted = 0;
 	const byProducer: Partial<Record<EvidenceProducer, number>> = {};
 	const holdReasons: Partial<Record<EvidenceHoldReason, number>> = {};
 	let present = 0;
@@ -228,6 +265,10 @@ export function evidenceLifecycleReport(): EvidenceLifecycleReport {
 		}
 		present += 1;
 		presentBytes += record.bytes;
+		const group = groups[PRODUCER_GROUP[record.producer]];
+		group.present += 1;
+		if (record.holds.includes("unknown")) group.unknown += 1;
+		if (record.blockedExhausted) blockedExhausted += 1;
 		for (const hold of record.holds) holdReasons[hold] = (holdReasons[hold] ?? 0) + 1;
 		if (record.holds.includes("unknown")) unknown += 1;
 		if (record.holds.length === 0) would.push(record);
@@ -240,7 +281,11 @@ export function evidenceLifecycleReport(): EvidenceLifecycleReport {
 		removedByExistingPolicy: removed,
 		byProducer,
 		holdReasons,
-		unknownHoldShare: present === 0 ? 0 : Math.round((unknown / present) * 10_000) / 10_000,
+		unknownHoldShare: share(unknown, present),
+		unknownHoldShareByProducer: Object.fromEntries(
+			Object.entries(groups).map(([name, g]) => [name, { ...g, share: share(g.unknown, g.present) }]),
+		) as Record<EvidenceProducerGroup, UnknownHoldShare>,
+		blockedExhausted,
 		wouldDelete: {
 			count: would.length,
 			bytes: would.reduce((sum, record) => sum + record.bytes, 0),

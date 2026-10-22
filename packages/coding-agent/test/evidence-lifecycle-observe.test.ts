@@ -17,7 +17,7 @@ import {
 import goalController from "../src/core/extensions/builtin/goal-controller.ts";
 import type { ExtensionAPI, ExtensionCommandContext, RegisteredCommand } from "../src/core/extensions/types.ts";
 import { deleteGoalRecallFiles, OutputArtifactWriter, outputRecallDir } from "../src/core/goal-output-recall.ts";
-import { observeRecallRecheck } from "../src/core/goal-output-recall-evidence.ts";
+import { observeRecallBlockedExhausted, observeRecallRecheck } from "../src/core/goal-output-recall-evidence.ts";
 import { spillTruncatedOutput } from "../src/core/tools/artifact-spill.ts";
 import type { BashOperations } from "../src/core/tools/bash.ts";
 import { OutputAccumulator } from "../src/core/tools/output-accumulator.ts";
@@ -144,6 +144,12 @@ describe("spec 106 D1 observe", () => {
 		expect(report.unknownHoldShare).toBe(0.5);
 		expect(report.holdReasons).toEqual({ unknown: 1 });
 		expect(report.byProducer).toEqual({ "goal-recall": 1, "read-spill": 1 });
+		expect(report.unknownHoldShareByProducer).toEqual({
+			recall: { present: 1, unknown: 0, share: 0 },
+			spill: { present: 1, unknown: 1, share: 1 },
+			bash: { present: 0, unknown: 0, share: 0 },
+			executor: { present: 0, unknown: 0, share: 0 },
+		});
 	});
 
 	it("existing pruners still delete as before and are recorded as removed-by-existing-policy", () => {
@@ -189,6 +195,20 @@ describe("spec 106 D1 observe", () => {
 		expectNoRawBytes([snapshot.fullOutputPath ?? "", result.fullOutputPath ?? ""]);
 	});
 
+	it("blocked-exhausted goals keep their recall holds and are counted separately", () => {
+		const cwd = tempRoot("omk-d1-blocked-");
+		recall(cwd, "g");
+		observeRecallRecheck("g", false);
+		const before = listEvidenceArtifacts()[0]?.holds;
+		observeRecallBlockedExhausted("g");
+		const [record] = listEvidenceArtifacts();
+		expect(record?.holds).toEqual(before);
+		expect(record?.blockedExhausted).toBe(true);
+		const report = evidenceLifecycleReport();
+		expect(report.blockedExhausted).toBe(1);
+		expect(report.wouldDelete.count).toBe(0);
+	});
+
 	it("registry is bounded and counts overflow", () => {
 		for (let i = 0; i < EVIDENCE_REGISTRY_MAX + 2; i++) {
 			registerEvidenceArtifact({ producer: "bash-spill", path: `/none/${i}`, bytes: 1 });
@@ -208,10 +228,10 @@ function gitRepo(): string {
 	return root;
 }
 
-async function failingGoalRound() {
+async function failingGoalRound(maxRounds = 3, settles = 1) {
 	const cwd = gitRepo();
 	await new DurableGoalStore(join(cwd, ".omk", "goals", "current.json")).create(
-		createDurableGoal({ id: "session", objective: "Ship", maxRounds: 3, now: new Date().toISOString() }),
+		createDurableGoal({ id: "session", objective: "Ship", maxRounds, now: new Date().toISOString() }),
 	);
 	const commands = new Map<string, RegisteredCommand>();
 	const handlers = new Map<string, (event: never, context: never) => unknown>();
@@ -232,7 +252,9 @@ async function failingGoalRound() {
 		hasPendingMessages: () => false,
 	} as unknown as ExtensionCommandContext;
 	await commands.get("goal")?.handler(`verify printf '${SECRET}\\n'; exit 4`, ctx);
-	await handlers.get("agent_settled")?.({ type: "agent_settled", messages: [] } as never, ctx as never);
+	for (let i = 0; i < settles; i++) {
+		await handlers.get("agent_settled")?.({ type: "agent_settled", messages: [] } as never, ctx as never);
+	}
 	return { cwd, entries };
 }
 
@@ -257,6 +279,16 @@ describe("spec 106 D1 goal trace", () => {
 		]);
 		expect(readdirSync(outputRecallDir(cwd)).filter((n) => n.endsWith(".log"))).toHaveLength(2);
 		expect(JSON.stringify(entries)).not.toContain(SECRET);
+	});
+
+	it("flag observe: a goal blocked with rounds exhausted classifies its recall, holds unchanged", async () => {
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "1");
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
+		await failingGoalRound(1, 3);
+		const records = listEvidenceArtifacts().filter((r) => r.status === "present");
+		expect(records.length).toBeGreaterThan(0);
+		expect(records.every((r) => r.blockedExhausted && r.holds.includes("goal-active"))).toBe(true);
+		expect(evidenceLifecycleReport().blockedExhausted).toBe(records.length);
 	});
 });
 

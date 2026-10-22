@@ -98,6 +98,7 @@ import { createMemoryContextBudgetCacheProviderV2 } from "./context-budget-v2-ca
 import type { ContextBudgetCacheProviderV2 } from "./context-budget-v2-types.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
+import { appendEvidenceLifecycleEntry } from "./evidence-lifecycle-session.ts";
 import type { ToolHtmlRenderer } from "./export-html/index.ts";
 import {
 	type ContextUsage,
@@ -1476,6 +1477,7 @@ export class AgentSession {
 			// state need the boundary no retry follows, so mark it explicitly.
 			if (!this._willRetryAfterAgentEnd(event)) {
 				await this._extensionRunner.emit({ type: "agent_settled", messages: event.messages });
+				appendEvidenceLifecycleEntry(this.sessionManager);
 			}
 		} else if (event.type === "turn_start") {
 			this._turnMetricsState = {
