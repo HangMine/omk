@@ -34,7 +34,7 @@ not installed on linux-x64 and remain registry-verified (`npm view`, MIT).
 
 Source of truth: `specs/108-pi-decoupling/pi-inventory.generated.json`, produced by `scripts/pi-inventory.mjs`
 (no new deps). Regenerate: `npm run inventory:pi`. Verify: `npm run check:pi-inventory` (exit 1 on any diff).
-CI wiring of `check:pi-inventory` is a **follow-up PR**; CI workflows are not edited here.
+CI: `check:pi-inventory` runs inside `npm run check` (CI job `build-check-test`, `.github/workflows/ci.yml` step "npm run check"); a stale or tampered inventory fails CI. No workflow file is edited.
 
 ### Packages
 

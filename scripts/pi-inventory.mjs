@@ -5,8 +5,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-const ROOT = new URL("..", import.meta.url).pathname;
-const OUT = join(ROOT, "specs/108-pi-decoupling/pi-inventory.generated.json");
+// PI_INVENTORY_ROOT / PI_INVENTORY_OUT exist only for scripts/test/pi-inventory.test.mjs fixtures.
+const ROOT = process.env.PI_INVENTORY_ROOT ?? new URL("..", import.meta.url).pathname;
+const OUT = process.env.PI_INVENTORY_OUT ?? join(ROOT, "specs/108-pi-decoupling/pi-inventory.generated.json");
 const PI_PKG = /^@(mariozechner|earendil-works|oh-my-pi)\/|^pi-[a-z0-9-]+$/;
 const DEP_KEYS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
@@ -51,7 +52,8 @@ for (const f of files.filter((f) => CODE.test(f) && SCOPE.test(f) && !f.includes
 	});
 }
 // 3. runtime alias surface (pi specifiers OMK resolves for third-party extensions)
-const compat = readFileSync(join(ROOT, "packages/coding-agent/src/core/pi-compat.ts"), "utf8");
+const COMPAT = join(ROOT, "packages/coding-agent/src/core/pi-compat.ts");
+const compat = existsSync(COMPAT) ? readFileSync(COMPAT, "utf8") : "";
 const aliases = [...compat.matchAll(/\$\{namespace\}(\/pi-[^`]+)`,\s*"([^"]+)"/g)].flatMap(([, s, t]) =>
 	["@earendil-works", "@mariozechner"].map((ns) => ({ specifier: ns + s, target: t })));
 const aliasConsumers = files.filter((f) => /\/src\/.*\.ts$/.test(f) && f !== "packages/coding-agent/src/core/pi-compat.ts")
