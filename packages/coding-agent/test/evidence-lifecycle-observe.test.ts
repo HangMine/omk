@@ -259,3 +259,42 @@ describe("spec 106 D1 goal trace", () => {
 		expect(JSON.stringify(entries)).not.toContain(SECRET);
 	});
 });
+
+describe("spec 106 EV11 recall path reuse", () => {
+	it("flag off: names are unchanged (attempt numbers only)", () => {
+		const cwd = tempRoot("omk-ev11-off-");
+		expect(recall(cwd, "g").displayPath).toBe(".omk/goals/recall/acceptance-g-0-1-1.log");
+	});
+
+	it("flag observe: after every file of a goal/round/revision is removed, the next path is new", () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
+		const cwd = tempRoot("omk-ev11-on-");
+		const seen = new Set<string>();
+		for (let cycle = 0; cycle < 3; cycle++) {
+			const artifact = recall(cwd, "g");
+			expect(artifact.displayPath).toMatch(/^\.omk\/goals\/recall\/acceptance-g-0-1-1-[0-9a-f]{8}\.log$/u);
+			expect(seen.has(artifact.absolutePath)).toBe(false);
+			seen.add(artifact.absolutePath);
+			deleteGoalRecallFiles(cwd, "g");
+			expect(existsSync(artifact.absolutePath)).toBe(false);
+		}
+	});
+
+	it("flag observe: caps and goal-id scoping still apply to nonce names", () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
+		const cwd = tempRoot("omk-ev11-caps-");
+		for (let i = 0; i < 5; i++) recall(cwd, "a");
+		for (let i = 0; i < 2; i++) recall(cwd, "a-1");
+		const logs = () => readdirSync(outputRecallDir(cwd)).filter((n) => n.endsWith(".log"));
+		expect(logs().filter((n) => n.startsWith("acceptance-a-0-"))).toHaveLength(3);
+		expect(
+			logs()
+				.filter((n) => n.startsWith("acceptance-a-0-"))
+				.map((n) => n.split("-")[4])
+				.sort(),
+		).toEqual(["3", "4", "5"]);
+		deleteGoalRecallFiles(cwd, "a");
+		expect(logs()).toHaveLength(2);
+		expect(logs().every((n) => n.startsWith("acceptance-a-1-0-1-"))).toBe(true);
+	});
+});

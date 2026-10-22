@@ -67,6 +67,7 @@ A1 notes: reserve+commit are synchronous at expansion, so a failed request still
 
 - `OMK_EVIDENCE_LIFECYCLE=observe`: register managed artifacts (recall, read spill, tool-bash log, executor `fullOutputPath`) with `{artifactId, producer, bytes, holds[]}`; emit counts/bytes/hold reasons only (0 raw bytes in trace). **No deletes**, existing pruners untouched.
 - Prerequisite fix recorded for PR 6: `nextAttempt()` reuses paths after deletion (`goal-output-recall.ts:118`) ⇒ needs monotonic id before any deletion ships.
+- **EV11 (flag `observe` only):** recall files are `acceptance-<id>-<round>-<rev>-<attempt>-<8 hex nonce>.log`, so a path whose files were all removed (today possible via the per-dir cap or clear/replace) is never reused; cap/clear patterns accept both forms. Flag off keeps the attempt-only names byte-identical. A durable monotonic counter is still owed before D2 deletion ships (the nonce is collision-avoidance, not ordering).
 - Observed metrics (counts only): artifacts registered, bytes, hold reasons, and **share of artifacts whose hold reason is `unknown`** (no producer/consumer mapping) — the gap D2 deletion must close first.
 - Bar: 0 deletes; trace has 0 raw bytes; EV10 (verified-run GC/evidence/publish) unchanged.
 
