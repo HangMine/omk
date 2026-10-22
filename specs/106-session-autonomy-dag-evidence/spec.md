@@ -1,7 +1,7 @@
 # Spec 106 — session skill admission, goal autonomy, lane failure isolation, evidence lifecycle
 
 Status: draft (spec; C1 implemented on `feat/lane-failure-isolation`)
-Base: `origin/main` @ `ba1499e377` (after #206). Verified: `git diff 741ac1c473 ba1499e377` is empty for every file cited below (only change in range: `.omk/extensions/atelier/test/cost-history.test.ts`, #206), so all `file:line` refs hold on both. Launcher refs are main, not the C1 branch. Refs under `packages/coding-agent/src/core/` unless noted.
+Base: `origin/main` @ `f1920f4dad` (after #205/#206, merged in). Verified: `git diff 741ac1c473 f1920f4dad` touches none of the files cited below (only `.omk/extensions/atelier/test/cost-history.test.ts` (#206) and LICENSE/README/TRADEMARKS/`readmeasset/adaptorch/*` (#205)), so every `file:line` ref is re-anchored to `f1920f4dad` unchanged. Launcher refs are main, not the C1 branch. Refs under `packages/coding-agent/src/core/` unless noted.
 Source: 인호's v1.5.5 improvement doc (A–D). Freeze 10/23 12:00 KST ⇒ every behavior change default-off.
 
 ## 0. Doc claims re-checked against current main
@@ -22,7 +22,7 @@ All six SHA-256 values in doc §A.4 match main (files unchanged since 741ac1c4).
 | recall 4 MiB, 1 MiB head, 3/goal, 20/dir, mtime pruning, `nextAttempt` from surviving names | correct | `goal-output-recall.ts:30-34,88,106,118` |
 | `closeTempFile()` flushes, does not delete | correct | `tools/output-accumulator.ts:123` |
 | spill removes dir only on write failure | correct | `tools/artifact-spill.ts:29` |
-| **New finding (doc silent):** every builtin loadout is `write-scoped` with `edit/write/bash` | — | `loadouts.ts:218-300`; so "non-writer" can only mean the scheduler's declared `writeSet` (see §3, Q1) |
+| **New finding (doc silent):** every builtin loadout is `write-scoped` with `edit/write/bash` | — | `loadouts.ts:218-300`; so C1 isolation does not fire for builtin loadouts (decision D-Q1, §6) |
 | "lane A must not block D" is a bug | **framing**: it is a deliberate conservative policy with tests; treat as policy change | `test/subagent-lane-launcher.test.ts` |
 
 **The cap of 10 is a product contract chosen by 인호, not an evidence-backed optimum.** No external study supports 10; we do not claim quality gains from it.
@@ -41,14 +41,14 @@ All six SHA-256 values in doc §A.4 match main (files unchanged since 741ac1c4).
 
 - Rule (flag on; Tech Lead 2026-10-22): a settled `failed` lane is *non-writing* only if its declared `scheduler.writeSet` is empty AND its grant has no write-capable tool (`edit`, `write`, `bash`) AND it is `parallelizable`; a missing/unknown `writeSet` ⇒ writer. A non-writing failure blocks only its transitive dependents via `laneGrants[].dependsOn` (already includes receipt-consumer edges). Any other non-completed status (unsettled, cancelled, permit-rejected, admission-deferred, skipped-abort) or a failed writer ⇒ legacy global block. **Note:** every builtin loadout grants `edit/write/bash` (`loadouts.ts:218-300`), so real behavior barely changes today; the rule is the contract future read-only loadouts will use.
 - `LaunchSubagentLanesResult.allLanesCompleted: boolean` — true only if every lane completed; **DG1 asserts it is false** (no false completion). Additive field; flag-off outcomes unchanged.
+- **C1 cannot be measured on real runs until a read-only loadout/grant exists**: every builtin loadout grants `edit/write/bash`, so with the flag on, builtin-loadout failures still take the legacy global block. This is the deliberate safe trade-off (a failed writer may leave partial workspace changes; no edge ≠ independent).
 - Batches and `Promise.all` barrier unchanged (DG2 is a later PR).
-- Tests `test/subagent-lane-failure-scope.test.ts`: flag-off legacy, DG1 (doc counterexample: A→B, C→D, only A fails ⇒ B blocked, C and D complete, overall NOT complete), DG1 transitive, DG3 join, DG4 writer, unsettled keeps global block + permit, all-complete. Failing-first verified (DG1×2 fail without launcher change).
+- Tests `test/subagent-lane-failure-scope.test.ts`: flag-off legacy, DG1 (doc counterexample: A→B, C→D, only A fails ⇒ B blocked, C and D complete, overall NOT complete), DG1 transitive, DG3 join, DG4 writer, empty writeSet + `bash` lane fails ⇒ next batch blocked, unsettled keeps global block + permit, all-complete. Failing-first verified (DG1×2 fail without launcher change).
 - Bars: 8/8 new (adds: empty writeSet + `bash` lane fails ⇒ next batch blocked) + 48/48 existing lane tests (0 writer-conflict / unsettled-permit regressions); flag-off outcomes identical on the legacy fixture.
 
 ## 3. A1 — skill admission
 
 - `SkillAdmissionLedger` (pure, owned by `AgentSession`) persisted as a **new versioned session entry type** `skill_admission` (Tech Lead 2026-10-22), each record `{ schemaVersion: 1, policyRevision, skillId, digest (sha256 of body), source, status: "reserved"|"admitted"|"released" }` plus `origin` and `requestId`; session-level `cap: 10`, optional `legacyOverCap: true`:
-  `{ schemaVersion: 1, policyRevision, cap: 10, entries: [{ skillId, source, digest(sha256 of body), origin: "settings"|"explicit"|"harness"|"steer"|"followUp"|"read"|"worker", state: "reserved"|"admitted", requestId }], legacyOverCap?: true }`.
 - `reserve(skillId, digest)` is synchronous (single JS turn ⇒ atomic): counts `reserved + admitted`; same `(skillId, source, digest)` ⇒ no new slot; new digest ⇒ new slot. Returns `{ok:false, reason:"cap"}` at 10.
 - `commit(requestId)` when the provider request is built; `release(requestId)` only when failure before send is certain.
 - Restored from session entries after resume and compaction (and model switch); **never reset to 0 by any path** — pinned by SK1/SK2/SK5 tests. Missing ledger + history of >10 bodies ⇒ `legacyOverCap`, new admissions refused.
@@ -57,13 +57,14 @@ All six SHA-256 values in doc §A.4 match main (files unchanged since 741ac1c4).
 - Flag off ⇒ byte-identical provider requests to main.
 
 Tests (`test/suite/` because it is session code): SK1 6+3+5 ⇒ 10 admitted + reasons; **SK2** 9 admitted, two concurrent new reads ⇒ exactly 1 ok; SK3 cross-path; SK4 dedupe/alias/new digest; **SK5** resume + compaction + model switch keep count; SK7 legacy; flag-off byte equality.
-PREREG bars: SK1–SK7 deterministic pass 100%; 0 cap violations across 200 randomized interleavings (seeded); flag-off request bytes identical.
+PREREG bars: SK1–SK7 deterministic pass 100%; flag-off request bytes identical. **Invariant check** (not a reliability claim): 200 seeded randomized reserve/commit/release interleavings must show 0 cap violations; 0/200 only bounds the per-interleaving violation rate at ≈1.5% (95% upper, rule of three), so it is a regression guard, not evidence of correctness.
 
 ## 4. D1 — evidence lifecycle, observe-only
 
 - `OMK_EVIDENCE_LIFECYCLE=observe`: register managed artifacts (recall, read spill, tool-bash log, executor `fullOutputPath`) with `{artifactId, producer, bytes, holds[]}`; emit counts/bytes/hold reasons only (0 raw bytes in trace). **No deletes**, existing pruners untouched.
 - Prerequisite fix recorded for PR 6: `nextAttempt()` reuses paths after deletion (`goal-output-recall.ts:118`) ⇒ needs monotonic id before any deletion ships.
-- Bar: trace has 0 raw bytes; EV10 (verified-run GC/evidence/publish) unchanged.
+- Observed metrics (counts only): artifacts registered, bytes, hold reasons, and **share of artifacts whose hold reason is `unknown`** (no producer/consumer mapping) — the gap D2 deletion must close first.
+- Bar: 0 deletes; trace has 0 raw bytes; EV10 (verified-run GC/evidence/publish) unchanged.
 
 ## 5. B — goal autonomy (post-freeze)
 
@@ -71,11 +72,29 @@ PREREG bars: SK1–SK7 deterministic pass 100%; 0 cap violations across 200 rand
 - Intent wiring: goal created only for explicit execution requests (existing `/goal` path, plus an opt-in intent classifier behind the same flag); scope = approved acceptance contract revision + command set.
 - Hard stops: round cap (existing `maxRounds`, default 8, not raisable by the model), budget, user steer/cancel, **outcome-unknown side effect ⇒ stop, never blind retry (AU4)**, contract/target change ⇒ re-approval (AU3).
 - **Primary metric: false-completion rate** (reported complete, fails independent grading; both denominators). Secondary only: duplicate-confirmation count. A drop in confirmations with any rise in false completion = fail.
-- PREREG bar (paired, same model/budget, ≥20 tasks): false completion not higher than baseline (upper CI bound of difference ≤ 0); AU1–AU4 deterministic 100%.
+- PREREG bar — **non-inferiority**, fixed before measuring:
+  - H0: FC(autonomy) − FC(baseline) ≥ δ. Margin **δ = +5pp false-completion (placeholder — pending 인호 decision)**.
+  - Unit: task, paired (same task, model, provider, effort, tools, budget in both arms); repeats are not independent tasks.
+  - CI: paired proportion difference, Tango score interval (Newcombe paired hybrid score as cross-check), one-sided 95%. Pass iff upper bound < δ.
+  - Task count rationale: n ≈ (z₀.₉₅ + z₀.₈)² · p_disc / δ² with assumed discordance p_disc ≈ 0.10 ⇒ (1.645+0.842)²·0.10/0.05² ≈ 250 paired tasks; a pilot re-estimates p_disc, then n is frozen before the main run.
+  - Paid-run **$ cap: pending 인호 decision**; no paid run before it is posted.
+  - AU1–AU4 deterministic 100%.
 
-## 6. Tech Lead rulings
-Resolved (Tech Lead, 2026-10-22 KST): (1) non-writing = empty writeSet AND no edit/write/bash, unknown ⇒ writer; (2) A1 ledger = new versioned session entry type; (3) `allLanesCompleted` on `LaunchSubagentLanesResult`.
-#206 merged; C1 is based on post-#206 main.
+## 6. Default-on promotion (each needs its own separate PREREG; nothing here promotes)
+
+| Item | §12.1 metrics required | Notes |
+|---|---|---|
+| C1 | DAG: unrelated-branch blocks, resource conflicts, stale-result rejections, unsettled reservations remaining; 검증 완료율; 거짓 완료 | needs a read-only loadout/grant first (else unmeasurable, §2) |
+| A1 | 스킬: unique admissions, real body tokens, cap/budget refusals, resume match rate; 검증 완료당 비용; 거짓 완료 | cap 10 is a contract, so promotion judges no-regression, not gains |
+| D1 | EVIDENCE: created/retained bytes, hold reasons, unknown-hold share, unexpected absence; 전체 자원 (disk) | observe-only; deletion (D2) is a separate spec |
+
+Promotion requires 0 cap violations, 0 permission widening and 0 required-evidence loss, plus the separate PREREG's bar.
+
+## 7. Decisions (recorded; were open questions Q1–Q3)
+- **D-Q1** (Tech Lead, 2026-10-22 KST): a lane is non-writing only if declared `scheduler.writeSet` is empty AND its grant has no `edit`/`write`/`bash`; unknown/missing `writeSet` ⇒ writer. Builtin loadouts all have these tools ⇒ C1 does not fire for them until a read-only grant exists. Pinned by the empty-writeSet + `bash` test.
+- **D-Q2**: A1 ledger = new versioned session entry `skill_admission` v1; restored on resume; never reset by compaction or model switch.
+- **D-Q3**: `allLanesCompleted` is a field on `LaunchSubagentLanesResult`; DG1 asserts overall incomplete.
+- #205/#206 merged; both branches merged `origin/main` @ `f1920f4dad` (merge commits, no rebase).
 
 ## Appendix — source doc §10 and §11.1, verbatim (fixed before measuring)
 
