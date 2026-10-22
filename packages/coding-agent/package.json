@@ -1,7 +1,7 @@
 {
 	"name": "open-multi-agent-kit",
 	"version": "1.5.6",
-	"description": "OMK (Open Multi-Agent Kit) coding agent CLI with read, bash, edit, write tools and session management",
+	"description": "Open-source TypeScript coding agent for the terminal. Switch models mid-session; finish goals only when your test passes.",
 	"type": "module",
 	"omkConfig": {
 		"name": "omk",
@@ -88,7 +88,15 @@
 		"llm",
 		"cli",
 		"tui",
-		"agent"
+		"agent",
+		"multi-agent",
+		"ai-agents",
+		"coding-assistant",
+		"terminal",
+		"typescript",
+		"mcp",
+		"local-llm",
+		"developer-tools"
 	],
 	"author": "Mario Zechner",
 	"license": "MIT",
@@ -99,5 +107,9 @@
 	},
 	"engines": {
 		"node": ">=22.19.0"
+	},
+	"homepage": "https://github.com/dmae97/omk#readme",
+	"bugs": {
+		"url": "https://github.com/dmae97/omk/issues"
 	}
 }
