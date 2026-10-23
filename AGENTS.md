@@ -102,6 +102,24 @@ reuses an existing API implementation, plus the wider matrix (`tokens`, `abort`,
 live-credential cases behind `describe.skipIf` on that provider's own environment
 variable so a keyless run still passes.
 
+## Autonomous development mode (24/7)
+
+The repository owner runs agent teams on this repo in continuous autonomous mode. Agents
+keep working without asking for a per-step OK: open branches and PRs, push work branches,
+review, and merge.
+
+Still required in this mode:
+
+- Merge only after the reviewer approved the current head SHA and CI is green. Use a merge
+  commit pinned to that SHA (`gh pr merge N --merge --match-head-commit <sha>`). Any head
+  change needs a new review.
+- After a PR is open, never rebase, amend, or force-push; update it by merging `main` in.
+- One concern per PR. No new dependency without review. Never skip or bypass CI, and do not
+  edit workflow files without the owner's OK.
+- Tags, GitHub Releases, and npm publish happen only when the owner says to release.
+  Paid benchmark runs wait for a dollar cap the owner sets.
+- Never commit, log, or echo secrets.
+
 ## Git and safety
 
 - Multiple sessions may share this working tree. Stage only files you changed, by explicit
