@@ -63,6 +63,8 @@ export function buildTrajectory({ events, runLog, agentVersion, inputHashes = {}
 	const eventLog = []; // one entry per input event, in order
 	let header;
 	let sessionInfo;
+	let activeInfo; // latest omk_session_info seen so far (seq 1 or a later change)
+	const sessionInfoChanges = []; // spec 112 seq >= 2 lines, verbatim (masked later)
 	const agentSteps = [];
 	const llmLines = (runLog[LLM_CALL] ?? []).map((line, index) => ({ line, index }));
 	const leadLines = llmLines.filter((l) => !isWorker(l.line));
@@ -82,7 +84,17 @@ export function buildTrajectory({ events, runLog, agentVersion, inputHashes = {}
 		}
 		if (ev?.type === "omk_session_info" && !sessionInfo) {
 			sessionInfo = ev;
+			activeInfo = ev;
 			eventLog.push({ ref: "sessionInfo" });
+			return;
+		}
+		if (ev?.type === "omk_session_info") {
+			// Spec 110 follow-up: a re-emitted line (system prompt / tools changed). ATIF has no
+			// slot for a mid-run system prompt change, so keep it under extra.omk and tag the
+			// agent steps that ran under it (below).
+			activeInfo = ev;
+			sessionInfoChanges.push(ev);
+			eventLog.push({ ref: "sessionInfoChange", index: sessionInfoChanges.length - 1 });
 			return;
 		}
 		const m = ev?.type === "message_end" ? ev.message : undefined;
@@ -110,6 +122,7 @@ export function buildTrajectory({ events, runLog, agentVersion, inputHashes = {}
 					thinkingLengths: reasoning.lengths,
 				},
 			};
+			if (activeInfo) step._activeInfo = activeInfo;
 			agentSteps.push(step);
 			eventLog.push({ ref: "step", step: step.step_id });
 			return;
@@ -188,6 +201,16 @@ export function buildTrajectory({ events, runLog, agentVersion, inputHashes = {}
 		if (next) assign(step, next);
 	}
 
+	// Tag agent steps with the session info they ran under, only when the run had a change,
+	// so runs without seq >= 2 lines export byte-identically to before.
+	for (const step of agentSteps) {
+		const info = step._activeInfo;
+		delete step._activeInfo;
+		if (sessionInfoChanges.length && info) {
+			step.extra.omk.sessionInfo = { seq: info.seq ?? null, systemHash: info.systemHash ?? null, toolsHash: info.toolsHash ?? null };
+		}
+	}
+
 	const sum = (key) => agentSteps.reduce((acc, s) => acc + (s.metrics?.[key] ?? 0), 0);
 	const modelName = firstLead?.model ?? agentSteps.find((s) => s.model_name)?.model_name;
 	const agent = { name: "omk", version: agentVersion };
@@ -222,6 +245,7 @@ export function buildTrajectory({ events, runLog, agentVersion, inputHashes = {}
 					? omit(sessionInfo, typeof sessionInfo.systemPrompt === "string" ? ["systemPrompt", "tools"] : ["tools"])
 					: null,
 				sessionInfoTools: sessionInfo && "tools" in sessionInfo ? sessionInfo.tools : undefined,
+				...(sessionInfoChanges.length ? { sessionInfoChanges } : {}),
 				eventLog,
 				hasLlmCallLog: LLM_CALL in runLog,
 				unmatchedLlmCalls: [...unmatched].map((l) => ({ line: l.index, record: l.line })),
