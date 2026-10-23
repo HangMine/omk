@@ -683,7 +683,7 @@ export default function (omk: ExtensionAPI) {
 		resolveTimeoutMs: (ctx) => (ctx.thinkingLevel === "ultra" ? 0 : undefined),
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			spawningSessionId = ctx.sessionManager.getSessionId();
+			spawningSessionId = ctx.sessionManager?.getSessionId?.();
 			const agentScope: AgentScope = params.agentScope ?? "user";
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const selectedModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
