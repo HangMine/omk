@@ -76,8 +76,10 @@ that are applied without reading reference files, so G2 is reported with that ca
 
 Run the observe log on the A/B baseline (main, all flags off, `OMK_SKILL_SELECT` as in the current baseline), TB 4.0 66 tasks. Implement only when:
 
-- G1 (flag-off base runs): count tasks with >= 1 candidate `wouldLoad: true` whose `nameSha256` has **no** `read` line in that session. Pass if >= 3 tasks. (Auto-load would deliver something the model never fetched itself.)
-- G2 (A/B treatment arm, upper bound): unused-load rate = loaded skills never used in that session / loaded skills (`loaded: true`), pooled over tasks with a task-clustered 95% CI. Proposed bar: **<= 50%** (**Tech Lead to confirm**). Over the bar ⇒ auto-load is not promoted even if pass rate holds. Flag-off runs report the same ratio over `wouldLoad: true` as a preview.
+- G1 (flag-off base runs, pinned to one main commit after `5d22c0f32c`, recorded in the report; G2's flag-off preview uses the same commit): count tasks with >= 1 candidate `wouldLoad: true` whose `nameSha256` has **no** `read` line in that session. Pass if >= 3 tasks. (Auto-load would deliver something the model never fetched itself.)
+- G2 (A/B treatment arm, **report-only in the first A/B; not a pass/fail gate**): unused-load rate = loaded skills never used in that session / loaded skills (`loaded: true`), pooled over tasks with a task-clustered 95% CI. Flag-off runs report the same ratio over `wouldLoad: true` as a preview.
+  - Calibration: the upper bound is set from the first A/B, before the second measurement. Reference = share of strong picks (`wouldLoad: true`) the model itself read in the flag-off runs. Caveat: with auto-load the body is already in the prompt, so re-reads understate use; the read-based part of "used" is biased toward "unused" in the treatment arm, and the bound must allow for that.
+  - "Used" keeps both signals: a `read` line, or a tool call on a path under the skill folder (`pathHash` match).
 - G3: 0 prompts with `wouldExceedBudget = true` among G1 tasks, or the budget drop rule is tested first.
 
 Count by task (lead + workers grouped via `parentSessionId`). Under 3 ⇒ parked as weak evidence, reported as such.
@@ -108,7 +110,7 @@ If no task has any skill candidate on TB 4.0, the spec is parked.
 - AL7: worker gets only parent-selected admitted paths via `--skill`; worker auto-load and suggest stay off even with the flag set in the parent env.
 - Run log: `prompt` lines carry `band`, `wouldLoad`, `loaded`, `nameSha256` per candidate; a `read` of a skill file yields one `read` line joinable by `nameSha256`; ambiguous ⇒ `wouldLoad: false`; flag off ⇒ `loaded: false` everywhere. G1 and G2 counts recomputed from a fixture log match expected numbers.
 - Run log: written only with `OMK_RUN_LOG_DIR`; no field contains skill name, path or text (assert no string field > 64 chars except hashes; names of fixture skills never appear); counter bounded (1000 sessions).
-- No new package in `package.json`/lockfile (diff check).
+- Dependencies: no test on `package.json`/lockfile; Library Scout checks deps via `git diff` per implementation PR.
 - Existing: SK1–SK7 suites, `skill-selector`, `prompt-skill-message`, `skill-search-gate` tests unchanged and green.
 
 ## 7. Decisions (Tech Lead, 2026-10-23 KST)
