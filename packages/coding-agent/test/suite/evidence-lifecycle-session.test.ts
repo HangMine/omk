@@ -115,7 +115,10 @@ describe("spec 106 D1 session sink", () => {
 		const a = await createHarness();
 		const b = await createHarness();
 		harnesses.push(a, b);
-		const big = "head -c 120000 /dev/zero | tr '\\0' a";
+		// Many short lines: the executor's rolling buffer may drop leading pipe chunks, and what it keeps
+		// (>= ~36 KB) must still trip truncateTail. A single 120 KB line could leave < 50 KB and no spill
+		// depending on how the pipe chunked it (flaky under load); >2000 kept lines always truncates.
+		const big = "seq 1 40000";
 		const outputs: string[] = [];
 		for (const [harness, runs] of [
 			[a, 1],

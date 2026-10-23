@@ -37,6 +37,25 @@
 
 ---
 
+A lightweight, MIT-licensed coding agent for your terminal. Switch models in
+one session, add subagents when you need them, and mark a goal done only when
+your own check passes.
+
+Requires Node.js 22.19 or newer:
+
+```bash
+npm install -g open-multi-agent-kit --ignore-scripts
+cd your-project
+omk
+```
+
+The first run opens `/login` (subscription, API key, or local model). To try it
+without a global install: `npx --ignore-scripts open-multi-agent-kit`.
+Details in [Quick start](#quick-start).
+
+<!-- TODO: terminal demo GIF goes here (install, `omk`, a `/goal verify` run passing).
+     Record a real session; do not use a mock-up. -->
+
 ## Why OMK
 
 An AI saying “done” is not an acceptance check. With `/goal verify`, you choose
@@ -86,18 +105,19 @@ flowchart LR
 
 ## Quick start
 
-Install the standalone binary (no Node.js needed; the installer verifies the
-release's `SHA256SUMS` and refuses a mismatch), then start in your repository:
+Install from npm (Node.js 22.19 or newer), then start in your repository:
 
 ```bash
-curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+npm install -g open-multi-agent-kit --ignore-scripts
 cd your-project
 omk
 ```
 
-With Node.js 22.19 or newer you can use npm instead:
-`npm install -g open-multi-agent-kit --ignore-scripts`, or run
-`npx --ignore-scripts open-multi-agent-kit` without a global install.
+Or run `npx --ignore-scripts open-multi-agent-kit` without a global install.
+
+<!-- TODO: a standalone binary installer (install.sh with SHA256SUMS) is planned,
+     but the latest release has no install.sh asset yet. Add it back here once
+     https://github.com/dmae97/omk/releases/latest/download/install.sh resolves. -->
 
 1. On a first run OMK opens `/login` for you: sign in with a subscription or an
    API key. An existing Claude Code or Codex CLI login can be reused with
@@ -236,7 +256,7 @@ rather than the published npm package. It is not an official leaderboard result.
   to start in that task's working directory. Two transient provider errors were
   retried; no trial was excluded.
 - OMK failed all three `pytorch-model-recovery` trials because the CLI rejected
-  an instruction starting with `- ` (fixed in #84). Without that
+  an instruction starting with a dash and a space (fixed in #84). Without that
   task the difference is +5.4 pp [0.0, +10.7].
 - Not a leaderboard run: 3 trials instead of the official 5, our own network
   allowlist and apt cache proxy, and OMK alone had 150 s extra for a workspace
@@ -409,34 +429,6 @@ setting off the prompt is byte-identical to one built without a corpus.
 
 </details>
 
-## OMK + AdaptOrch
-
-<a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk">
-  <img
-    src="readmeasset/adaptorch/omk-adaptorch-banner.svg"
-    alt="OMK writes and runs code. AdaptOrch checks what it wrote. correctness_claim: false — it ran, and this is what happened."
-    width="100%"
-  />
-</a>
-
-OMK is this local, MIT-licensed coding agent. AdaptOrch is a separate
-proprietary evidence service. Neither requires the other: installing OMK does
-not create an AdaptOrch account or make calls to it by default.
-
-For an optional integration, see the [WPL package and clients](packages/adaptorch-wpl/README.md)
-and [MCP setup](packages/coding-agent/docs/mcp.md). The WPL package exposes
-state, client, and adjudication primitives, not an automatic verification loop
-for every CLI prompt.
-
-AdaptOrch's reports carry `correctness_claim=false`; they are not semantic
-correctness proofs or OMK harness benchmark results.
-[Review AdaptOrch plans](https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk#pricing)
-· [Claim boundary](https://adaptorch.com/claim-boundary?utm_source=github&utm_medium=readme&utm_campaign=omk)
-
-<sub>The AdaptOrch name and marks identify that separate proprietary product
-and appear here with permission. They are excluded from this repository's MIT
-grant — see [TRADEMARKS.md](TRADEMARKS.md).</sub>
-
 ## Prior art
 
 <details>
@@ -478,7 +470,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.5](.github/RELEASE_NOTES_v1.5.5.md)
+- [Release notes for v1.5.6](.github/RELEASE_NOTES_v1.5.6.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -569,6 +561,33 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.6
+
+### Added
+
+- Lane ready frontier behind `OMK_LANE_READY_QUEUE=1` (default off). A lane starts as soon as its dependencies finish, up to the lane-width limit. Frontier counts are logged to `subagent-lane-frontier.jsonl` (#212).
+- Lane failure scope behind `OMK_LANE_FAILURE_SCOPE=1` (default off). A lane that fails without writing anything blocks only its descendants. Adds `allLanesCompleted` (#208).
+- The edit tool records which match stage succeeded, or why matching failed, in the run log. This only observes; edit behavior is unchanged. Subagent workers inherit the parent session id through `OMK_RUN_LOG_PARENT_SESSION` (#235).
+- Session skill admission behind `OMK_SKILL_ADMISSION` (`1`, `true` or `on`; default off). A session admits at most 10 unique skill bodies, and the count survives resume and compaction. It covers explicit, steer and follow-up skill loads, `SKILL.md` reads through the `read` tool, and skills handed to workers; workers start with `--no-skills` and get only admitted skills (#209, #210). Not gated yet: reading `SKILL.md` through bash, and `SKILL.md` reads inside a worker.
+- Evidence lifecycle observe-only mode behind `OMK_EVIDENCE_LIFECYCLE=observe` (default off). It reports what would be deleted and deletes nothing; the trace stores only hashes and counts (#211).
+
+With all four flags off, behavior is the same as 1.5.5.
+
+### Fixed
+
+- The required-tools contract listener no longer leaks or fires twice on dispose and re-install (#204).
+- `npm run check` exits 0 again (#206).
+- Bash output now reports `truncated: true` when leading chunks were dropped; before, it could say `truncated: false` after losing the start of the output (#224).
+- Diagnostics after `edit` and `write` no longer return stale cached results, and file paths are matched exactly (#226).
+- A flaky evidence-lifecycle two-session test is stable again (#222).
+
+### Changed
+
+- Design specs added, not implemented: 107 edit diagnostics (#225), 108-1 pi dependency inventory with a regeneration check script (#229), 109 single-binary distribution (#228), 110 ATIF trajectory export (#231), 111 finish-confirm gate (#230), 112 JSON session info (#234).
+- The trademark notice moved out of `LICENSE`, so GitHub detects the MIT license. AdaptOrch logo files moved to `readmeasset/adaptorch/` with a `NOTICE` saying they are not MIT-licensed (#205).
+
+Release notes live in [RELEASE_NOTES_v1.5.6.md](.github/RELEASE_NOTES_v1.5.6.md).
+
 ## Release v1.5.5
 
 ### Behavior change (security)
@@ -616,24 +635,6 @@ Release notes live in [RELEASE_NOTES_v1.5.5.md](.github/RELEASE_NOTES_v1.5.5.md)
 
 Release notes live in [RELEASE_NOTES_v1.5.4.md](.github/RELEASE_NOTES_v1.5.4.md).
 
-## Release v1.5.3
-
-### Fixed
-
-- Skill search now passes the active TODO kind to metacon ranking. The `phase` input existed in the ranker and run log but `SkillSearchGate` never supplied it, so ranking and `phaseSource` always reported the `task` default.
-- Concurrent attachment previews now share one in-flight Photon decode. A second repaint of the same active attachment no longer allocates another full-resolution image and resized RGBA buffer; a dropped draft still releases its entry through the existing `WeakMap`.
-- Reading a run journal now retries a torn tail as a concurrent change instead of reporting `integrity`. A live writer appending one record can be observed between its size/ctime check and the read, so a reader could see a partial final line; `readRunJournal` retries that bounded window and still fails with `journal_truncated` once the retries are exhausted. Middle-file corruption keeps reporting `integrity`.
-
-### Tests
-
-- Two compaction tests pin a 1 ms retry backoff instead of inheriting the default 5-attempt, 2 s-base policy. The retry path and assertions are unchanged; without the pin they waited about 62 s for a 503 and exceeded the 30 s Vitest timeout, which failed CI on every run since the default changed in 1.5.1.
-- `verified-run.test.ts` gives its fixture 30 s of work and verify budget and derives the "past the work deadline" clock from that budget. The old 3 s budget also bounded process spawn, so a loaded host spent it before the writer ran and the suite reported `deadline`; the timeout behavior keeps its own test with `workMs: 100`.
-- `verified-run-authority-restart.test.ts` uses a 60 s grant TTL. Its fixtures assert restart quarantine, not expiry, and a 1 s TTL let a loaded host expire the grant before `dispatchIntent()` committed. Expiry stays pinned deterministically in `verified-run-authority-store.test.ts`.
-- `memory-factorial` waits up to 30 s for the host clock instead of 5 s. A WSL2 time resync can hold `Date.now()` for seconds while `performance.now()` advances; the store's real-clock guard and the test's future-dated-memory assertions are unchanged.
-- The `journal-read-retry` mutator writes each record with one `pwrite` call, so the fixture only produces the two valid journal states it claims to produce. The reader-side retry above is what makes the live-writer assertions hold without weakening them.
-
-Release notes live in [RELEASE_NOTES_v1.5.3.md](.github/RELEASE_NOTES_v1.5.3.md).
-
 <!-- releases:end -->
 
 </details>
@@ -664,6 +665,12 @@ MIT-licensed coding-agent harness — and began from the
 removed in this release line; OMK `0.9x` is OMK-native (see
 [`specs/constitution.md`](specs/constitution.md)), and the design debt to both
 projects stands. Thank you.
+
+## OMK + AdaptOrch
+
+AdaptOrch is a separate, optional product and is not called by default. See
+[OMK + AdaptOrch](packages/coding-agent/docs/omk-adaptorch.md) for the optional integration and
+[TRADEMARKS.md](TRADEMARKS.md) for the name and marks.
 
 ## License
 
