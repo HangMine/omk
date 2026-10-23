@@ -2,10 +2,6 @@
 
 ## [Unreleased]
 
-### Added
-
-- Head + tail bash output behind `OMK_EXEC_TRUNCATE_MIDDLE=1` (default off). Long agent bash output keeps the start and the end with a marker line in the middle, inside the same 50KB / 2000-line budget. With the flag off, bash output is unchanged (spec 113).
-
 ## [1.5.6] - 2026-10-22
 
 ### Added
