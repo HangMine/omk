@@ -92,7 +92,7 @@ Rules:
 
 ### Flag off
 
-Byte-identical to the A/B baseline (main at or after `a5127044a9`): same match result, same
+Byte-identical to the A/B baseline (main after spec 107 PR #250 (`OMK_EDIT_DIAGNOSTICS`, head `173ecc8185`) merges; the same main SHA as the 107 A/B): same match result, same
 error strings, same diff/details, same tool description and schema. Today's normalized stage
 (trim-end + Unicode) stays as is.
 
@@ -172,7 +172,7 @@ models only (script `indent_only_count.mjs`).
 
 Owner: Bench Analyst; method: Agent Researcher (shared 107 rules).
 
-1. Build A = main **at or after `a5127044a9`** (D7), B = spec 114 head, in two dirs of equal
+1. Build A = main **after spec 107 PR #250 (`OMK_EDIT_DIAGNOSTICS`, head `173ecc8185`) merges** (D7), B = spec 114 head, in two dirs of equal
    path length, same Node 22, `env -u TYPESAFE_API_KEY`, `OMK_TRUST_PROJECT=0`, temp HOME.
 2. **Diff the first request payload first** (one task, B flag on). Must be identical (tool
    description unchanged); any diff stops the A/B.
@@ -197,6 +197,6 @@ Owner: Bench Analyst; method: Agent Researcher (shared 107 rules).
   mixed tabs/spaces → fail, don't edit.
 - **D5** Tool description unchanged; first-request payload diff must be 0.
 - **D6** v1 records the match stage in the run log only, not in the tool result.
-- **D7** A/B baseline SHA = main at or after `a5127044a9`.
+- **D7** A/B baseline SHA = main after spec 107 PR #250 (`OMK_EDIT_DIAGNOSTICS`, head `173ecc8185`) merges; the same main SHA is used for the 107 A/B.
 - **D8** Code ported from Codex `seek_sequence.rs` counts as porting: Apache-2.0 source header at
   the top of the file and a `NOTICE` entry in the same PR (create root `NOTICE` if missing).
