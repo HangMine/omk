@@ -53,7 +53,7 @@ Target `schema_version: "ATIF-v1.8"` (the model default; accepted values `ATIF-v
 | LLM calls per assistant step | `Step.llm_call_count` | never 0 on a step with `metrics` (v1.7 rule) |
 | sum over steps | `Trajectory.final_metrics{total_prompt_tokens, total_completion_tokens, total_cached_tokens, total_cost_usd, total_steps}` | |
 | other run-log files (`finish-check`, `deliverable-guard`, `skill-select`, `quota-no-retry`, spec 107 diagnostics, unknown names) | `Trajectory.extra.omk.runLog["<name>"]` = raw lines, verbatim | lossless catch-all |
-| worker (`role: worker`) runs | `Trajectory.subagent_trajectories[]` (unique `trajectory_id` required) + `ObservationResult.subagent_trajectory_ref` | Q2 |
+| worker (`role: worker`) `llm-call` lines | `Trajectory.extra.omk.workerLlmCalls` (verbatim) | v1: no `subagent_trajectories`; see Q2 |
 | exporter version, input file hashes | `Trajectory.extra.omk.export` | |
 
 Rules: `Step.step_id` sequential from 1 (`validate_step_ids`). `model_name`,
@@ -64,7 +64,7 @@ nearest `extra` so nothing is dropped and nothing collides.
 ## Where it lives
 
 `scripts/bench/atif-export.mjs` (next to `scripts/tb-mini-suite.mjs`), run as
-`node scripts/bench/atif-export.mjs --events <events.jsonl> --run-log <dir> --out <trajectory.json>`.
+`node scripts/bench/atif-export.mjs --events <events.jsonl> --run-log <dir> [--mask-env-names A,B] --out <trajectory.json>`.
 Not imported by any package, not in any `dependencies`, not shipped in the npm tarball.
 No new npm deps (Node built-ins only).
 
@@ -77,13 +77,26 @@ validation date.
 
 ## Redaction
 
-- Before writing, scan every string value for: values of `TYPESAFE_API_KEY` and every
-  other env var whose name matches `/KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i`; replace with
-  `[REDACTED:<NAME>]`. Other env values are not masked.
-- Pattern pass for common key shapes (`sk-`, `xai-`, `ghp_`, `Bearer ...`).
+- The exporter runs on the host (Q6 decision), so the host env alone does not know every
+  agent-side secret. Before writing, scan every string value (object keys included, and the
+  whole `extra.omk` tree, `extra.omk.eventLog` included) for: values of `TYPESAFE_API_KEY` and
+  every other env var whose name matches `/KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i`, plus every
+  name listed in `--mask-env-names A,B` or `OMK_ATIF_MASK_ENV_NAMES="A,B"` (secret names from
+  the agent environment; values are read from the exporter's environment); replace with
+  `[REDACTED:<NAME>]`. Env values shorter than 8 characters are skipped (flags like `1`
+  would shred unrelated text). Other env values are not masked.
+- Secrets that exist only inside the container are out of scope for v1: bench runs pass keys
+  from the host, so the host has the values. An env-file handoff is a follow-up only if a real
+  case turns up.
+- Pattern pass for common key shapes -> `[REDACTED:PATTERN]`: `sk-`, `xai-`,
+  `ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_` and `github_pat_`, each followed by at least 16
+  characters from `[A-Za-z0-9_-]` (so `sk-learn` is not masked); `Bearer <token>` at any
+  length. The post-write rescan uses the same patterns. The 8-character minimum applies to
+  env values only.
 - Never copy `process.env` into output; never log redacted values.
 - Masking is the only allowed lossy step in the export.
-- The exporter fails (exit 2) rather than writing, if a post-write rescan still finds a hit.
+- The exporter fails (exit 2) and removes the output file, rather than leaving it, if a
+  post-write rescan (same env values, names and patterns) still finds a hit.
 
 ## Success criteria
 
@@ -94,7 +107,7 @@ validation date.
    0 fields lost. The no-slot fields listed above are checked by name.
 2. In the bench environment only, Harbor's own validator (`trajectory_validator.py` /
    `Trajectory.model_validate`) accepts 100% of trajectories exported from the fixture set
-   (>= 3 fixtures: plain, tool error, worker subagent). In omk CI, the exporter's output for
+   (>= 3 fixtures: plain, tool error, worker lines). In omk CI, the exporter's output for
    the sample input must structurally match the checked-in validated sample ATIF file.
 3. Counts match the run log: matched + unmatched (`extra.omk.unmatchedLlmCalls`) ==
    total lead `llm-call` lines; total
@@ -122,11 +135,18 @@ logging (if Q1 needs a new log field, that's a separate spec).
 - **Q1 system prompt:** use the full system prompt text from the event stream as the first
   step (`source:"system"`); the masking pass applies. If absent, emit a hash placeholder step
   with the reason in `extra.omk`. The run log is unchanged.
-- **Q2 workers:** embedded in the same file as `subagent_trajectories`.
+- **Q2 workers:** out of scope for v1: no `subagent_trajectories`. Worker `llm-call` lines
+  are kept verbatim in `extra.omk.workerLlmCalls`. A follow-up after spec 112 adds worker
+  event lines and maps them to `subagent_trajectories` (unique `trajectory_id` +
+  `ObservationResult.subagent_trajectory_ref`).
+- **Q6 host:** the exporter runs on the host; agent-side secret names reach it through
+  `--mask-env-names` / `OMK_ATIF_MASK_ENV_NAMES` (see Redaction).
 - **Q4 tokens:** `prompt_tokens = input + cacheRead + cacheWrite`; `cached_tokens = cacheRead`.
 - **Q5 join:** by `responseId` first, else by order. Unmatched `llm-call` lines go to
   `Trajectory.extra.omk.unmatchedLlmCalls`, never dropped.
-- **Q3, Q6:** to be confirmed from source before the implementation PR.
+- **Q3:** `--mode json` carries no tool schemas or system prompt, so `agent.tool_definitions`
+  (optional in ATIF) is omitted and the Q1 hash placeholder is used unless an
+  `omk_session_info` line (spec 112) is present.
 - **Q7:** non-blocking.
 
 ## Open questions
