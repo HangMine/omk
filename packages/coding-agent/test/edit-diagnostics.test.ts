@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -507,7 +507,9 @@ describe("checkerRan and checker versions (spec 107 pre-registration)", () => {
 		fake([]);
 		await edit("a.ts", "1", "2");
 		expect(flushEditDiagnosticsSession()).toBeUndefined();
-		expect(existsSync(logDir)).toBe(false);
+		// edit-match.jsonl is main's unflagged run-log observer (edit-match-observe.ts); only edit-diag* must be absent.
+		const files = existsSync(logDir) ? readdirSync(logDir) : [];
+		expect(files.filter((f) => f.startsWith("edit-diag"))).toEqual([]);
 	});
 
 	it("ON/shadow with zero edits or no checker-backed file: exactly one session line, checkerRan=false", async () => {
