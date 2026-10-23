@@ -170,11 +170,24 @@ describe("spec 110 masking (criterion 4)", () => {
 		}
 	});
 
-	it("masks key shapes at any length, even below the env-value minimum", () => {
-		const text = "a sk-x b xai-y c ghp_z d Bearer q e github_pat_w";
-		assert.equal(maskString(text, []), "a [REDACTED:PATTERN] b [REDACTED:PATTERN] c [REDACTED:PATTERN] d [REDACTED:PATTERN] e [REDACTED:PATTERN]");
+	it("short key-shape prefixes stay; Bearer masks at any length", () => {
+		const text = "a sk-x b xai-y c ghp_z e github_pat_w d Bearer q";
+		assert.equal(maskString(text, []), "a sk-x b xai-y c ghp_z e github_pat_w d [REDACTED:PATTERN]");
 		assert.deepEqual(rescan(maskString(text, []), []), []);
-		assert.ok(rescan("sk-1", []).length > 0, "rescan sees short key shapes too");
+		assert.ok(rescan("Bearer q", []).length > 0, "rescan sees short Bearer too");
+		assert.deepEqual(rescan("sk-1", []), []);
+	});
+
+	it("leaves sk-learn unmasked", () => {
+		assert.equal(maskString("pip install sk-learn", []), "pip install sk-learn");
+		assert.deepEqual(rescan("sk-learn", []), []);
+	});
+
+	it("masks a fake sk- key of 20+ characters", () => {
+		const key = "sk-fake_ABCDEFGHIJ-0123456789";
+		assert.ok(key.length - 3 >= 20);
+		assert.equal(maskString(`k=${key};`, []), "k=[REDACTED:PATTERN];");
+		assert.ok(rescan(key, []).length > 0);
 	});
 
 	it("masks and rescans extra.omk.eventLog (raw catch-all events)", () => {

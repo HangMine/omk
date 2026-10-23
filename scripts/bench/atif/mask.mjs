@@ -7,12 +7,15 @@
 export const SECRET_NAME = /KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i;
 /** Shorter values (flags like "1", "true") would shred unrelated text. */
 export const MIN_SECRET_LENGTH = 8;
-/** Key shapes are masked at any length; MIN_SECRET_LENGTH applies to env values only. */
+/**
+ * Key shapes: prefix + at least 16 of [A-Za-z0-9_-] (so `sk-learn` stays); Bearer at any
+ * length. MIN_SECRET_LENGTH applies to env values only. The rescan uses the same list.
+ */
 export const KEY_PATTERNS = [
-	/\bsk-[A-Za-z0-9_-]+/g,
-	/\bxai-[A-Za-z0-9_-]+/g,
-	/\bgh[pousr]_[A-Za-z0-9]+/g,
-	/\bgithub_pat_[A-Za-z0-9_]+/g,
+	/\bsk-[A-Za-z0-9_-]{16,}/g,
+	/\bxai-[A-Za-z0-9_-]{16,}/g,
+	/\bgh[pousr]_[A-Za-z0-9_-]{16,}/g,
+	/\bgithub_pat_[A-Za-z0-9_-]{16,}/g,
 	/\bBearer\s+[A-Za-z0-9._~+/=-]+/g,
 ];
 

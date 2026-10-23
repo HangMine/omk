@@ -85,9 +85,14 @@ validation date.
   the agent environment; values are read from the exporter's environment); replace with
   `[REDACTED:<NAME>]`. Env values shorter than 8 characters are skipped (flags like `1`
   would shred unrelated text). Other env values are not masked.
-- Pattern pass for common key shapes (`sk-`, `xai-`, `ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_`,
-  `github_pat_`, `Bearer ...`) -> `[REDACTED:PATTERN]`, at any length (the 8-character
-  minimum applies to env values only).
+- Secrets that exist only inside the container are out of scope for v1: bench runs pass keys
+  from the host, so the host has the values. An env-file handoff is a follow-up only if a real
+  case turns up.
+- Pattern pass for common key shapes -> `[REDACTED:PATTERN]`: `sk-`, `xai-`,
+  `ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_` and `github_pat_`, each followed by at least 16
+  characters from `[A-Za-z0-9_-]` (so `sk-learn` is not masked); `Bearer <token>` at any
+  length. The post-write rescan uses the same patterns. The 8-character minimum applies to
+  env values only.
 - Never copy `process.env` into output; never log redacted values.
 - Masking is the only allowed lossy step in the export.
 - The exporter fails (exit 2) and removes the output file, rather than leaving it, if a
