@@ -8,10 +8,18 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, normalize } from "node:path";
-import { appendRunLog, RUN_LOG_DIR_ENV, type RunLogValue } from "../run-log.ts";
+import { appendRunLog, RUN_LOG_DIR_ENV, type RunLogValue, runLogRole } from "../run-log.ts";
 import { normalizeForFuzzyMatch, normalizeToLF } from "./edit-diff.ts";
 
 export const EDIT_MATCH_RUN_LOG = "edit-match";
+/** Set by the subagent worker env (`subagentWorkerEnv`) to the spawning session's id. */
+export const RUN_LOG_PARENT_SESSION_ENV = "OMK_RUN_LOG_PARENT_SESSION";
+
+/** Lead's session id in a worker process; null for the lead or when unknown. */
+export function editParentSessionId(env: NodeJS.ProcessEnv): string | null {
+	if (runLogRole(env) !== "worker") return null;
+	return env[RUN_LOG_PARENT_SESSION_ENV]?.trim() || null;
+}
 
 export type EditMatchFailureReason = "indent_only" | "multiple_matches" | "not_found" | "unknown";
 
@@ -98,7 +106,14 @@ function write(
 ): void {
 	appendRunLog(
 		EDIT_MATCH_RUN_LOG,
-		{ event: "edit_match", seq: nextSeq(env), ts: new Date().toISOString(), sessionId, ...record },
+		{
+			event: "edit_match",
+			seq: nextSeq(env),
+			ts: new Date().toISOString(),
+			sessionId,
+			parentSessionId: editParentSessionId(env),
+			...record,
+		},
 		{ env },
 	);
 }

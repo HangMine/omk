@@ -342,6 +342,9 @@ type WorkerExtensionArgsFn = (model: string | undefined) => string[];
 /** Spec 106 SK6: the parent session's admission store for one subagent tool call, keyed by its args closure. */
 const workerSkillAdmission = new WeakMap<WorkerExtensionArgsFn, WorkerSkillAdmit>();
 
+/** Session id of the process spawning workers (set per subagent call; one session per process). */
+let spawningSessionId: string | undefined;
+
 async function runSingleAgentAttempt(
 	defaultCwd: string,
 	agents: AgentConfig[],
@@ -455,7 +458,7 @@ async function runSingleAgentAttempt(
 			command: invocation.command,
 			args: invocation.args,
 			cwd: workerCwd,
-			env: subagentWorkerEnv(childSubagentEnv(process.env), projectTrust),
+			env: subagentWorkerEnv(childSubagentEnv(process.env), projectTrust, spawningSessionId),
 			cutoffMs,
 			signal,
 			onStdout: stream.stdout,
@@ -680,6 +683,7 @@ export default function (omk: ExtensionAPI) {
 		resolveTimeoutMs: (ctx) => (ctx.thinkingLevel === "ultra" ? 0 : undefined),
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			spawningSessionId = ctx.sessionManager.getSessionId();
 			const agentScope: AgentScope = params.agentScope ?? "user";
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const selectedModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;

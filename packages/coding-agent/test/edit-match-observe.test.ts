@@ -2,12 +2,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { subagentWorkerEnv } from "../examples/extensions/subagent/worker-env.ts";
 import { RUN_LOG_DIR_ENV } from "../src/core/run-log.ts";
 import { createEditTool, createEditToolDefinition } from "../src/core/tools/edit.ts";
 import {
 	classifyEditMatchFailure,
 	EDIT_MATCH_RUN_LOG,
 	editMatchObserver,
+	editParentSessionId,
 	editPathHash,
 } from "../src/core/tools/edit-match-observe.ts";
 import { EDIT_CASES } from "./edit-match-observe-cases.ts";
@@ -143,6 +145,34 @@ describe("edit match observation: run log lines", () => {
 			expect(l.sessionId).toBe("sess-123");
 			expect(new Date(l.ts).toISOString()).toBe(l.ts);
 		}
+	});
+
+	it("worker line carries the lead's session id; lead line has parentSessionId null", async () => {
+		const savedRole = process.env.OMK_RUN_LOG_ROLE;
+		const savedParent = process.env.OMK_RUN_LOG_PARENT_SESSION;
+		try {
+			delete process.env.OMK_RUN_LOG_ROLE;
+			delete process.env.OMK_RUN_LOG_PARENT_SESSION;
+			await runCase("exact");
+			const workerEnv = subagentWorkerEnv({ OMK_RUN_LOG_DIR: logDir }, undefined, "lead-sess");
+			process.env.OMK_RUN_LOG_ROLE = workerEnv.OMK_RUN_LOG_ROLE;
+			process.env.OMK_RUN_LOG_PARENT_SESSION = workerEnv.OMK_RUN_LOG_PARENT_SESSION;
+			await runCase("not-found");
+			const [leadLine, workerLine] = logLines();
+			expect(leadLine).toMatchObject({ role: "lead", parentSessionId: null });
+			expect(workerLine).toMatchObject({ role: "worker", ok: false, parentSessionId: "lead-sess" });
+		} finally {
+			if (savedRole === undefined) delete process.env.OMK_RUN_LOG_ROLE;
+			else process.env.OMK_RUN_LOG_ROLE = savedRole;
+			if (savedParent === undefined) delete process.env.OMK_RUN_LOG_PARENT_SESSION;
+			else process.env.OMK_RUN_LOG_PARENT_SESSION = savedParent;
+		}
+	});
+
+	it("parentSessionId is null for a lead even if the variable is stray", () => {
+		expect(editParentSessionId({ OMK_RUN_LOG_PARENT_SESSION: "x" })).toBeNull();
+		expect(editParentSessionId({ OMK_RUN_LOG_ROLE: "worker" })).toBeNull();
+		expect(editParentSessionId({ OMK_RUN_LOG_ROLE: "worker", OMK_RUN_LOG_PARENT_SESSION: "p" })).toBe("p");
 	});
 
 	it("sessionId is null when the tool has no session context", async () => {
