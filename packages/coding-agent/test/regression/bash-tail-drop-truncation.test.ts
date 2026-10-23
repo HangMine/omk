@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { executeBashWithOperations } from "../../src/core/bash-executor.ts";
 import type { BashOperations } from "../../src/core/tools/bash.ts";
 import { DEFAULT_MAX_BYTES } from "../../src/core/tools/truncate.ts";
@@ -83,5 +83,28 @@ describe("bash executor tail-drop truncation", () => {
 		expect(result.truncated).toBe(false);
 		expect(result.output).toBe(line);
 		expect(result.fullOutputPath).toBeUndefined();
+	});
+
+	it("reports truncated: true, keeps the tail and the full spill file on the cancelled path too", async () => {
+		const line = `${"a".repeat(78 * 1024)}${"b".repeat(42 * 1024 - 8)}TAIL-END`;
+		const buf = Buffer.from(line);
+		const controller = new AbortController();
+		const ops: BashOperations = {
+			exec: async (_command, _cwd, { onData }) => {
+				onData(buf.subarray(0, 78 * 1024));
+				onData(buf.subarray(78 * 1024));
+				controller.abort();
+				throw new Error("aborted");
+			},
+		};
+		const result = await executeBashWithOperations("x", "/", ops, { signal: controller.signal });
+		if (result.fullOutputPath) spills.push(result.fullOutputPath);
+
+		expect(result.cancelled).toBe(true);
+		expect(result.truncated).toBe(true);
+		expect(result.output.endsWith("TAIL-END")).toBe(true);
+		expect(Buffer.byteLength(result.output, "utf-8")).toBe(DEFAULT_MAX_BYTES);
+		expect(result.fullOutputPath).toBeDefined();
+		await vi.waitFor(() => expect(readFileSync(result.fullOutputPath!, "utf-8")).toBe(line));
 	});
 });

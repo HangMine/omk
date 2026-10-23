@@ -13,6 +13,7 @@ import {
 	restoreLineEndings,
 	stripBom,
 } from "./edit-diff.ts";
+import { editMatchObserver } from "./edit-match-observe.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -138,7 +139,7 @@ export function createEditToolDefinition(
 		],
 		parameters: editSchema,
 		prepareArguments: prepareEditArguments,
-		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, _ctx?) {
+		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, ctx?) {
 			const { path, edits } = validateEditInput(input);
 			const absolutePath = resolveToCwd(path, cwd);
 			assertWorkspaceWrite(options?.workspaceRoots, "Edit", path, absolutePath);
@@ -177,12 +178,22 @@ export function createEditToolDefinition(
 				const { bom, text: content } = stripBom(rawContent);
 				const originalEnding = detectLineEnding(content);
 				const normalizedContent = normalizeToLF(content);
-				const { baseContent, newContent } = applyEditsToNormalizedContent(normalizedContent, edits, path);
+				let applied: ReturnType<typeof applyEditsToNormalizedContent>;
+				try {
+					applied = applyEditsToNormalizedContent(normalizedContent, edits, path);
+				} catch (error) {
+					// Failure path only: the classifier never runs on a successful edit.
+					editMatchObserver.logFailure(absolutePath, normalizedContent, edits, ctx);
+					throw error;
+				}
+				const { baseContent, newContent } = applied;
 				throwIfAborted();
 
 				const finalContent = bom + restoreLineEndings(newContent, originalEnding);
 				await ops.writeFile(absolutePath, finalContent);
 				throwIfAborted();
+
+				editMatchObserver.logSuccess(absolutePath, normalizedContent, edits, ctx);
 
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);
