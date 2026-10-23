@@ -8,9 +8,12 @@ import {
 } from "../../durable-goal.ts";
 import { parseDurableGoalCheckpointCommand } from "../../durable-goal-checkpoint.ts";
 import { DurableGoalStore } from "../../durable-goal-store.ts";
+import { evidenceLifecycleDeleteEnabled } from "../../evidence-lifecycle.ts";
+import { recoverEvidenceDeletions } from "../../evidence-lifecycle-delete.ts";
 import { GoalAcceptance, type GoalVerifierFactory } from "../../goal-acceptance.ts";
 import { decideGoalContinuation } from "../../goal-continuation.ts";
-import { deleteGoalRecallFiles, goalOutputRecallEnabled } from "../../goal-output-recall.ts";
+import { deleteGoalRecallFiles, goalOutputRecallEnabled, outputRecallDir } from "../../goal-output-recall.ts";
+import { rewriteRecallLinksInMessages } from "../../goal-output-recall-links.ts";
 import { goalStateDirectory } from "../../goal-verification.ts";
 import type { ExtensionAPI } from "../types.ts";
 import { GoalAcceptanceFlow, type GoalAcceptanceTestHooks } from "./goal-controller-acceptance.ts";
@@ -40,6 +43,17 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 		omk.on("tool_call", (event, ctx) => {
 			flow.recallAccess.observe(event.toolName, event.input, ctx.cwd);
 			return undefined;
+		});
+	}
+
+	// Spec 118 D2 (`delete` only): finish interrupted deletes at startup; hide deleted links on resume (EV9).
+	if (evidenceLifecycleDeleteEnabled()) {
+		omk.on("session_start", (_event, ctx) => {
+			recoverEvidenceDeletions(outputRecallDir(ctx.cwd));
+		});
+		omk.on("context", (event, ctx) => {
+			const messages = rewriteRecallLinksInMessages(event.messages, ctx.cwd);
+			return messages === undefined ? undefined : { messages };
 		});
 	}
 

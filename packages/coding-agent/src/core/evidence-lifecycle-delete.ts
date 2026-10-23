@@ -98,6 +98,14 @@ function pend(record: MutableRecord, reason: string, log?: string, sessionId?: s
 /**
  * Deletes one artifact of the current session by id. `expectedVersion` (CAS): a consumer that changed the
  * record since the caller looked wins, and nothing is deleted.
+ *
+ * G2 / EV4 consistency assumption: the registry is in-process memory and this function is fully
+ * synchronous from the eligibility check through `unlink` and the final status write (sync fs calls, no
+ * `await`, no callback). Node runs it to completion on one thread, so no consumer update, new lease or
+ * pruner can interleave between "eligible" and "deleted". Every state change bumps `record.version`, so a
+ * caller that read the record earlier (across an `await`) passes `expectedVersion` and loses with `cas` if
+ * anything changed. This does NOT cover other processes or worker threads sharing the recall dir; there,
+ * the inode/size re-check before `unlink` is the only guard. Making any step async breaks the assumption.
  */
 export function deleteEvidenceArtifact(artifactId: string, expectedVersion?: number): DeleteOutcome {
 	if (!evidenceLifecycleDeleteEnabled()) return { deleted: false, reason: "flag-off" };
@@ -203,7 +211,25 @@ export type EvidenceLookupState = "present" | "deleted_after_use" | "missing_une
 /** What a recall reader sees for `path` (EV9): a deleted artifact is never shown as a live link. */
 export function lookupEvidence(path: string): EvidenceLookupState {
 	if (evidenceRecordOfPath(path)?.status === "deleted_after_use") return "deleted_after_use";
-	return existsSync(path) ? "present" : "missing_unexpectedly";
+	if (existsSync(path)) return "present";
+	// After a restart the registry is empty: the durable deletion log is the record (EV9 on resume).
+	return loggedAsDeleted(path) ? "deleted_after_use" : "missing_unexpectedly";
+}
+
+function loggedAsDeleted(path: string): boolean {
+	const dir = dirname(path);
+	const needle = `"pathSha256":"${sha256(path)}"`;
+	try {
+		return readdirSync(dir)
+			.filter((name) => /^evidence-deletions-[0-9a-f]{16}\.jsonl$/u.test(name))
+			.some((name) =>
+				readFileSync(join(dir, name), "utf8")
+					.split("\n")
+					.some((line) => line.includes(needle) && line.includes('"event":"deleted"')),
+			);
+	} catch {
+		return false;
+	}
 }
 
 /**

@@ -1,4 +1,5 @@
 import {
+	existsSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
@@ -30,7 +31,11 @@ import {
 	resetEvidenceDeleteForTest,
 } from "../src/core/evidence-lifecycle-delete.ts";
 import { evidenceLifecycleReport } from "../src/core/evidence-lifecycle-report.ts";
-import { EVIDENCE_UNATTRIBUTED } from "../src/core/evidence-lifecycle-scope.ts";
+import {
+	EVIDENCE_UNATTRIBUTED,
+	resetEvidenceScopeForTest,
+	withEvidenceSession,
+} from "../src/core/evidence-lifecycle-scope.ts";
 import { RECALL_COUNTER_FILE, recallCounterFs } from "../src/core/evidence-recall-counter.ts";
 import {
 	deleteGoalRecallFiles,
@@ -39,6 +44,12 @@ import {
 	outputRecallDir,
 } from "../src/core/goal-output-recall.ts";
 import { observeRecallBlockedExhausted, observeRecallRecheck } from "../src/core/goal-output-recall-evidence.ts";
+import {
+	DELETED_RECALL_LINK,
+	MISSING_RECALL_LINK,
+	rewriteRecallLinks,
+	rewriteRecallLinksInMessages,
+} from "../src/core/goal-output-recall-links.ts";
 
 const SECRET = "SECRET-RAW-OUTPUT-d2-91c4";
 const roots: string[] = [];
@@ -199,7 +210,9 @@ describe("spec 118 D2 race and restart (G2, G3)", () => {
 		writeFileSync(log, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(""));
 		resetEvidenceLifecycleForTest(); // process restart: in-memory records gone
 		expect(recoverEvidenceDeletions(outputRecallDir(cwd))).toBe(1);
-		expect(lookupEvidence(a.absolutePath)).toBe("missing_unexpectedly");
+		expect(existsSync(a.absolutePath)).toBe(false);
+		// Restarted registry is empty; the durable log answers the lookup.
+		expect(lookupEvidence(a.absolutePath)).toBe("deleted_after_use");
 		expect(logLines(cwd).at(-1)).toMatchObject({ event: "deleted", reason: "recovered" });
 		expect(recoverEvidenceDeletions(outputRecallDir(cwd))).toBe(0);
 	});
@@ -379,5 +392,83 @@ describe("spec 118 D2 hold-aware pruners (G9, G13)", () => {
 		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
 		for (let i = 0; i < OUTPUT_RECALL_PER_GOAL + 2; i++) recall(cwd, "g", i);
 		expect(readdirSync(outputRecallDir(cwd)).filter((n) => n.endsWith(".log"))).toHaveLength(OUTPUT_RECALL_PER_GOAL);
+	});
+});
+
+describe("spec 118 G5 cross-session id", () => {
+	it("an id registered by another session deletes 0 files from this session", () => {
+		resetEvidenceScopeForTest();
+		const cwd = tempCwd();
+		const a = withEvidenceSession("session-a", () => {
+			const artifact = recall(cwd, "ga");
+			// a's artifact is fully eligible inside a: ACKed, verified, no hold.
+			updateEvidenceArtifact(artifact.absolutePath, {
+				consumed: ["repair-turn", "acceptance-recheck"],
+				verified: true,
+				goalActive: false,
+			});
+			return artifact;
+		});
+		const aId = listEvidenceArtifacts("session-a")[0]?.artifactId as string;
+		expect(aId).toBe("ev-1");
+		const b = withEvidenceSession("session-b", () => {
+			const own = recall(cwd, "gb"); // b's own ev-1, still held
+			expect(deleteEvidenceArtifact(aId)).toEqual({ deleted: false, reason: "hold-goal-active" });
+			observeRecallRecheck("ga", true); // b has no "ga" artifacts: nothing of a's is touched
+			return own;
+		});
+		expect(lookupEvidence(a.absolutePath)).toBe("present");
+		expect(lookupEvidence(b.absolutePath)).toBe("present");
+		expect(withEvidenceSession("session-c", () => deleteEvidenceArtifact(aId))).toEqual({
+			deleted: false,
+			reason: "not-found",
+		});
+		expect(readdirSync(outputRecallDir(cwd)).filter((n) => n.endsWith(".log"))).toHaveLength(2);
+		expect(readdirSync(outputRecallDir(cwd)).some((n) => n.startsWith("evidence-deletions-"))).toBe(false);
+		resetEvidenceScopeForTest();
+	});
+});
+
+describe("spec 118 EV9 links and restart lookup", () => {
+	it("after a restart the deletion log still reports deleted_after_use", () => {
+		const cwd = tempCwd();
+		const a = recall(cwd, "g");
+		observeRecallRecheck("g", true);
+		resetEvidenceLifecycleForTest();
+		expect(lookupEvidence(a.absolutePath)).toBe("deleted_after_use");
+		rmSync(recall(cwd, "h").absolutePath);
+		expect(lookupEvidence(join(outputRecallDir(cwd), "acceptance-h-0-1-9-00000000.log"))).toBe(
+			"missing_unexpectedly",
+		);
+	});
+
+	it("rewrites deleted and missing links, keeps present ones and non-recall lines", () => {
+		const cwd = tempCwd();
+		const deleted = recall(cwd, "g");
+		observeRecallRecheck("g", true);
+		const present = recall(cwd, "p");
+		const line = (path: string) => `Full output: ${path} (2 lines, 31B; complete)`;
+		const text = [
+			"head",
+			line(deleted.displayPath),
+			line(present.displayPath),
+			line(".omk/goals/recall/acceptance-x-0-1-1-00000000.log"),
+			line("src/other.log"),
+		].join("\n");
+		expect(rewriteRecallLinks(text, cwd).split("\n")).toEqual([
+			"head",
+			DELETED_RECALL_LINK,
+			line(present.displayPath),
+			MISSING_RECALL_LINK,
+			line("src/other.log"),
+		]);
+		const messages = [
+			{ role: "user" as const, content: line(deleted.displayPath), timestamp: 0 },
+			{ role: "user" as const, content: [{ type: "text" as const, text: line(present.displayPath) }], timestamp: 0 },
+		];
+		const next = rewriteRecallLinksInMessages(messages, cwd);
+		expect(next?.[0]).toMatchObject({ content: DELETED_RECALL_LINK });
+		expect(next?.[1]).toBe(messages[1]);
+		expect(rewriteRecallLinksInMessages([messages[1]], cwd)).toBeUndefined();
 	});
 });
