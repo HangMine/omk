@@ -2296,6 +2296,7 @@ export class AgentSession {
 		return createSubagentLaneAuthority({
 			runId: this._activeRunId ?? `session-${this.sessionManager.getSessionId() ?? "unknown"}`,
 			promptRunId: this._promptLifecycle.activePromptRunId,
+			sessionId: this.sessionManager.getSessionId() ?? null,
 			decision: this._lastResourceAdmission,
 			permitPool: this.workloadPermitPool,
 			inventory,
@@ -5343,8 +5344,7 @@ export class AgentSession {
 		const result: Array<{ entryId: string; text: string }> = [];
 
 		for (const entry of entries) {
-			if (entry.type !== "message") continue;
-			if (entry.message.role !== "user") continue;
+			if (entry.type !== "message" || entry.message.role !== "user") continue;
 
 			const text = this._extractUserMessageText(entry.message.content);
 			if (text) {
