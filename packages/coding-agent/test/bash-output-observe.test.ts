@@ -123,3 +123,28 @@ describe("bash-output run log", () => {
 		await expect(run(SMALL)).resolves.toBeDefined();
 	});
 });
+
+describe("bash-output seq LRU cap", () => {
+	it("keeps at most 1000 sessions and an active session's seq continues", async () => {
+		const { logBashOutput, bashSeqSessionCount, BASH_SEQ_SESSION_CAP } = await import(
+			"../src/core/tools/bash-output-observe.ts"
+		);
+		const env = { OMK_RUN_LOG_DIR: dir } as NodeJS.ProcessEnv;
+		logBashOutput(undefined, ctx("active"), env);
+		for (let i = 0; i < BASH_SEQ_SESSION_CAP + 50; i++) {
+			logBashOutput(undefined, ctx(`lru-${i}`), env);
+			if (i % 100 === 0) logBashOutput(undefined, ctx("active"), env);
+			expect(bashSeqSessionCount()).toBeLessThanOrEqual(BASH_SEQ_SESSION_CAP);
+		}
+		expect(bashSeqSessionCount()).toBe(BASH_SEQ_SESSION_CAP);
+		logBashOutput(undefined, ctx("active"), env);
+		logBashOutput(undefined, ctx("lru-0"), env);
+		const all = lines();
+		const active = all.filter((l) => l.sessionId === "active").map((l) => l.seq);
+		expect(active).toEqual(active.map((_, i) => i + 1));
+		// lru-0 was evicted, so its counter restarts.
+		expect(all.filter((l) => l.sessionId === "lru-0").map((l) => l.seq)).toEqual([1, 1]);
+		const last = all[all.length - 1];
+		expect([last.totalLines, last.totalBytes, last.outputBytes, last.truncated]).toEqual([null, null, null, false]);
+	});
+});
