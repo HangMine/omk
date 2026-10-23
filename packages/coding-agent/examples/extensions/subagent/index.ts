@@ -342,8 +342,8 @@ type WorkerExtensionArgsFn = (model: string | undefined) => string[];
 /** Spec 106 SK6: the parent session's admission store for one subagent tool call, keyed by its args closure. */
 const workerSkillAdmission = new WeakMap<WorkerExtensionArgsFn, WorkerSkillAdmit>();
 
-/** Session id of the process spawning workers (set per subagent call; one session per process). */
-let spawningSessionId: string | undefined;
+/** Spawning session id for one subagent tool call, keyed by its args closure (no module-global state). */
+const workerSpawningSession = new WeakMap<WorkerExtensionArgsFn, string | undefined>();
 
 async function runSingleAgentAttempt(
 	defaultCwd: string,
@@ -358,6 +358,7 @@ async function runSingleAgentAttempt(
 	onUpdate: ResultUpdateCallback | undefined,
 	workerExtensionArgs: WorkerExtensionArgsFn,
 	loopGuard: SubagentLoopGuard,
+	spawningSessionId: string | undefined,
 ): Promise<SubagentAttemptResult> {
 	const agent = agents.find((candidate) => candidate.name === agentName);
 	if (!agent) throw new Error(`Unknown agent: ${agentName}`);
@@ -548,6 +549,7 @@ async function runSingleAgent(
 		: undefined;
 	// Spec 071: always on, one guard per logical task, so resumed attempts keep the usage already counted.
 	const loopGuard = createSubagentLoopGuard();
+	const spawningSessionId = workerSpawningSession.get(workerExtensionArgs);
 	if (unbounded) {
 		return (
 			await runSingleAgentAttempt(
@@ -563,6 +565,7 @@ async function runSingleAgent(
 				reportUpdate,
 				workerExtensionArgs,
 				loopGuard,
+				spawningSessionId,
 			)
 		).result;
 	}
@@ -596,6 +599,7 @@ async function runSingleAgent(
 				input.onUpdate,
 				workerExtensionArgs,
 				loopGuard,
+				spawningSessionId,
 			),
 	});
 }
@@ -683,7 +687,6 @@ export default function (omk: ExtensionAPI) {
 		resolveTimeoutMs: (ctx) => (ctx.thinkingLevel === "ultra" ? 0 : undefined),
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			spawningSessionId = ctx.sessionManager?.getSessionId?.();
 			const agentScope: AgentScope = params.agentScope ?? "user";
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const selectedModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
@@ -696,6 +699,7 @@ export default function (omk: ExtensionAPI) {
 				getEntries: () => ctx.sessionManager.getEntries(),
 				appendCustomEntry: (customType: string, data?: unknown) => omk.appendEntry(customType, data),
 			};
+			workerSpawningSession.set(workerExtensionArgs, ctx.sessionManager?.getSessionId?.());
 			workerSkillAdmission.set(workerExtensionArgs, (granted) => admitWorkerSkills(parentLedger, granted));
 			const confirmProjectAgents = params.confirmProjectAgents ?? true;
 			const executionPolicy = resolveSubagentExecutionPolicy(

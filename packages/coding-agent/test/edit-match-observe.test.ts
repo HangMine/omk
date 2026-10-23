@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { subagentWorkerEnv } from "../examples/extensions/subagent/worker-env.ts";
 import { RUN_LOG_DIR_ENV } from "../src/core/run-log.ts";
+import { SessionManager } from "../src/core/session-manager.ts";
 import { createEditTool, createEditToolDefinition } from "../src/core/tools/edit.ts";
 import {
 	classifyEditMatchFailure,
@@ -127,7 +128,7 @@ describe("edit match observation: run log lines", () => {
 		expect(spy).toHaveBeenCalledTimes(1);
 	});
 
-	it("seq increments by 1 per line within the file and ts is ISO", async () => {
+	it("seq counts per session from 1 and ts is ISO", async () => {
 		const p = join(dir, "seq.txt");
 		writeFileSync(p, "a\nb\nc\n");
 		const def = createEditToolDefinition(dir);
@@ -144,6 +145,91 @@ describe("edit match observation: run log lines", () => {
 		for (const l of lines) {
 			expect(l.sessionId).toBe("sess-123");
 			expect(new Date(l.ts).toISOString()).toBe(l.ts);
+		}
+	});
+
+	it("two sessions writing alternately to one file each get seq [1,2,...]", async () => {
+		writeFileSync(join(dir, "s.txt"), "a\nb\nc\nd\ne\nf\n");
+		const def = createEditToolDefinition(dir);
+		const ctxA = { sessionManager: { getSessionId: () => "alt-A" } } as never;
+		const ctxB = { sessionManager: { getSessionId: () => "alt-B" } } as never;
+		const order: [never, string][] = [
+			[ctxA, "a"],
+			[ctxB, "b"],
+			[ctxA, "c"],
+			[ctxB, "d"],
+			[ctxA, "e"],
+			[ctxB, "f"],
+		];
+		for (const [ctx, ch] of order) {
+			await def.execute(
+				ch,
+				{ path: "s.txt", edits: [{ oldText: ch, newText: ch.toUpperCase() }] },
+				undefined,
+				undefined,
+				ctx,
+			);
+		}
+		const lines = logLines();
+		expect(lines.map((l) => l.sessionId)).toEqual(["alt-A", "alt-B", "alt-A", "alt-B", "alt-A", "alt-B"]);
+		const seqOf = (id: string) => lines.filter((l) => l.sessionId === id).map((l) => l.seq);
+		expect(seqOf("alt-A")).toEqual([1, 2, 3]);
+		expect(seqOf("alt-B")).toEqual([1, 2, 3]);
+		const keys = new Set(lines.map((l) => `${l.sessionId}:${l.seq}`));
+		expect(keys.size).toBe(lines.length);
+	});
+
+	it("2-level nested workers: each line's parentSessionId is the immediate parent's sessionId", async () => {
+		const savedRole = process.env.OMK_RUN_LOG_ROLE;
+		const savedParent = process.env.OMK_RUN_LOG_PARENT_SESSION;
+		try {
+			// --no-session workers use SessionManager.inMemory, which still mints a uuidv7 id.
+			const [lead, w1, w2] = [0, 1, 2].map(() => SessionManager.inMemory(dir).getSessionId());
+			expect(new Set([lead, w1, w2]).size).toBe(3);
+			for (const id of [lead, w1, w2]) expect(id).toMatch(/^[0-9a-f-]{36}$/);
+			writeFileSync(join(dir, "n.txt"), "a\nb\nc\n");
+			const def = createEditToolDefinition(dir);
+			const ctx = (id: string) => ({ sessionManager: { getSessionId: () => id } }) as never;
+			delete process.env.OMK_RUN_LOG_ROLE;
+			delete process.env.OMK_RUN_LOG_PARENT_SESSION;
+			await def.execute(
+				"1",
+				{ path: "n.txt", edits: [{ oldText: "a", newText: "A" }] },
+				undefined,
+				undefined,
+				ctx(lead),
+			);
+			const env1 = subagentWorkerEnv({ ...process.env }, undefined, lead);
+			process.env.OMK_RUN_LOG_ROLE = env1.OMK_RUN_LOG_ROLE;
+			process.env.OMK_RUN_LOG_PARENT_SESSION = env1.OMK_RUN_LOG_PARENT_SESSION;
+			await def.execute(
+				"2",
+				{ path: "n.txt", edits: [{ oldText: "b", newText: "B" }] },
+				undefined,
+				undefined,
+				ctx(w1),
+			);
+			const env2 = subagentWorkerEnv({ ...process.env }, undefined, w1);
+			process.env.OMK_RUN_LOG_ROLE = env2.OMK_RUN_LOG_ROLE;
+			process.env.OMK_RUN_LOG_PARENT_SESSION = env2.OMK_RUN_LOG_PARENT_SESSION;
+			await def.execute(
+				"3",
+				{ path: "n.txt", edits: [{ oldText: "c", newText: "C" }] },
+				undefined,
+				undefined,
+				ctx(w2),
+			);
+			const lines = logLines();
+			expect(lines.map((l) => [l.sessionId, l.parentSessionId])).toEqual([
+				[lead, null],
+				[w1, lead],
+				[w2, w1],
+			]);
+		} finally {
+			if (savedRole === undefined) delete process.env.OMK_RUN_LOG_ROLE;
+			else process.env.OMK_RUN_LOG_ROLE = savedRole;
+			if (savedParent === undefined) delete process.env.OMK_RUN_LOG_PARENT_SESSION;
+			else process.env.OMK_RUN_LOG_PARENT_SESSION = savedParent;
 		}
 	});
 

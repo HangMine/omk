@@ -6,8 +6,7 @@
  * Lines hold enums, numbers and a short path hash only (no paths, no file text).
  */
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join, normalize } from "node:path";
+import { normalize } from "node:path";
 import { appendRunLog, RUN_LOG_DIR_ENV, type RunLogValue, runLogRole } from "../run-log.ts";
 import { normalizeForFuzzyMatch, normalizeToLF } from "./edit-diff.ts";
 
@@ -85,18 +84,16 @@ export function editSessionId(ctx: EditCtx | undefined): string | null {
 	}
 }
 
-/** Next line number in `<dir>/edit-match.jsonl` (1-based), so `seq` is monotonic within the file. */
-function nextSeq(env: NodeJS.ProcessEnv): number {
-	const dir = env[RUN_LOG_DIR_ENV]?.trim();
-	if (!dir) return 1;
-	try {
-		const text = readFileSync(join(dir, `${EDIT_MATCH_RUN_LOG}.jsonl`), "utf-8");
-		let lines = 0;
-		for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) lines++;
-		return lines + 1;
-	} catch {
-		return 1;
-	}
+/**
+ * Per-session line counters, in memory. `seq` is 1, 2, ... per sessionId within this process,
+ * so (sessionId, seq) is unique even when lead and worker append to the same file.
+ */
+const seqBySession = new Map<string | null, number>();
+
+function nextSeq(sessionId: string | null): number {
+	const seq = (seqBySession.get(sessionId) ?? 0) + 1;
+	seqBySession.set(sessionId, seq);
+	return seq;
 }
 
 function write(
@@ -108,7 +105,7 @@ function write(
 		EDIT_MATCH_RUN_LOG,
 		{
 			event: "edit_match",
-			seq: nextSeq(env),
+			seq: nextSeq(sessionId),
 			ts: new Date().toISOString(),
 			sessionId,
 			parentSessionId: editParentSessionId(env),
