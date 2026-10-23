@@ -567,6 +567,7 @@ On hold:
 
 - Lane ready frontier behind `OMK_LANE_READY_QUEUE=1` (default off). A lane starts as soon as its dependencies finish, up to the lane-width limit. Frontier counts are logged to `subagent-lane-frontier.jsonl` (#212).
 - Lane failure scope behind `OMK_LANE_FAILURE_SCOPE=1` (default off). A lane that fails without writing anything blocks only its descendants. Adds `allLanesCompleted` (#208).
+- The edit tool records which match stage succeeded, or why matching failed, in the run log. This only observes; edit behavior is unchanged. Subagent workers inherit the parent session id through `OMK_RUN_LOG_PARENT_SESSION` (#235).
 - Session skill admission behind `OMK_SKILL_ADMISSION` (`1`, `true` or `on`; default off). A session admits at most 10 unique skill bodies, and the count survives resume and compaction. It covers explicit, steer and follow-up skill loads, `SKILL.md` reads through the `read` tool, and skills handed to workers; workers start with `--no-skills` and get only admitted skills (#209, #210). Not gated yet: reading `SKILL.md` through bash, and `SKILL.md` reads inside a worker.
 - Evidence lifecycle observe-only mode behind `OMK_EVIDENCE_LIFECYCLE=observe` (default off). It reports what would be deleted and deletes nothing; the trace stores only hashes and counts (#211).
 
@@ -576,9 +577,13 @@ With all four flags off, behavior is the same as 1.5.5.
 
 - The required-tools contract listener no longer leaks or fires twice on dispose and re-install (#204).
 - `npm run check` exits 0 again (#206).
+- Bash output now reports `truncated: true` when leading chunks were dropped; before, it could say `truncated: false` after losing the start of the output (#224).
+- Diagnostics after `edit` and `write` no longer return stale cached results, and file paths are matched exactly (#226).
+- A flaky evidence-lifecycle two-session test is stable again (#222).
 
 ### Changed
 
+- Design specs added, not implemented: 107 edit diagnostics (#225), 108-1 pi dependency inventory with a regeneration check script (#229), 109 single-binary distribution (#228), 110 ATIF trajectory export (#231), 111 finish-confirm gate (#230), 112 JSON session info (#234).
 - The trademark notice moved out of `LICENSE`, so GitHub detects the MIT license. AdaptOrch logo files moved to `readmeasset/adaptorch/` with a `NOTICE` saying they are not MIT-licensed (#205).
 
 Release notes live in [RELEASE_NOTES_v1.5.6.md](.github/RELEASE_NOTES_v1.5.6.md).
