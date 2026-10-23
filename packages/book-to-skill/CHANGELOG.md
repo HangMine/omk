@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.5.7] - 2026-10-23
+
+### Fixed
+
+- The `bin` path in `package.json` is normalized to `dist/cli.js` (#248).
+
 ## [1.5.6] - 2026-10-22
 
 
