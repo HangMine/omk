@@ -21,11 +21,12 @@ So trailing whitespace and Unicode punctuation already match today. What does **
 1. **Leading-indent drift.** `oldText` with the right lines but wrong indentation (tabs vs
    spaces, 2 vs 4, one level off) → `getNotFoundError` (`:286`). spec 107's run log already
    classifies this as `indent_only` (`edit-match-observe.ts:70`, `matchesIgnoringIndent`).
-2. **Uniqueness is checked only for exact text.** `applyEditsToNormalizedContent` (`:333`)
-   calls `countOccurrences(baseContent, edit.oldText)` (`:280`, exact `indexOf` loop,
-   `:365-368`). A stage-2 match that has two normalized candidates is silently applied to the
-   first one. (Existing bug; fixed **without a flag** in a separate fix PR before this spec is
-   implemented, see D2.)
+2. **Duplicate rejection already holds for existing stages.** `countOccurrences` (`:280`)
+   normalizes both sides, and `applyEditsToNormalizedContent` (`:365`) throws
+   `getDuplicateError` when a normalized `oldText` has 2+ candidates (covered by
+   `test/tools.test.ts:972`, `:1052`,
+   `test/regression/edit-diff-fuzzy-whole-file-rewrite.test.ts:151`). The new `trim` stage
+   must keep this guarantee (see D2).
 
 The model then re-reads the file and retries, costing a turn and tokens.
 
@@ -91,7 +92,7 @@ Rules:
 
 ### Flag off
 
-Byte-identical to the A/B baseline (main after the D2 fix PR merges): same match result, same
+Byte-identical to the A/B baseline (main at or after `a5127044a9`): same match result, same
 error strings, same diff/details, same tool description and schema. Today's normalized stage
 (trim-end + Unicode) stays as is.
 
@@ -152,7 +153,8 @@ New `packages/coding-agent/test/spec114-edit-fuzzy-match.test.ts`:
 14. Edit tool and `computeEditsDiff` give identical results (diff, error) for cases 3-8 (D3).
 15. First request payload (tool description/schema) identical with flag on and off (D5).
 
-The stage-2 two-candidate regression test lives in the D2 fix PR, not here.
+Case 8 is the trim-stage duplicate guard; existing-stage duplicate tests (`test/tools.test.ts:972`,
+`:1052`, `edit-diff-fuzzy-whole-file-rewrite.test.ts:151`) must stay green.
 
 Keep green: `edit-match-observe.test.ts`, `edit-tool-legacy-input.test.ts`,
 `edit-tool-no-full-redraw.test.ts`, full `npm run check`.
@@ -170,7 +172,7 @@ models only (script `indent_only_count.mjs`).
 
 Owner: Bench Analyst; method: Agent Researcher (shared 107 rules).
 
-1. Build A = main **after the D2 fix PR merges** (D7), B = spec 114 head, in two dirs of equal
+1. Build A = main **at or after `a5127044a9`** (D7), B = spec 114 head, in two dirs of equal
    path length, same Node 22, `env -u TYPESAFE_API_KEY`, `OMK_TRUST_PROJECT=0`, temp HOME.
 2. **Diff the first request payload first** (one task, B flag on). Must be identical (tool
    description unchanged); any diff stops the A/B.
@@ -187,15 +189,14 @@ Owner: Bench Analyst; method: Agent Researcher (shared 107 rules).
 
 - **D1** No Unicode stage in v1. `fuzzyFindText` already folds quotes/dashes; the only new
   stage is leading-indent-insensitive (`trim`).
-- **D2** The fuzzy multi-candidate first-hit bug is a bug: fixed in a separate no-flag fix PR
-  (branch `fix/edit-fuzzy-ambiguous`, in progress) with a regression test; 2+ candidates fail.
-  Not gated on the count.
+- **D2** Duplicate rejection already holds for the existing stages (normalized
+  `countOccurrences` + `getDuplicateError`). The new `trim` stage must keep it: 2+ candidates
+  fail with the duplicate error (test case 8). No separate fix PR is needed.
 - **D3** Scope = edit tool + `computeEditsDiff`, with a test that both give identical results.
 - **D4** Re-indent: apply the file-vs-model indent delta uniformly to every replacement line;
   mixed tabs/spaces → fail, don't edit.
 - **D5** Tool description unchanged; first-request payload diff must be 0.
 - **D6** v1 records the match stage in the run log only, not in the tool result.
-- **D7** A/B baseline SHA = main after the D2 fix PR merges (so the bug fix is not mixed into
-  the indent effect).
+- **D7** A/B baseline SHA = main at or after `a5127044a9`.
 - **D8** Code ported from Codex `seek_sequence.rs` counts as porting: Apache-2.0 source header at
   the top of the file and a `NOTICE` entry in the same PR (create root `NOTICE` if missing).
