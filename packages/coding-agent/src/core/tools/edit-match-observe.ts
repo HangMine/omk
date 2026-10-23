@@ -87,13 +87,28 @@ export function editSessionId(ctx: EditCtx | undefined): string | null {
 /**
  * Per-session line counters, in memory. `seq` is 1, 2, ... per sessionId within this process,
  * so (sessionId, seq) is unique even when lead and worker append to the same file.
+ * LRU-capped so a long-running process does not grow without bound.
  */
 const seqBySession = new Map<string | null, number>();
 
+/** Max sessions whose seq counter is kept; least recently used is evicted beyond this. */
+export const EDIT_SEQ_SESSION_CAP = 1000;
+
 function nextSeq(sessionId: string | null): number {
 	const seq = (seqBySession.get(sessionId) ?? 0) + 1;
+	// Re-insert so this session becomes most recently used.
+	seqBySession.delete(sessionId);
 	seqBySession.set(sessionId, seq);
+	while (seqBySession.size > EDIT_SEQ_SESSION_CAP) {
+		const oldest = seqBySession.keys().next().value as string | null;
+		seqBySession.delete(oldest);
+	}
 	return seq;
+}
+
+/** Test hook: number of sessions currently tracked. */
+export function editSeqSessionCount(): number {
+	return seqBySession.size;
 }
 
 function write(
