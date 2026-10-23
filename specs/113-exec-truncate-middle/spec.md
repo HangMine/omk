@@ -1,6 +1,6 @@
 # Spec 113: `OMK_EXEC_TRUNCATE_MIDDLE`: head + tail bash output with a middle marker
 
-Status: draft (spec only, no code). Base: omk `9617e1effb` (main after #238).
+Status: draft (spec only, no code), PR #245. Tech Lead answers applied (see Resolved decisions). Base: omk `9617e1effb` (main after #238).
 Candidate 1 of the 107 A/B queue (Agent Researcher order: truncate-middle, edit fuzzy-indent, compaction).
 
 ## Problem
@@ -47,8 +47,8 @@ prefix and a suffix and puts a marker in the middle:
 **No code is copied.** It is Rust and works on a finished string; omk needs a streaming
 TypeScript version. If a later PR does copy code, it must add an Apache-2.0 attribution
 header on the file and create/update a root `NOTICE` (omk has no `NOTICE` today at
-`9617e1effb`) carrying the Codex NOTICE lines. Differences on purpose: omk uses a 1/3 head
-(not 1/2), counts lines as well as bytes, and names the full-output file in the marker.
+`9617e1effb`) carrying the Codex NOTICE lines. Same 1/2 split as Codex; differences on purpose: omk counts lines as well as bytes, counts the
+marker inside the budget, and names the full-output file in the marker.
 
 ## Change
 
@@ -66,21 +66,25 @@ New env flag `OMK_EXEC_TRUNCATE_MIDDLE`, **default off**.
 
 ### Budget split
 
-Same totals as today, so token cost per call is bounded the same way.
+Same totals as today, **marker included**, so the model gets the same bytes in both arms (D2).
+
+Let `M` = byte length of the marker line incl. its `\n` (computed with the final numbers;
+if a digit count changes after the split, recompute once and re-split).
 
 | | bytes | lines |
 |---|---|---|
-| head | `floor(maxBytes / 3)` = 17,066 | `floor(maxLines / 3)` = 666 |
-| tail | `maxBytes - headBytesUsed` (≥ 34,134) | `maxLines - headLinesUsed` (≥ 1,334) |
+| marker | `M` (typically ≤ ~250) | 1 |
+| head | `floor((maxBytes - M) / 2)` (≈ 25,475 for M = 250) | `floor((maxLines - 1) / 2)` = 999 |
+| tail | `maxBytes - M - headBytesUsed` (≥ 25,475) | `maxLines - 1 - headLinesUsed` (≥ 1,000) |
 
-- Head + tail ≤ 51,200 bytes and ≤ 2000 lines. The marker is extra (≤ ~250 bytes), same
-  rule as MCP (spec 066).
+- Head + marker + tail ≤ 51,200 bytes and ≤ 2000 lines (strict; unlike MCP spec 066).
 - Head keeps whole lines. If line 1 alone exceeds the head byte budget, head is a UTF-8 safe
   byte prefix of line 1 (same as `truncateHeadTail`).
 - Unused head budget goes to the tail.
-- Why 1/3: the end usually holds the exit status / summary / final error, so the tail keeps
-  the larger share; the head only needs the command echo and the first error. Open
-  question Q1 for 1/2.
+- Why 1/2: Codex `split_budget` and MCP spec 066 precedent (D1). A 1/3 head is only measured
+  as a separate follow-up if the A/B result is ambiguous.
+- Streaming head capture uses the upper bound `floor((maxBytes - 256) / 2)` = 25,472 bytes;
+  `snapshot()` trims the head further if the real `M` needs it.
 
 ### Marker
 
@@ -148,22 +152,22 @@ mid-line):
 
 ### Tool description
 
-`bash.ts:117` says "truncated to last 2000 lines or 50KB". When on, the description
-becomes "truncated to the first ~666 lines / 16.7KB and the last lines, 2000 lines / 50KB
-total" so the model is not told the wrong policy. This changes `toolsHash` and the first
-request payload in the on-arm; it is the **only** expected payload diff (see A/B step 1).
+`bash.ts:117` ("truncated to last 2000 lines or 50KB") is **unchanged** in both arms (D5), so
+the A/B isolates the output change. `toolsHash` and the first request payload are identical
+across arms (see A/B step 2).
 
 ### Workers
 
-Subagent / worker processes inherit `process.env`, so they get the flag with no extra code.
-The bash tool reads it per call, so a worker that sees `1` behaves the same as the parent.
-A test asserts a child spawned through the normal path sees the variable (Q4 if any spawn
-path scrubs env).
+Subagent / worker processes are expected to inherit `process.env`, so they get the flag with no
+extra code; the bash tool reads it per call. Test 14 asserts that a subagent worker spawned
+through omk's real spawn path sees `OMK_EXEC_TRUNCATE_MIDDLE=1` from the parent (D4). Any spawn
+path that builds a clean env is listed here by the implementation PR and is treated as
+**flag-off** (no explicit pass-through in phase 1).
 
 ### Out of scope
 
 - `executeBashWithOperations` (user `!` / RPC bash, `bash-executor.ts`). Phase 2 behind the
-  same flag, after the A/B (Q3).
+  same flag, after the A/B (D3). Phase 1 = agent bash tool only.
 - read/grep/find/ls truncation, MCP cap (already head+tail), limits themselves.
 
 ## Code integration points (at `9617e1effb`)
@@ -173,19 +177,19 @@ path scrubs env).
 | `packages/coding-agent/src/core/tools/output-accumulator.ts` | `OutputAccumulatorOptions`, `constructor`, `appendDecodedText`, `snapshot`, new `buildHeadTailSnapshot` | head capture + head/tail snapshot |
 | `packages/coding-agent/src/core/tools/truncate.ts` | export `truncateStringToBytesFromStart`; extend `TruncationResult` with optional head-tail fields | helper + types |
 | `packages/coding-agent/src/core/tools/bash-output.ts` | `formatBashOutput` | marker + new trailing notice when `strategy === "head-tail"` |
-| `packages/coding-agent/src/core/tools/bash.ts` | `execute` (accumulator creation `:147`), tool `description` `:117` | read flag, pass option, description |
+| `packages/coding-agent/src/core/tools/bash.ts` | `execute` (accumulator creation `:147`) | read flag, pass option (description unchanged) |
 | `packages/coding-agent/README.md` / `docs` | env flag list | document flag |
 
 ## Tests (unit)
 
 New `packages/coding-agent/test/spec113-exec-truncate-middle.test.ts`:
 
-1. Flag off: 3 fixtures (small, 3000 lines, one 200KB line) → content, details, description
+1. Flag off: 3 fixtures (small, 3000 lines, one 200KB line) → content, details
    byte-identical to a snapshot taken at `9617e1effb`.
 2. On, under limits → identical to off (no marker, no temp file).
-3. On, 5000 short lines → first 666 lines, marker, last lines; head+tail ≤ 2000 lines /
-   51,200 bytes; `omittedLines` = 5000 − kept.
-4. On, byte-limited (500 lines × 1KB) → head ≤ 17,066 bytes, total ≤ 51,200, omitted bytes exact.
+3. On, 5000 short lines → first 999 lines, marker, last lines; head+marker+tail ≤ 2000
+   lines / 51,200 bytes; `omittedLines` = 5000 − kept.
+4. On, byte-limited (500 lines × 1KB) → head = `floor((51,200 − M)/2)` bytes or less, head+marker+tail ≤ 51,200, omitted bytes exact.
 5. On, single 200KB line → head = code-point prefix, marker says `inside line 1`, `omittedLines` 0.
 6. On, just over limit (51,300 bytes) → no byte shown twice (overlap rule).
 7. UTF-8: 3- and 4-byte chars (한글, emoji) split across `append` chunk borders at every
@@ -197,8 +201,9 @@ New `packages/coding-agent/test/spec113-exec-truncate-middle.test.ts`:
 11. Marker numbers (`a`, `b`, `L`, `S`, `N`, `T`) match a brute-force count from the temp file.
 12. Head ends mid-line (line 1 too long) → marker on its own line.
 13. RTK + flag: RTK applied output unchanged.
-14. Env: a child process spawned with `process.env` sees `OMK_EXEC_TRUNCATE_MIDDLE=1`;
-    flag read per call (toggle between two calls in one process).
+14. Env: a subagent worker spawned through omk's normal spawn path inherits
+    `OMK_EXEC_TRUNCATE_MIDDLE=1` from the parent env; flag read per call (toggle between two
+    calls in one process); tool description identical with flag on/off.
 15. Memory: 50MB streamed → accumulator retained text ≤ head budget + 4×maxBytes.
 
 Existing to keep green: `bash-output-tail.test.ts`, `spec076-bash-correctness.test.ts`,
@@ -209,11 +214,17 @@ full `npm run check`.
 
 Owner: Bench Analyst; method: Agent Researcher (shared 107 rules).
 
+0. **Gate (D6)**: existing box logs are pre-#224 and have no `truncated` field, so they are not
+   used. The count of **distinct tasks** with at least one bash call `truncated:true` is taken
+   from the 107 A/B run logs at `9617e1effb` (run log on, free models); no separate run.
+   Agent Researcher aggregates. If < 3 tasks: no A/B, merge on unit tests only (flag stays
+   default off). If ≥ 3: steps 1-8.
+
 1. **Build both arms** from baseline `9617e1effb` (A) and the spec 113 head (B) in two
    directories of **equal path length** (e.g. `/workspace/ab113-a`, `/workspace/ab113-b`),
    same Node 22, `env -u TYPESAFE_API_KEY`, `OMK_TRUST_PROJECT=0`, temp HOME.
-2. **Diff the first request payload first** (one task, both arms, B with the flag on). The
-   only allowed diff is the bash tool description. Anything else (paths, ordering, cache
+2. **Diff the first request payload first** (one task, both arms, B with the flag on). No diff is
+   allowed (tool description is unchanged). Anything else (paths, ordering, cache
    boundary) stops the A/B until fixed.
 3. **Run**: B = `OMK_EXEC_TRUNCATE_MIDDLE=1`, A = unset. 66 tasks × n ≥ 5 per arm, same
    model, same seeds/order rules, interleaved.
@@ -228,17 +239,16 @@ Owner: Bench Analyst; method: Agent Researcher (shared 107 rules).
 8. Report: baseline SHA, B SHA, model, n, CI, token/time ratios, secondary counts, raw logs path.
    No ranking claims; public text only "self-measured under TB 4.0 rules".
 
-## Open questions
+## Resolved decisions (Tech Lead)
 
-- **Q1** Head share 1/3 vs 1/2 (Codex and MCP spec 066 use 1/2). Only measure a second split if
-  the 1/3 arm passes.
-- **Q2** Should the marker be counted inside the 50KB budget (strict) or extra as in MCP?
-- **Q3** Apply the same policy to `executeBashWithOperations` (user `!` / RPC) in phase 2, or
-  keep user-facing output tail-only?
-- **Q4** Is there any worker/subagent spawn path that builds a clean env (not `process.env`)?
-  If so, the flag must be passed explicitly there.
-- **Q5** Should the tool description change with the flag (honest, but adds a payload diff), or
-  stay fixed so the A/B isolates the output change only?
-- **Q6** Few A/B tasks may produce >50KB bash output; if `truncated:true` calls are rare, the
-  primary metric has little power. Pre-count truncated calls from 107 baseline logs before the
-  full run.
+- **D1** Head share 1/2 (Codex / MCP spec 066 precedent). 1/3 only as a separate follow-up if
+  the A/B is ambiguous.
+- **D2** Marker counts inside the 50KB / 2000-line budget, so both arms give the model equal
+  bytes.
+- **D3** Phase 1 = agent bash tool only; user `!` / RPC (`executeBashWithOperations`) deferred
+  to phase 2.
+- **D4** Test that subagent workers inherit the parent env flag; any non-inheriting path is
+  documented in this spec and treated as flag-off.
+- **D5** Tool description unchanged.
+- **D6** Distinct-task count of `truncated:true` from the 107 A/B run logs at `9617e1effb`
+  (Agent Researcher); < 3 tasks => no A/B, merge on tests only.
