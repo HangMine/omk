@@ -113,12 +113,20 @@ Still required in this mode:
 - Merge only after the reviewer approved the current head SHA and CI is green. Use a merge
   commit pinned to that SHA (`gh pr merge N --merge --match-head-commit <sha>`). Any head
   change needs a new review.
-- After a PR is open, never rebase, amend, or force-push; update it by merging `main` in.
-- One concern per PR. No new dependency without review. Never skip or bypass CI, and do not
-  edit workflow files without the owner's OK.
-- Tags, GitHub Releases, and npm publish happen only when the owner says to release.
-  Paid benchmark runs wait for a dollar cap the owner sets.
-- Never commit, log, or echo secrets.
+- After a PR is open, never rebase, amend, force-push, or use `--no-verify`; update it by
+  merging `main` in. Commits are authored as `dmae97`.
+- One concern per PR. No new dependency without review. Pin the measurement baseline SHA
+  before an A/B. Never skip or bypass CI, and do not edit workflow files without the
+  owner's OK.
+- Tags and npm publish happen only when the owner says to release. Do not create the
+  GitHub Release by hand; let the release workflow create it so it can attach binaries.
+- Paid benchmark runs wait for a dollar cap the owner sets.
+- Never print, log, or commit secrets.
+- Code copied from other projects must be MIT or Apache-2.0: name the source at the top of
+  the file, and update `NOTICE` for Apache-2.0 code. GPL, unlicensed, or source-available
+  code (for example Claude Code) is a reference for ideas only.
+- Public text makes no ranking claims. Benchmark numbers are described only as
+  "self-measured under TB 4.0 rules".
 
 ## Git and safety
 
