@@ -234,7 +234,8 @@ describe("spec 117 delivery and workers", () => {
 
 	it("AL7: worker env forces auto-load off and suggest off", () => {
 		const env = subagentWorkerEnv({ ...ON, OMK_SKILL_SEARCH_SUGGEST: "1" });
-		expect(env.OMK_SKILL_AUTO_LOAD).toBe("0");
+		expect(env.OMK_SKILL_AUTO_LOAD).toBeUndefined();
+		expect("OMK_SKILL_AUTO_LOAD" in subagentWorkerEnv({})).toBe(false);
 		expect(env.OMK_SKILL_SEARCH_SUGGEST).toBe("0");
 		expect(skillAutoLoadActive(env)).toBe(false);
 	});

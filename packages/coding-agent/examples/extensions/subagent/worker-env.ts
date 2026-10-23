@@ -42,7 +42,7 @@ export function subagentWorkerEnv(
 	env.OMK_DELIVERABLE_GUARD = "0";
 	// Spec 050 R7: workers keep OMK_SKILL_SEARCH (the `skill_search` tool) but get no automatic candidates.
 	env.OMK_SKILL_SEARCH_SUGGEST = "0";
-	env.OMK_SKILL_AUTO_LOAD = "0";
+	delete env.OMK_SKILL_AUTO_LOAD; // spec 117: unset = off; no new var, so flag-off worker env is unchanged
 	env.OMK_TODO_VERIFY = "0";
 	env.OMK_ADAPTIVE_EFFORT = "0";
 	delete env.OMK_RUN_LOG_PARENT_SESSION;

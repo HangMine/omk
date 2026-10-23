@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "omk-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { subagentWorkerEnv } from "../../examples/extensions/subagent/worker-env.ts";
 import {
 	compactionHysteresisConfigFor,
 	getCompactionHeadroomThreshold,
@@ -191,5 +192,18 @@ describe("spec 117 e2e", () => {
 			const src = readFileSync(join(__dirname, "../../src/core", file), "utf8");
 			expect(src).not.toMatch(/from "\.\/compaction/);
 		}
+	});
+
+	// Gap closed after #262 CI: the tests above only compare the lead session's in-process request, but a worker's
+	// first request is its spawn argv + system prompt + OMK_* env (subagent-loop-guard golden). Setting
+	// OMK_SKILL_AUTO_LOAD=0 in the worker env added one env key there. Flag off must add no worker env key at all.
+	it("flag off: worker env has exactly the pre-117 keys (no OMK_SKILL_AUTO_LOAD added)", () => {
+		const parent = { OMK_TRUST_PROJECT: "0", OMK_SKILL_ADMISSION: "1", PATH: "/bin" };
+		const env = subagentWorkerEnv(parent, "0");
+		expect(Object.keys(env).filter((k) => k.includes("AUTO_LOAD"))).toEqual([]);
+		const pre117 = { ...env };
+		expect(JSON.stringify(subagentWorkerEnv({ ...parent, OMK_SKILL_AUTO_LOAD: "1" }, "0"))).toBe(
+			JSON.stringify(pre117),
+		);
 	});
 });
