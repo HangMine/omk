@@ -9,6 +9,12 @@
 import type { AssistantMessage, ImageContent } from "omk-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
 import { OVERFLOW_RECOVERY_FAILED } from "../core/compaction/overflow-recovery-progress.ts";
+import {
+	createJsonSessionInfoEmitter,
+	type JsonSessionInfoEmitter,
+	jsonSessionInfoEnabled,
+	setJsonSessionInfoEmitter,
+} from "../core/json-session-info.ts";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
 import { formatPinnedQuotaFailoverNotice } from "../core/pinned-quota-failover-notice.ts";
 import type { PromptSettlementOutcome } from "../core/prompt-settlement.ts";
@@ -50,6 +56,9 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 	let overflowRecoveryFailure: string | undefined;
 	let renderedTermination: SessionTermination | undefined;
 	const signalCleanupHandlers: Array<() => void> = [];
+	// Spec 112: only json mode with OMK_JSON_SESSION_INFO=1 creates an emitter; otherwise nothing changes.
+	const sessionInfo: JsonSessionInfoEmitter | undefined =
+		mode === "json" && jsonSessionInfoEnabled() ? createJsonSessionInfoEmitter(writeRawStdout) : undefined;
 
 	const renderTermination = (termination: SessionTermination): void => {
 		if (termination.kind === "completed" || renderedTermination === termination) return;
@@ -157,6 +166,12 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			},
 		});
 
+		if (sessionInfo) {
+			// First line right after the header; later provider requests re-emit only on a hash change.
+			sessionInfo.observe({ systemPrompt: session.agent.state.systemPrompt, tools: session.agent.state.tools });
+			setJsonSessionInfoEmitter(sessionInfo);
+		}
+
 		unsubscribe?.();
 		unsubscribe = session.subscribe((event) => {
 			if (event.type === "prompt_settled") latestOutcome = event.outcome;
@@ -261,6 +276,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			cleanup();
 		}
 		await disposeRuntime();
+		if (sessionInfo) setJsonSessionInfoEmitter(undefined);
 		await flushRawStdout();
 	}
 }
