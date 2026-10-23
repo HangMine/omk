@@ -18,6 +18,7 @@
  * spawns its own workers applies the same rule.
  * Typed todo checks (spec 049) belong to the lead; workers always get `OMK_TODO_VERIFY` off.
  * Adaptive reasoning effort (spec 037) is always off in workers.
+ * With the run log on, `OMK_RUN_LOG_PARENT_SESSION` carries the spawning session's id (never inherited).
  */
 const LEAD_ONLY_VARS = [
 	"OMK_TIME_BUDGET_SEC",
@@ -26,7 +27,11 @@ const LEAD_ONLY_VARS = [
 	"OMK_FINISH_CHECK_REVERIFY",
 ];
 
-export function subagentWorkerEnv(parent: NodeJS.ProcessEnv, projectTrust?: "1" | "0"): NodeJS.ProcessEnv {
+export function subagentWorkerEnv(
+	parent: NodeJS.ProcessEnv,
+	projectTrust?: "1" | "0",
+	leadSessionId?: string,
+): NodeJS.ProcessEnv {
 	const env: NodeJS.ProcessEnv = { ...parent };
 	for (const name of LEAD_ONLY_VARS) delete env[name];
 	delete env.OMK_TRUST_PROJECT;
@@ -38,6 +43,11 @@ export function subagentWorkerEnv(parent: NodeJS.ProcessEnv, projectTrust?: "1" 
 	env.OMK_SKILL_SEARCH_SUGGEST = "0";
 	env.OMK_TODO_VERIFY = "0";
 	env.OMK_ADAPTIVE_EFFORT = "0";
-	if (parent.OMK_RUN_LOG_DIR?.trim()) env.OMK_RUN_LOG_ROLE = "worker";
+	delete env.OMK_RUN_LOG_PARENT_SESSION;
+	if (parent.OMK_RUN_LOG_DIR?.trim()) {
+		env.OMK_RUN_LOG_ROLE = "worker";
+		// Run-log lines from the worker name the spawning session (edit-match parentSessionId).
+		if (leadSessionId) env.OMK_RUN_LOG_PARENT_SESSION = leadSessionId;
+	}
 	return env;
 }
