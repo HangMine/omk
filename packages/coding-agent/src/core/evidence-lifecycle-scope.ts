@@ -12,7 +12,8 @@ let owner: AsyncLocalStorage<string> | undefined;
 let runs = 0;
 
 export function withEvidenceSession<T>(sessionId: string, fn: () => T): T {
-	if (process.env.OMK_EVIDENCE_LIFECYCLE !== "observe") return fn();
+	const mode = process.env.OMK_EVIDENCE_LIFECYCLE;
+	if (mode !== "observe" && mode !== "delete") return fn();
 	owner ??= new AsyncLocalStorage<string>();
 	runs += 1;
 	return owner.run(sessionId, fn);

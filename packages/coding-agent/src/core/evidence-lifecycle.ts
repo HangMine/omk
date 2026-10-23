@@ -13,13 +13,22 @@
 import { createHash } from "node:crypto";
 import { statSync } from "node:fs";
 import { currentEvidenceSession, EVIDENCE_UNATTRIBUTED } from "./evidence-lifecycle-scope.ts";
+import {
+	type EvidenceHoldReason,
+	type EvidenceProducer,
+	evidenceLifecycleDeleteEnabled,
+	evidenceLifecycleObserveEnabled,
+} from "./evidence-lifecycle-types.ts";
 
-export type EvidenceProducer = "goal-recall" | "read-spill" | "bash-spill" | "tool-output-log" | "bash-executor-log";
+export * from "./evidence-lifecycle-types.ts";
 
-/** `unknown`: no producer/consumer mapping exists yet, so nothing may be deleted on its behalf (D2 gap). */
-export type EvidenceHoldReason = "goal-active" | "awaiting-consumer" | "retry" | "recovery" | "unknown";
-
-export type EvidenceArtifactStatus = "present" | "removed-by-existing-policy";
+/** Spec 118 D2 (`delete` only) adds `deleting`, `delete_pending` and `deleted_after_use`. */
+export type EvidenceArtifactStatus =
+	| "present"
+	| "removed-by-existing-policy"
+	| "deleting"
+	| "delete_pending"
+	| "deleted_after_use";
 
 export interface EvidenceArtifactRecord {
 	/** Monotonic per process (`ev-<n>`); never reused, never derived from the path. */
@@ -41,48 +50,15 @@ export interface EvidenceArtifactRecord {
 	readonly status: EvidenceArtifactStatus;
 	/** Classification only: the owning goal was blocked with rounds exhausted. Holds are NOT released. */
 	readonly blockedExhausted: boolean;
-}
-
-export type EvidenceProducerGroup = "recall" | "spill" | "bash" | "executor";
-
-export interface UnknownHoldShare {
-	readonly present: number;
-	readonly unknown: number;
-	readonly share: number;
-}
-
-export interface EvidenceLifecycleReport {
-	readonly mode: "observe";
-	readonly registered: number;
-	readonly present: number;
-	readonly presentBytes: number;
-	readonly removedByExistingPolicy: number;
-	readonly byProducer: Readonly<Partial<Record<EvidenceProducer, number>>>;
-	readonly holdReasons: Readonly<Partial<Record<EvidenceHoldReason, number>>>;
-	/** Present artifacts with an `unknown` hold over present artifacts; 0 when none are present. */
-	readonly unknownHoldShare: number;
-	readonly unknownHoldShareByProducer: Readonly<Record<EvidenceProducerGroup, UnknownHoldShare>>;
-	/** Present artifacts whose goal was blocked with rounds exhausted (still held; counted separately). */
-	readonly blockedExhausted: number;
-	readonly wouldDelete: { readonly count: number; readonly bytes: number; readonly artifactIds: readonly string[] };
-	/** Always 0 in observe mode; kept in the report so a trace proves it. */
-	readonly deletes: 0;
-	/** Registrations dropped once this session's registry hit its bound (counts only). */
-	readonly overflow: number;
-	/** Artifacts registered with no session context (explicit bucket, not part of this report's counts). */
-	readonly unattributed: number;
-	/** Artifacts registered in this process across every session bucket and `unattributed` (ratio denominator). */
-	readonly processRegistered: number;
+	/** Spec 118 D2: why the last delete did not complete (enum-like text, never a path). */
+	readonly deleteReason?: string;
 }
 
 /** Per session. */
 export const EVIDENCE_REGISTRY_MAX = 4096;
 
-export function evidenceLifecycleObserveEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	return env.OMK_EVIDENCE_LIFECYCLE === "observe";
-}
-
-interface MutableRecord {
+/** Internal mutable record; `path`/`ino` are memory-only (delete mode) and never reported. */
+export interface MutableRecord {
 	artifactId: string;
 	producer: EvidenceProducer;
 	pathSha256: string;
@@ -97,6 +73,13 @@ interface MutableRecord {
 	goalActive: boolean;
 	blockedExhausted: boolean;
 	status: EvidenceArtifactStatus;
+	path?: string;
+	ino?: number;
+	leases: number;
+	/** Bumped on every state change (CAS for delete vs new consumer). */
+	version: number;
+	deleteAttempts: number;
+	deleteReason?: string;
 }
 
 interface SessionRegistry {
@@ -126,6 +109,14 @@ function sizeOf(path: string): number {
 		return statSync(path).size;
 	} catch {
 		return 0;
+	}
+}
+
+function inodeOf(path: string): number | undefined {
+	try {
+		return statSync(path).ino;
+	} catch {
+		return undefined;
 	}
 }
 
@@ -178,6 +169,10 @@ export function registerEvidenceArtifact(input: RegisterEvidenceInput): string |
 			goalActive: input.goalActive ?? false,
 			blockedExhausted: false,
 			status: "present",
+			leases: 0,
+			version: 0,
+			deleteAttempts: 0,
+			...(evidenceLifecycleDeleteEnabled() ? { path: input.path, ino: inodeOf(input.path) } : {}),
 		};
 		// A path written again is a new artifact (new id); the old record is superseded, not deleted.
 		records.delete(pathSha256);
@@ -198,6 +193,7 @@ export interface EvidenceUpdate {
 }
 
 function applyUpdate(record: MutableRecord, update: EvidenceUpdate): void {
+	record.version += 1;
 	for (const consumer of update.consumed ?? []) record.consumed.add(consumer);
 	if (update.verified !== undefined) record.verified = update.verified;
 	if (update.goalActive !== undefined) record.goalActive = update.goalActive;
@@ -247,6 +243,7 @@ function freeze(record: MutableRecord): EvidenceArtifactRecord {
 		holds: holdsOf(record),
 		status: record.status,
 		blockedExhausted: record.blockedExhausted,
+		...(record.deleteReason !== undefined ? { deleteReason: record.deleteReason } : {}),
 	};
 }
 
@@ -269,6 +266,25 @@ export function evidenceProcessRegistered(): number {
 /** Number of session keys (including `unattributed`) currently held. */
 export function evidenceRegistrySessionCount(): number {
 	return sessions.size;
+}
+
+/** Spec 118 D2 internal seam: mutable records of one session (delete module only). */
+export function evidenceRecordsOf(sessionId: string): MutableRecord[] {
+	return [...(registryOf(sessionId, false)?.records.values() ?? [])];
+}
+
+/** Spec 118 D2 internal seam: the record of `path` in any session, if registered. */
+export function evidenceRecordOfPath(path: string): MutableRecord | undefined {
+	const pathSha256 = sha256(path);
+	for (const registry of sessions.values()) {
+		const record = registry.records.get(pathSha256);
+		if (record !== undefined) return record;
+	}
+	return undefined;
+}
+
+export function evidenceHoldsOf(record: MutableRecord): EvidenceHoldReason[] {
+	return holdsOf(record);
 }
 
 /** Session disposed: forget its artifacts (records only; files are untouched). */

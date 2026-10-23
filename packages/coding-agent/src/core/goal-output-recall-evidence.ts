@@ -1,10 +1,15 @@
-/** Spec 106 D1 (observe only): lifecycle hooks for goal recall files. Records state; deletes nothing. */
+/**
+ * Spec 106 D1: lifecycle hooks for goal recall files. Records state; deletes nothing unless the flag is
+ * `delete` (spec 118 D2), where a verified passing re-run ACKs and removes eligible files.
+ */
+import { createHash } from "node:crypto";
 import {
 	type EvidenceLifecycleReport,
 	evidenceLifecycleObserveEnabled,
 	registerEvidenceArtifact,
 	updateEvidenceArtifactsByOwner,
 } from "./evidence-lifecycle.ts";
+import { deleteSettledRecall } from "./evidence-lifecycle-delete.ts";
 import { evidenceLifecycleReport } from "./evidence-lifecycle-report.ts";
 
 /** The repair turn that reads the file and the re-run check that verifies the fix. */
@@ -32,6 +37,8 @@ export function observeRecallRecheck(goalId: string, passed: boolean): void {
 		verified: passed,
 		...(passed ? { goalActive: false } : {}),
 	});
+	// Spec 118 D2 (`delete` only): a verified pass is the ACK; eligible recall files go now.
+	if (passed) deleteSettledRecall(createHash("sha256").update(goalId).digest("hex"));
 }
 
 /** The goal was blocked with rounds exhausted: classify its recall files; holds stay (no state change). */
