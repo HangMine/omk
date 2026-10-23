@@ -121,6 +121,67 @@ describe("spec 110 ATIF export", () => {
 	});
 });
 
+describe("spec 110 follow-up: omk_session_info seq >= 2", () => {
+	const info = (seq, h, prompt) => ({
+		type: "omk_session_info",
+		seq,
+		systemHash: h.repeat(64),
+		toolsHash: "1".repeat(64),
+		systemPrompt: prompt,
+		tools: [{ name: "bash", description: "run", parameters: { type: "object" } }],
+	});
+	const run = (events) => {
+		const eventsText = events.map((e) => JSON.stringify(e)).join("\n");
+		return JSON.parse(exportTrajectory({ eventsText, runLogDir: join(fx("plain"), "run-log"), env: {}, version: "1" }).json);
+	};
+	const base = () => parseJsonl(readFileSync(join(fx("plain"), "events.jsonl"), "utf8"));
+
+	it("seq 1 only: no sessionInfoChanges, no per-step tag, round-trips", () => {
+		const events = base();
+		events.splice(1, 0, info(1, "a", "You are omk."));
+		const t = run(events);
+		assert.equal(t.extra.omk.sessionInfoChanges, undefined);
+		for (const s of t.steps) assert.equal(s.extra?.omk?.sessionInfo, undefined);
+		assert.deepStrictEqual(reverseTrajectory(t).events, events);
+	});
+
+	it("seq 2 hash change: kept in sessionInfoChanges, later agent steps tagged, round-trips", () => {
+		const events = base();
+		events.splice(1, 0, info(1, "a", "You are omk."));
+		const firstAgent = events.findIndex((e) => e.type === "message_end" && e.message?.role === "assistant");
+		const lastAgent = events.findLastIndex((e) => e.type === "message_end" && e.message?.role === "assistant");
+		assert.ok(firstAgent < lastAgent, "fixture needs >= 2 assistant messages");
+		events.splice(lastAgent, 0, info(2, "b", "You are omk (compacted)."));
+		const t = run(events);
+		assert.equal(t.steps[0].message, "You are omk.", "system step stays seq 1");
+		assert.equal(t.extra.omk.sessionInfoChanges.length, 1);
+		assert.equal(t.extra.omk.sessionInfoChanges[0].seq, 2);
+		assert.equal(t.extra.omk.sessionInfoChanges[0].systemPrompt, "You are omk (compacted).");
+		const agents = t.steps.filter((s) => s.source === "agent");
+		assert.equal(agents[0].extra.omk.sessionInfo.seq, 1);
+		assert.equal(agents[0].extra.omk.sessionInfo.systemHash, "a".repeat(64));
+		assert.equal(agents.at(-1).extra.omk.sessionInfo.seq, 2);
+		assert.equal(agents.at(-1).extra.omk.sessionInfo.systemHash, "b".repeat(64));
+		assert.ok(t.steps.every((s, i) => s.step_id === i + 1));
+		assert.deepStrictEqual(reverseTrajectory(t).events, events);
+	});
+
+	it("masks secrets inside a seq 2 line; rescan 0", () => {
+		const FAKE = { TYPESAFE_API_KEY: "tsk_fake_0123456789abcdef" };
+		const events = base();
+		events.splice(1, 0, info(1, "a", "You are omk."));
+		events.push(info(2, "b", `new ${FAKE.TYPESAFE_API_KEY} sk-abcdefghijklmnop1234 Bearer abc`));
+		const eventsText = events.map((e) => JSON.stringify(e)).join("\n");
+		const { json, hits } = exportTrajectory({ eventsText, runLogDir: join(fx("plain"), "run-log"), env: FAKE, version: "1" });
+		const t = JSON.parse(json);
+		assert.match(t.extra.omk.sessionInfoChanges[0].systemPrompt, /\[REDACTED:TYPESAFE_API_KEY\]/);
+		assert.deepEqual(hits, []);
+		assert.deepEqual(rescan(json, collectSecrets(FAKE)), []);
+		assert.ok(!json.includes(FAKE.TYPESAFE_API_KEY));
+		assert.ok(!/sk-abcdefghij|Bearer abc/.test(json));
+	});
+});
+
 describe("spec 110 masking (criterion 4)", () => {
 	const FAKE = {
 		TYPESAFE_API_KEY: "tsk_fake_0123456789abcdef",

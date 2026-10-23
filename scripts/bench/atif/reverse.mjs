@@ -57,6 +57,7 @@ export function reverseTrajectory(t) {
 			if (omk.sessionInfoTools !== undefined) info.tools = omk.sessionInfoTools;
 			return info;
 		}
+		if (e.ref === "sessionInfoChange") return omk.sessionInfoChanges[e.index];
 		const step = stepById.get(e.step);
 		if (e.ref === "step" && step.source === "user") {
 			const o = step.extra.omk;
