@@ -9,9 +9,11 @@ import { createEditTool, createEditToolDefinition } from "../src/core/tools/edit
 import {
 	classifyEditMatchFailure,
 	EDIT_MATCH_RUN_LOG,
+	EDIT_SEQ_SESSION_CAP,
 	editMatchObserver,
 	editParentSessionId,
 	editPathHash,
+	editSeqSessionCount,
 } from "../src/core/tools/edit-match-observe.ts";
 import { EDIT_CASES } from "./edit-match-observe-cases.ts";
 
@@ -312,5 +314,28 @@ describe("classifyEditMatchFailure", () => {
 				{ oldText: "q", newText: "" },
 			]),
 		).toEqual({ reason: "not_found", editIndex: 1 });
+	});
+});
+
+describe("edit match seq LRU cap", () => {
+	it("keeps at most 1000 sessions and an active session's seq continues", () => {
+		const env = { [RUN_LOG_DIR_ENV]: logDir } as NodeJS.ProcessEnv;
+		const ctx = (id: string) => ({ sessionManager: { getSessionId: () => id } });
+		const edits = [{ oldText: "a", newText: "A" }];
+		const log = (id: string) => editMatchObserver.logSuccess("f.txt", "a", edits, ctx(id), env);
+		log("active");
+		for (let i = 0; i < EDIT_SEQ_SESSION_CAP + 50; i++) {
+			log(`lru-${i}`);
+			if (i % 100 === 0) log("active");
+			expect(editSeqSessionCount()).toBeLessThanOrEqual(EDIT_SEQ_SESSION_CAP);
+		}
+		expect(editSeqSessionCount()).toBe(EDIT_SEQ_SESSION_CAP);
+		log("active");
+		log("lru-0");
+		const all = logLines();
+		const active = all.filter((l) => l.sessionId === "active").map((l) => l.seq);
+		expect(active).toEqual(active.map((_, i) => i + 1));
+		// lru-0 was evicted, so its counter restarts.
+		expect(all.filter((l) => l.sessionId === "lru-0").map((l) => l.seq)).toEqual([1, 1]);
 	});
 });
