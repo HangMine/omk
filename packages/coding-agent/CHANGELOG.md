@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.5.7] - 2026-10-23
+
+### Added
+
+- Structured diagnostics after `edit` and `write` behind `OMK_EDIT_DIAGNOSTICS` (flag, default off). Diagnostics are skipped when remote `operations` are passed (#250).
+- Head plus tail bash output behind `OMK_EXEC_TRUNCATE_MIDDLE` (flag, default off) (#246).
+- A `session_info` line in JSON output behind `OMK_JSON_SESSION_INFO` (flag, default off) (#244).
+
+With all three flags off, behavior is the same as 1.5.6.
+
+### Fixed
+
+- Bash output keeps the full 50KB tail when one long line spans several chunks (#238).
+
+### Changed
+
+- Bench tooling: an ATIF trajectory exporter in `scripts/bench/atif-export.mjs` (#239), which also maps seq 2+ session-info lines (#251).
+- Design specs added, not implemented: 113 head+tail bash output (#245), 114 indent-insensitive edit matching (#249).
+- `AGENTS.md` records the autonomous development mode and the patch-release order (#241, #247).
+- Pi inventory tests cover `.mts`, `.cts`, `.tsx` and `.mjs` discovery (#236).
+
 ## [1.5.6] - 2026-10-22
 
 ### Added

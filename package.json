@@ -80,7 +80,7 @@
 	"engines": {
 		"node": ">=22.19.0"
 	},
-	"version": "1.5.6",
+	"version": "1.5.7",
 	"overrides": {
 		"@stryker-mutator/core": {
 			"typed-rest-client": {
