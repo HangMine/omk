@@ -13,7 +13,7 @@ export const SKILL_ADMISSION_ENTRY_TYPE = "skill_admission";
 export const SKILL_ADMISSION_SCHEMA_VERSION = 1;
 export const SKILL_ADMISSION_POLICY_REVISION = "106-a1-r1";
 
-export type SkillAdmissionSource = "explicit" | "steer" | "followUp" | "read" | "default" | "worker";
+export type SkillAdmissionSource = "explicit" | "steer" | "followUp" | "read" | "default" | "worker" | "auto";
 export type SkillAdmissionStatus = "reserved" | "admitted" | "released";
 
 export interface SkillAdmissionRecord {

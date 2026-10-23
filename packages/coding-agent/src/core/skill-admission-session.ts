@@ -19,6 +19,7 @@ import {
 	type SkillAdmissionSource,
 	skillBodyDigest,
 } from "./skill-admission-ledger.ts";
+import { observeSkillRead } from "./skill-autoload-observe.ts";
 import type { Skill } from "./skills.ts";
 import { resolveReadPath } from "./tools/path-utils.ts";
 
@@ -139,6 +140,7 @@ export function gateSkillRead(
 	isError: boolean,
 	env: NodeJS.ProcessEnv = process.env,
 ): { content: { type: "text"; text: string }[]; details: undefined } | undefined {
+	observeSkillRead(sessionManager, skills, cwd, toolName, args, isError, env); // spec 117 run log, no flag
 	if (toolName !== "read" || isError || !isSkillAdmissionEnabled(env)) return undefined;
 	const rawPath = (args as { path?: unknown } | undefined)?.path;
 	if (typeof rawPath !== "string") return undefined;

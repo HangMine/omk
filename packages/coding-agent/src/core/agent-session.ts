@@ -640,7 +640,7 @@ export class AgentSession {
 	private _followUpMessages: string[] = [];
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
-	private readonly _promptSkillFreeze = new PromptSkillFreeze();
+	private readonly _promptSkillFreeze = new PromptSkillFreeze(() => this.sessionManager);
 	private readonly _deferredTurnInput = new DeferredTurnInput();
 
 	// Compaction state
