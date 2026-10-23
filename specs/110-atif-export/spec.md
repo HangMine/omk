@@ -147,6 +147,7 @@ logging (if Q1 needs a new log field, that's a separate spec).
 - **Q3:** `--mode json` carries no tool schemas or system prompt, so `agent.tool_definitions`
   (optional in ATIF) is omitted and the Q1 hash placeholder is used unless an
   `omk_session_info` line (spec 112) is present.
+  Only the first (seq 1) line is mapped. Seq 2 and later `omk_session_info` lines are kept only in `extra.omk.eventLog` (masked); mapping them is a follow-up.
 - **Q7:** non-blocking.
 
 ## Open questions

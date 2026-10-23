@@ -24,7 +24,7 @@ import {
 } from "../../src/core/llm-call-run-log.ts";
 import { RUN_LOG_DIR_ENV } from "../../src/core/run-log.ts";
 import { runPrintMode } from "../../src/modes/print-mode.ts";
-import { createHarness, type Harness } from "./harness.ts";
+import { createHarness, type Harness, type HarnessOptions } from "./harness.ts";
 
 const printIo = vi.hoisted(() => ({ output: [] as string[] }));
 vi.mock("../../src/core/output-guard.js", () => ({
@@ -76,6 +76,8 @@ async function run(options: {
 	flag: string | undefined;
 	messages?: string[];
 	between?: (harness: Harness, index: number) => void;
+	prepare?: (harness: Harness) => void;
+	extensionFactories?: HarnessOptions["extensionFactories"];
 }): Promise<RunResult> {
 	if (options.flag === undefined) delete process.env[JSON_SESSION_INFO_ENV];
 	else process.env[JSON_SESSION_INFO_ENV] = options.flag;
@@ -84,8 +86,13 @@ async function run(options: {
 	process.env[RUN_LOG_DIR_ENV] = logDir;
 	resetLlmCallRunLogClock();
 
-	const harness = await createHarness({ tools: [tool("read"), tool("grep")], systemPrompt: "base system" });
+	const harness = await createHarness({
+		tools: [tool("read"), tool("grep")],
+		systemPrompt: "base system",
+		extensionFactories: options.extensionFactories,
+	});
 	harnesses.push(harness);
+	options.prepare?.(harness);
 	const followUps = options.messages ?? [];
 	harness.setResponses([fauxAssistantMessage("one"), ...followUps.map((_, i) => fauxAssistantMessage(`r${i}`))]);
 	const requests: Context[] = [];
@@ -223,6 +230,68 @@ describe("spec 112 OMK_JSON_SESSION_INFO", () => {
 		expect(on.runLog).toHaveLength(1);
 		expect(on.runLog[0]!.systemHash).toBe(info!.systemHash);
 		expect(on.runLog[0]!.toolsHash).toBe(info!.toolsHash);
+	});
+
+	it("decision (a): setup prompt/tools equal the first real request -> exactly one line, seq 1 only", async () => {
+		const on = await run({ flag: "1" });
+		const info = infoLines(on);
+		expect(info.map((line) => line.seq)).toEqual([1]);
+		expect(on.requests).toHaveLength(1);
+		expect(info[0]!.systemHash).toBe(systemHash(on.requests[0]!));
+		expect(info[0]!.toolsHash).toBe(toolsHash(on.requests[0]!));
+		expect(info[0]!.systemHash).toBe(on.runLog[0]!.systemHash);
+		expect(info[0]!.toolsHash).toBe(on.runLog[0]!.toolsHash);
+	});
+
+	/** seq 2 must come from the real request: after seq 1, before that request's assistant events, hashes = its llm-call line. */
+	function expectSeq2FromRequest(on: RunResult, changed: "system" | "tools") {
+		const info = infoLines(on);
+		expect(info.map((line) => line.seq)).toEqual([1, 2]);
+		const [first, second] = info as [Record<string, unknown>, Record<string, unknown>];
+		expect(on.lines.indexOf(first)).toBe(1);
+		const assistantStart = on.lines.findIndex(
+			(line) => line.type === "message_start" && (line.message as { role?: string })?.role === "assistant",
+		);
+		expect(on.lines.indexOf(second)).toBeLessThan(assistantStart);
+		const [request] = on.requests;
+		expect(on.requests).toHaveLength(1);
+		expect(second.systemHash).toBe(systemHash(request!));
+		expect(second.toolsHash).toBe(toolsHash(request!));
+		expect(second.systemHash).toBe(on.runLog[0]!.systemHash);
+		expect(second.toolsHash).toBe(on.runLog[0]!.toolsHash);
+		// Only the part that really changed in the request differs from seq 1.
+		if (changed === "tools") {
+			expect(second.toolsHash).not.toBe(first.toolsHash);
+			expect(second.systemHash).toBe(first.systemHash);
+		} else {
+			expect(second.systemHash).not.toBe(first.systemHash);
+			expect(second.toolsHash).toBe(first.toolsHash);
+			expect(second.systemPrompt).toBe(request!.systemPrompt);
+		}
+	}
+
+	it("decision (b): prepareTools narrows the sent tools -> seq 2 before that request, hashes = its llm-call line", async () => {
+		const on = await run({
+			flag: "1",
+			prepare: (harness) => {
+				harness.session.agent.prepareTools = (tools) => tools.filter((t) => t.name === "read");
+			},
+		});
+		expectSeq2FromRequest(on, "tools");
+		expect((infoLines(on)[1]!.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["read"]);
+	});
+
+	it("decision (b): an extension rewrites the system prompt -> seq 2 before that request, hashes = its llm-call line", async () => {
+		const on = await run({
+			flag: "1",
+			extensionFactories: [
+				(omk) => {
+					omk.on("before_agent_start", async () => ({ systemPrompt: "extension system prompt" }));
+				},
+			],
+		});
+		expectSeq2FromRequest(on, "system");
+		expect(infoLines(on)[1]!.systemPrompt).toBe("extension system prompt");
 	});
 
 	it("criterion 2a: unchanged hashes across prompts write no new line", async () => {
