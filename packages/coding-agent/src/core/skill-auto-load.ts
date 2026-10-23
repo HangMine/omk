@@ -84,6 +84,22 @@ export function autoLoadSkills(input: AutoLoadInput): string | undefined {
 	const active = skillAutoLoadActive(env, input.warn);
 	const observe = Boolean(env[RUN_LOG_DIR_ENV]?.trim());
 	if (!active && !observe) return undefined;
+	if (active) return runAutoLoad(input, env, true, observe);
+	// Observe-only (flag off, run log on): selection, body reads and logging never reach the prompt or throw.
+	try {
+		runAutoLoad(input, env, false, true);
+	} catch {
+		// swallowed: a flag-off prompt must stay unchanged
+	}
+	return undefined;
+}
+
+function runAutoLoad(
+	input: AutoLoadInput,
+	env: NodeJS.ProcessEnv,
+	active: boolean,
+	observe: boolean,
+): string | undefined {
 	const invocable = input.skills.filter((skill) => !skill.disableModelInvocation);
 	const byName = new Map(invocable.map((skill) => [skill.name, skill]));
 	const picks: Pick[] = [];

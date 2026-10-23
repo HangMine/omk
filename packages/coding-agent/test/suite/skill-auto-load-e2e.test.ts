@@ -105,7 +105,9 @@ describe("spec 117 e2e", () => {
 			for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
 			const off = await firstRequest(await harnessWith(skills, root), false);
 			expect(off.bytes).toBe(absent.bytes);
-			// Reported usage tracks the prompt; it can differ only by the random temp-dir name length (~4 chars/token).
+			// Usage is compared with a tolerance on purpose: each harness gets a random tmp dir name, so the raw prompt
+			// length (and the faux usage estimate, ~4 chars/token) can differ by a few chars, while the context bytes
+			// above are exactly equal after normalizing timestamps and that tmp dir.
 			const slack = Math.ceil(Math.abs(off.rawLength - absent.rawLength) / 4) + 1;
 			expect(off.input).toBeGreaterThan(0);
 			expect(Math.abs(off.input - absent.input)).toBeLessThanOrEqual(slack);
