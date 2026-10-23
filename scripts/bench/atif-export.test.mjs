@@ -202,6 +202,35 @@ describe("spec 110 masking (criterion 4)", () => {
 		for (const k of ["TYPESAFE_API_KEY", "GITHUB_TOKEN", "DB_PASSWORD"]) assert.ok(!json.includes(FAKE[k]), k);
 	});
 
+	it("spec 112 criterion 5: masks every omk_session_info string (seq 1 and a re-emitted seq 2); rescan 0", () => {
+		const events = parseJsonl(readFileSync(join(fx("plain"), "events.jsonl"), "utf8"));
+		const info = (seq) => ({
+			type: "omk_session_info",
+			seq,
+			systemHash: "0".repeat(64),
+			toolsHash: "1".repeat(64),
+			systemPrompt: `You are omk. ${leak(FAKE.TYPESAFE_API_KEY)} xai-abcdefghijklmnopqrst`,
+			tools: [
+				{
+					name: "bash",
+					description: `run ${leak(FAKE.GITHUB_TOKEN)}`,
+					parameters: { type: "object", properties: { cmd: { type: "string", description: `e.g. ${FAKE.DB_PASSWORD}`, default: "Bearer abcdefghijklmnopqrstu" } } },
+				},
+			],
+		});
+		events.splice(1, 0, info(1));
+		events.push(info(2));
+		const eventsText = events.map((e) => JSON.stringify(e)).join("\n");
+		const { json, hits } = exportTrajectory({ eventsText, runLogDir: join(fx("plain"), "run-log"), env: FAKE, version: "1" });
+		const t = JSON.parse(json);
+		assert.match(t.steps[0].message, /^You are omk\. use \[REDACTED:TYPESAFE_API_KEY\]/);
+		assert.match(t.agent.tool_definitions[0].function.description, /\[REDACTED:GITHUB_TOKEN\]/);
+		assert.deepEqual(hits, []);
+		assert.deepEqual(rescan(json, collectSecrets(FAKE)), []);
+		for (const k of ["TYPESAFE_API_KEY", "GITHUB_TOKEN", "DB_PASSWORD"]) assert.ok(!json.includes(FAKE[k]), k);
+		assert.ok(!/sk-abcdefghij|ghp_abcdefghij|xai-abcdefghij|Bearer abcdefghij/.test(json));
+	});
+
 	it("masks agent-env secret names given by --mask-env-names / OMK_ATIF_MASK_ENV_NAMES", () => {
 		const env = { HARBOR_TRIAL_NONCE: "nonce-value-abcdef", MODEL_ENDPOINT_ID: "endpoint-id-987654" };
 		const { dir, eventsPath } = leakyTrial();
