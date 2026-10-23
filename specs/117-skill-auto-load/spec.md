@@ -27,8 +27,10 @@ Gap (the PR 2 scope): every selector above emits **names, descriptions and `<loc
 
 - Flag read per session start from `process.env`; values `1/on/true` = on. `OMK_SKILL_ADMISSION=1` is required:
   `OMK_SKILL_AUTO_LOAD` alone does nothing and writes one stderr warning per process (no second ledger, no second cap).
-- Candidates = the **existing** selector output for the prompt (provider harness `selectSkills()` picks, or
-  `OMK_SKILL_SELECT` ranker hits when active). No new ranker, no new thresholds.
+- Candidates = the **existing** ranking only: `SkillSearchSession` in `src/core/skill-search.ts` (BM25 index,
+  `SKILL_CANDIDATE_K = 3`, `SKILL_CANDIDATE_MIN_SCORE = 2`; metacon via `skill-select-rankers.ts` when
+  `OMK_SKILL_SELECT=metacon`) and the provider harness `selectSkills()` picks. No new ranker, no new thresholds,
+  **0 new dependencies** (no embedding, vector or fuzzy-match packages).
 - Load rule: only candidates that pass the existing **strong** threshold (`SKILL_STRONG_THRESHOLD`) are
   loaded, at most `MAX_SELECTED_SKILLS = 3` per prompt. The ambiguous band (weak..strong) is never loaded; it is
   only counted in the observe log (§3). Zero is a valid result (doc: "무관한 질의 0개 허용").
@@ -50,23 +52,32 @@ Gap (the PR 2 scope): every selector above emits **names, descriptions and `<loc
 
 ## 3. Step 1: observe-only run log (no flag, lands first, separate small PR)
 
-When `OMK_RUN_LOG_DIR` is set, append one line per user prompt to `skill-autoload.jsonl`. Counts and hashes only, **no skill text, names or paths**:
+When `OMK_RUN_LOG_DIR` is set, append lines to `skill-autoload.jsonl`. Counts and hashes only, **no skill text, names or paths**.
+Skills are identified only by `nameSha256` (sha256 of the canonical skill id) so lines can be joined within a session.
 
-`{sessionId, parentSessionId, seq, candidates, strongCandidates, ambiguousCandidates, wouldLoad, wouldLoadStrong, alreadyAdmitted, admittedTotal,
-capRefusedWouldBe, bodyBytesWouldLoad, bodyTokensWouldLoad, requestTokensBefore, wouldExceedBudget,
-modelReadSkillWithin3Turns, candidateDigests:[sha256], candidatePathHashes:[sha256], flags:{autoLoad, admission}}`
+Per user prompt (`kind: "prompt"`):
 
-- `wouldLoadStrong` is computed with the §2 rule (what auto-load would actually load). `wouldLoad` = `wouldLoadStrong`
-  + ambiguous-band candidates; the ambiguous part is observation only and is never loaded. Both are computed, never applied, when the flag is off.
-- `modelReadSkillWithin3Turns`: count of `wouldLoad` skills the model later read itself (digest match) within 3 turns, written as a follow-up line `{seq, kind:"followup", ...}`.
-- `seq` uses the bounded per-session counter pattern from #255/#256 (LRU 1000 sessions).
+`{kind, sessionId, parentSessionId, seq, requestTokensBefore, alreadyAdmitted, admittedTotal, flags:{autoLoad, admission},
+candidates:[{nameSha256, digest, pathHash, band: "strong"|"ambiguous", wouldLoad, loaded, capRefused, overBudget, bodyBytes, bodyTokens}]}`
+
+- `band`: `strong` = passes `SKILL_STRONG_THRESHOLD`; `ambiguous` = weak..strong band. Below weak is not logged.
+- `wouldLoad` (bool): true only for `strong` picks the §2 rule would load (≤3 per prompt, not already admitted).
+  Ambiguous candidates are always `wouldLoad: false`; they are logged for observation only. Computed, never applied, when the flag is off.
+- `loaded` (bool): the body was actually admitted and sent (always `false` with the flag off).
+
+Per skill `read` of a SKILL.md or any file under a candidate skill's directory (`kind: "read"`):
+`{kind, sessionId, seq, nameSha256, turn}`. `seq` uses the bounded per-session counter pattern from #255/#256 (LRU 1000 sessions).
+
+"Used" (for G2) = the session has a `read` line for that `nameSha256` after the prompt that loaded it, or the
+model's tool calls touch a path under that skill directory (matched by `pathHash`). Weak proxy; it under-counts skills
+that are applied without reading reference files, so G2 is reported with that caveat.
 
 ## 4. Gate (before implementing §2)
 
 Run the observe log on the A/B baseline (main, all flags off, `OMK_SKILL_SELECT` as in the current baseline), TB 4.0 66 tasks. Implement only when:
 
-- G1: >= 3 tasks with `wouldLoad >= 1` where the model did **not** read that skill (`wouldLoadStrong >= 1` and `modelReadSkillWithin3Turns < wouldLoadStrong`), i.e. auto-load would add something.
-- G2: in >= 80% of prompts with `strongCandidates = 0`, `wouldLoadStrong = 0` (zero-load path is real).
+- G1 (flag-off base runs): count tasks with >= 1 candidate `wouldLoad: true` whose `nameSha256` has **no** `read` line in that session. Pass if >= 3 tasks. (Auto-load would deliver something the model never fetched itself.)
+- G2 (A/B treatment arm, upper bound): unused-load rate = loaded skills never used in that session / loaded skills (`loaded: true`), pooled over tasks with a task-clustered 95% CI. Proposed bar: **<= 50%** (**Tech Lead to confirm**). Over the bar ⇒ auto-load is not promoted even if pass rate holds. Flag-off runs report the same ratio over `wouldLoad: true` as a preview.
 - G3: 0 prompts with `wouldExceedBudget = true` among G1 tasks, or the budget drop rule is tested first.
 
 Count by task (lead + workers grouped via `parentSessionId`). Under 3 ⇒ parked as weak evidence, reported as such.
@@ -87,7 +98,7 @@ If no task has any skill candidate on TB 4.0, the spec is parked.
 - `OMK_SKILL_AUTO_LOAD=1` without `OMK_SKILL_ADMISSION`: exactly one warning per process (two sessions ⇒ one line), request and session file identical to off.
 - AL1: strong candidate ⇒ body in `prompt-skills` message, `skill_admission` record with source `auto`; system prompt bytes unchanged after first prompt.
 - AL2: unrelated prompt (no strong candidate) ⇒ 0 bodies, 0 records.
-- AL2b: ambiguous-band-only candidate ⇒ 0 bodies, 0 records; observe log has `wouldLoad = 1`, `wouldLoadStrong = 0`.
+- AL2b: ambiguous-band-only candidate ⇒ 0 bodies, 0 records; observe log has one candidate with `band: "ambiguous"`, `wouldLoad: false`.
 - AL1b: auto records carry source `"auto"`, never `"default"`; `defaultActiveSkills` names are not loaded as bodies.
 - AL3: 9 admitted + 2 strong candidates ⇒ exactly 1 loaded, 1 counts-only refusal (reuses SK2 ledger path).
 - AL4: same skill selected on two prompts ⇒ one record, no re-send of the body.
@@ -95,13 +106,15 @@ If no task has any skill candidate on TB 4.0, the spec is parked.
 - AL5b: compaction headroom state (trigger, rearm, hysteresis) identical before and after an auto-load budget check.
 - AL6: resume + compaction keeps count; auto load does not reset it (SK5 with `auto` source).
 - AL7: worker gets only parent-selected admitted paths via `--skill`; worker auto-load and suggest stay off even with the flag set in the parent env.
+- Run log: `prompt` lines carry `band`, `wouldLoad`, `loaded`, `nameSha256` per candidate; a `read` of a skill file yields one `read` line joinable by `nameSha256`; ambiguous ⇒ `wouldLoad: false`; flag off ⇒ `loaded: false` everywhere. G1 and G2 counts recomputed from a fixture log match expected numbers.
 - Run log: written only with `OMK_RUN_LOG_DIR`; no field contains skill name, path or text (assert no string field > 64 chars except hashes; names of fixture skills never appear); counter bounded (1000 sessions).
+- No new package in `package.json`/lockfile (diff check).
 - Existing: SK1–SK7 suites, `skill-selector`, `prompt-skill-message`, `skill-search-gate` tests unchanged and green.
 
 ## 7. Decisions (Tech Lead, 2026-10-23 KST)
 
 1. Source label: new `"auto"` in `SkillAdmissionSource`; `"default"` is not reused, so logs distinguish origin.
-2. Load rule: strong candidates only. The ambiguous band is counted only in the observe log `wouldLoad`.
+2. Load rule: strong candidates only. The ambiguous band is only logged (`band: "ambiguous"`, `wouldLoad: false`), never loaded.
 3. `defaultActiveSkills` body load: out of scope, separate PR.
 4. Budget: dedicated skill budget on the existing admission path; may read `compaction-headroom.ts`, never mutates its state.
 5. `OMK_SKILL_ADMISSION=1` is required; `OMK_SKILL_AUTO_LOAD` alone does nothing and warns once.
