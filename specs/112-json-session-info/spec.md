@@ -30,16 +30,24 @@ New env flag `OMK_JSON_SESSION_INFO`, **default off**.
 
 - **Off (unset, empty, or anything but `1`)**: no code path changes; `--mode json` stdout is
   byte-identical to main.
-- **On (`1`) and `--mode json`**: emit exactly one extra line, once per process, right after
-  the header line (`print-mode.ts:198-202`), before any event:
+- **On (`1`) and `--mode json`**: emit the first `omk_session_info` line right after the
+  header line (`print-mode.ts:198-202`), before any event, and a new line whenever
+  `systemHash` or `toolsHash` changes (e.g. after compaction or a model switch). No re-emit
+  while both hashes are unchanged.
 
   ```json
-  {"type":"omk_session_info","systemPrompt":"<string>","tools":[{"name":"...","description":"...","parameters":{...}}]}
+  {"type":"omk_session_info","seq":1,"systemHash":"<hex>","toolsHash":"<hex>","systemPrompt":"<string>","tools":[{"name":"...","description":"...","parameters":{...}}]}
   ```
 
-  Only these fields. `tools[]` entries carry only `name`, `description`, `parameters` (JSON
+  Only these fields. `seq` starts at 1 and increments by 1 per emitted line. `systemHash` /
+  `toolsHash` use the same functions as the `llm-call` run log (`llm-call-run-log.ts`).
+  `systemPrompt` is the final string actually sent to the provider (after all extension /
+  skill / cache-boundary processing), not an intermediate value. `tools[]` entries carry only `name`, `description`, `parameters` (JSON
   schema as given to the model). Nothing else (no cwd, env, model, settings).
 - Other modes (text, interactive, rpc): flag ignored.
+- Workers: subagent worker processes inherit the flag through env and emit their own
+  `omk_session_info` lines in their own json stream; spec 110 maps them into
+  `subagent_trajectories`.
 - Model input unchanged: the line is built from the same in-memory values the session
   already sends; it does not alter the system prompt, tool list, order or cache prefix.
 - **Run log rule unchanged**: `appendRunLog` records keep hashes only; this spec writes
@@ -50,7 +58,8 @@ New env flag `OMK_JSON_SESSION_INFO`, **default off**.
 
 The flag writes raw text to stdout (same trust level as the existing json event stream,
 which already contains prompts and tool output). Masking is done by the spec 110 exporter,
-not in omk runtime: the `systemPrompt` and `tools[].description` strings go through spec 110's
+not in omk runtime: every emitted string (`systemPrompt`, all `tools[]` strings incl. `description` and strings
+inside `parameters`) goes through spec 110's
 masking pass (secret-named env vars, `sk-`/`xai-`/`ghp_`/`Bearer` shapes) before
 `trajectory.json` is written. Mapping: `systemPrompt` → first step `source:"system"`
 `message`; `tools` → `agent.tool_definitions`.
@@ -59,9 +68,14 @@ masking pass (secret-named env vars, `sk-`/`xai-`/`ghp_`/`Bearer` shapes) before
 
 1. Flag off: `--mode json` stdout byte-identical to main for a fixed fake-provider run
    (golden comparison test).
-2. Flag on: exactly one `omk_session_info` line, at line index 1 (right after header), with
-   exactly the keys `type, systemPrompt, tools` and per tool exactly `name, description,
-   parameters`; values equal the session's system prompt and tool list.
+2. Flag on, no change during the run: exactly one `omk_session_info` line, at line index 1
+   (right after header), with exactly the keys `type, seq, systemHash, toolsHash,
+   systemPrompt, tools` and per tool exactly `name, description, parameters`.
+2a. Flag on, each change of system prompt or tools (simulated compaction / model switch):
+   exactly one new line, `seq` +1, new hashes; unchanged hashes => no new line.
+2b. `systemHash` of the emitted line == the run log `llm-call.systemHash` of the following
+   request, and `systemPrompt` == the string captured at the fake provider.
+2c. Worker process with inherited env emits its own line(s).
 3. Flag on: the provider request (system prompt, tools, messages) is identical to flag off
    (captured via fake stream function).
 4. Run log files byte-identical (modulo `t`/`pid`) between on and off.
@@ -72,7 +86,7 @@ masking pass (secret-named env vars, `sk-`/`xai-`/`ghp_`/`Bearer` shapes) before
 ## Test plan
 
 Unit tests only, no A/B, no live model:
-- print-mode json test with fake stream: off golden, on line position/shape, on/off request equality.
+- print-mode json test with fake stream: off golden, on line position/shape, one-line-per-change and no-change cases, hash == run log `systemHash`, on/off request equality, worker inheritance.
 - run-log unchanged test.
 - spec 110 exporter test (in that PR's suite): consumes `omk_session_info`, masks, rescan = 0.
 
@@ -81,12 +95,15 @@ Unit tests only, no A/B, no live model:
 No change to run-log content, session files, rpc/interactive modes, or the model request;
 no ATIF exporter code (spec 110); no paid runs.
 
+## Decisions (Tech Lead, 10/23)
+
+1. All emitted strings, including tool descriptions, go through spec 110 masking.
+2. Workers inherit the flag via env and emit their own lines (spec 110 `subagent_trajectories`).
+3. Not once-only: re-emit on `systemHash`/`toolsHash` change, with `seq` and hashes; no
+   re-emit when unchanged.
+4. `systemPrompt` is the final string sent to the provider; tested against run log `systemHash`.
+
 ## Open questions
 
-1. Workers (`OMK_RUN_LOG_ROLE=worker`): do subagent processes run in `--mode json` so the flag
-   reaches them, or does the lead need to forward it for spec 110's `subagent_trajectories`?
-2. If extensions/skills change the system prompt or tools mid-run, emit once (start state) or
-   re-emit on change? This spec says once; confirm a change is rare enough to record only as
-   `extra.omk` hash drift in spec 110.
-3. Where exactly the resolved system prompt is available before the first event (session
-   construction vs first provider request) — confirm in implementation.
+None open. Former Q1 (workers), Q2 (mid-run changes), Q3 (which prompt string) are closed
+by decisions 2, 3, 4.
