@@ -54,6 +54,7 @@ import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth
 import { parseBangInvocation } from "./bang-skill-invocation.ts";
 import type { BashResult } from "./bash-executor.ts";
 import { type CompactionSettings, compactionHysteresisConfigFor } from "./compaction/compaction-headroom.ts";
+import { observeCompaction } from "./compaction/compaction-observe.ts";
 import * as compactionPolicy from "./compaction/concurrent-write-policy.ts";
 import {
 	type CompactionHysteresisState,
@@ -525,7 +526,6 @@ interface ToolDefinitionEntry {
 }
 
 type BegunCompaction = import("./session-compaction-service.ts").BegunCompaction;
-type CommittedCompaction = import("./session-compaction-service.ts").CommittedCompaction;
 
 const PENDING_TOOL_RESULT_TOKENS = {
 	text: 1024,
@@ -3466,14 +3466,6 @@ export class AgentSession {
 		return this._compactionService.beginTransaction(compactionModel, emergency);
 	}
 
-	private _commitCompaction(
-		begun: BegunCompaction,
-		result: CompactionResult,
-		fromExtension: boolean,
-	): CommittedCompaction {
-		return this._compactionService.commit(begun, result, fromExtension);
-	}
-
 	private _pendingToolResultReserve(settings: CompactionSettings): number {
 		const pendingIds = this.agent.state.pendingToolCalls;
 		const calls = new Map<string, { readonly name: string; readonly args: unknown }>();
@@ -3739,9 +3731,10 @@ export class AgentSession {
 				tokensBefore,
 				details,
 			};
-			const committed = this._commitCompaction(begun, compactionResult, fromExtension);
+			const committed = this._compactionService.commit(begun, compactionResult, fromExtension);
 			committedCompaction = true;
 			this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
+			observeCompaction(this.sessionManager, "manual", fromExtension, pathEntries, preparation, compactionResult);
 
 			if (this._extensionRunner) {
 				await this._extensionRunner.emit({
@@ -4138,8 +4131,9 @@ export class AgentSession {
 				tokensBefore,
 				details,
 			};
-			const committed = this._commitCompaction(begun, result, fromExtension);
+			const committed = this._compactionService.commit(begun, result, fromExtension);
 			this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
+			observeCompaction(this.sessionManager, reason, fromExtension, pathEntries, preparation, result);
 
 			if (this._extensionRunner) {
 				await this._extensionRunner.emit({
