@@ -91,7 +91,11 @@ export interface Harness {
 }
 
 function createTempDir(): string {
-	const tempDir = join(tmpdir(), `pi-suite-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	// Fixed-length name (#257): `Math.random().toString(36)` has a variable number of digits, and the cwd is
+	// part of the system prompt, so the faux provider's token estimate (chars / 4) drifted by one between
+	// runs. Pad/trim the suffix to exactly 10 chars so two harnesses always get same-length prompts.
+	const suffix = Math.random().toString(36).slice(2, 12).padEnd(10, "0");
+	const tempDir = join(tmpdir(), `pi-suite-${Date.now()}-${suffix}`);
 	mkdirSync(tempDir, { recursive: true });
 	return tempDir;
 }
