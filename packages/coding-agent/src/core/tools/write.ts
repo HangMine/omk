@@ -84,7 +84,8 @@ export function createWriteToolDefinition(
 			}
 			const dir = dirname(absolutePath);
 			const diag =
-				isEditDiagnosticsEnabled() && EditDiagnosticsRun.applies(path)
+				// Custom operations (e.g. SSH) edit a remote file; the checker only sees local paths.
+				options?.operations === undefined && isEditDiagnosticsEnabled() && EditDiagnosticsRun.applies(path)
 					? new EditDiagnosticsRun("write", cwd, path, absolutePath, signal)
 					: undefined;
 			const result = await withFileMutationQueue(absolutePath, async () => {

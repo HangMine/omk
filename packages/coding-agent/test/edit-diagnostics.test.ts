@@ -532,3 +532,54 @@ describe("checkerRan and checker versions (spec 107 pre-registration)", () => {
 		}
 	});
 });
+
+describe("custom operations (remote) skip diagnostics", () => {
+	const localEditOps = {
+		readFile: (p: string) => Promise.resolve(readFileSync(p)),
+		writeFile: (p: string, c: string) => Promise.resolve(writeFileSync(p, c)),
+		access: () => Promise.resolve(),
+	};
+	const localWriteOps = {
+		writeFile: (p: string, c: string) => Promise.resolve(writeFileSync(p, c)),
+		mkdir: () => Promise.resolve(),
+	};
+
+	for (const mode of ["1", "shadow"]) {
+		it(`OMK_EDIT_DIAGNOSTICS=${mode}: edit and write with custom operations never call the collector`, async () => {
+			process.env.OMK_EDIT_DIAGNOSTICS = mode;
+			const calls = fake([{ lines: [] }, { lines: [err("a.ts", 1, "new")] }]);
+			const e = await createEditToolDefinition(root, { operations: localEditOps }).execute(
+				"t",
+				{ path: "a.ts", edits: [{ oldText: "1", newText: "2" }] },
+				undefined,
+				undefined,
+				{} as never,
+			);
+			expect(textOf(e)).toBe("Successfully replaced 1 block(s) in a.ts.");
+			expect(Object.keys(e.details ?? {})).toEqual(["diff", "patch", "firstChangedLine"]);
+			const w = await createWriteToolDefinition(root, { operations: localWriteOps }).execute(
+				"t",
+				{ path: "b.ts", content: "let y = 2;\n" },
+				undefined,
+				undefined,
+				{} as never,
+			);
+			expect(w).toStrictEqual({
+				content: [{ type: "text", text: "Successfully wrote 11 bytes to b.ts" }],
+				details: undefined,
+			});
+			expect(calls).toHaveLength(0);
+			expect(readLog("edit-diag")).toEqual([]);
+		});
+
+		it(`OMK_EDIT_DIAGNOSTICS=${mode}: default operations still call the collector`, async () => {
+			process.env.OMK_EDIT_DIAGNOSTICS = mode;
+			const calls = fake([{ lines: [] }, { lines: [] }, { lines: [] }, { lines: [] }]);
+			await edit("a.ts", "1", "2");
+			expect(calls.length).toBeGreaterThan(0);
+			const afterEdit = calls.length;
+			await write("b.ts", "let y = 2;\n");
+			expect(calls.length).toBeGreaterThan(afterEdit);
+		});
+	}
+});
