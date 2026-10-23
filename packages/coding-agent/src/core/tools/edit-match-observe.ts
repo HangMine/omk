@@ -6,8 +6,9 @@
  * Lines hold enums, numbers and a short path hash only (no paths, no file text).
  */
 import { createHash } from "node:crypto";
-import { normalize } from "node:path";
-import { appendRunLog } from "../run-log.ts";
+import { readFileSync } from "node:fs";
+import { join, normalize } from "node:path";
+import { appendRunLog, RUN_LOG_DIR_ENV, type RunLogValue } from "../run-log.ts";
 import { normalizeForFuzzyMatch, normalizeToLF } from "./edit-diff.ts";
 
 export const EDIT_MATCH_RUN_LOG = "edit-match";
@@ -65,43 +66,94 @@ export function classifyEditMatchFailure(
 	return { reason: "unknown", editIndex: null };
 }
 
-/** Methods live on an object so tests can spy on them. */
+type EditCtx = { sessionManager?: { getSessionId?: () => string } };
+
+/** Session id from the tool context (the task identifier in run-log lines), or null. */
+export function editSessionId(ctx: EditCtx | undefined): string | null {
+	try {
+		return ctx?.sessionManager?.getSessionId?.() ?? null;
+	} catch {
+		return null;
+	}
+}
+
+/** Next line number in `<dir>/edit-match.jsonl` (1-based), so `seq` is monotonic within the file. */
+function nextSeq(env: NodeJS.ProcessEnv): number {
+	const dir = env[RUN_LOG_DIR_ENV]?.trim();
+	if (!dir) return 1;
+	try {
+		const text = readFileSync(join(dir, `${EDIT_MATCH_RUN_LOG}.jsonl`), "utf-8");
+		let lines = 0;
+		for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) lines++;
+		return lines + 1;
+	} catch {
+		return 1;
+	}
+}
+
+function write(
+	env: NodeJS.ProcessEnv,
+	sessionId: string | null,
+	record: { readonly [key: string]: RunLogValue },
+): void {
+	appendRunLog(
+		EDIT_MATCH_RUN_LOG,
+		{ event: "edit_match", seq: nextSeq(env), ts: new Date().toISOString(), sessionId, ...record },
+		{ env },
+	);
+}
+
+const runLogOn = (env: NodeJS.ProcessEnv): boolean => Boolean(env[RUN_LOG_DIR_ENV]?.trim());
+
+/** Methods live on an object so tests can spy on them. All are no-ops (no extra work) when the run log is off. */
 export const editMatchObserver = {
 	classify: classifyEditMatchFailure,
 	/**
 	 * Stage per edit: 1 when oldText occurs verbatim, else 2. Mirrors fuzzyFindText's
 	 * exact-first order, so it equals its usedFuzzyMatch for every edit that applied.
 	 */
-	logSuccess(path: string, content: string, edits: readonly EditLike[], env: NodeJS.ProcessEnv = process.env): void {
-		const matchStages = edits.map((edit) => (content.includes(normalizeToLF(edit.oldText)) ? 1 : 2));
-		appendRunLog(
-			EDIT_MATCH_RUN_LOG,
-			{
-				event: "edit_match",
+	stages(content: string, edits: readonly EditLike[]): number[] {
+		return edits.map((edit) => (content.includes(normalizeToLF(edit.oldText)) ? 1 : 2));
+	},
+	logSuccess(
+		path: string,
+		content: string,
+		edits: readonly EditLike[],
+		ctx?: EditCtx,
+		env: NodeJS.ProcessEnv = process.env,
+	): void {
+		if (!runLogOn(env)) return;
+		try {
+			const matchStages = editMatchObserver.stages(content, edits);
+			write(env, editSessionId(ctx), {
 				ok: true,
 				pathHash: editPathHash(path),
 				edits: matchStages.length,
 				edit_match_stage: Math.max(...matchStages),
-				matchStages: [...matchStages],
-			},
-			{ env },
-		);
+				matchStages,
+			});
+		} catch {
+			// Observation must never change the tool outcome.
+		}
 	},
-	logFailure(path: string, content: string, edits: readonly EditLike[], env: NodeJS.ProcessEnv = process.env): void {
+	logFailure(
+		path: string,
+		content: string,
+		edits: readonly EditLike[],
+		ctx?: EditCtx,
+		env: NodeJS.ProcessEnv = process.env,
+	): void {
+		if (!runLogOn(env)) return;
 		try {
-			const { reason, editIndex } = editMatchObserver.classify(content, Array.isArray(edits) ? edits : []);
-			appendRunLog(
-				EDIT_MATCH_RUN_LOG,
-				{
-					event: "edit_match",
-					ok: false,
-					pathHash: editPathHash(path),
-					edits: Array.isArray(edits) ? edits.length : 0,
-					reason,
-					editIndex,
-				},
-				{ env },
-			);
+			const list = Array.isArray(edits) ? edits : [];
+			const { reason, editIndex } = editMatchObserver.classify(content, list);
+			write(env, editSessionId(ctx), {
+				ok: false,
+				pathHash: editPathHash(path),
+				edits: list.length,
+				reason,
+				editIndex,
+			});
 		} catch {
 			// Observation must never change the tool outcome.
 		}

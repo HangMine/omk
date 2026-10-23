@@ -139,7 +139,7 @@ export function createEditToolDefinition(
 		],
 		parameters: editSchema,
 		prepareArguments: prepareEditArguments,
-		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, _ctx?) {
+		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, ctx?) {
 			const { path, edits } = validateEditInput(input);
 			const absolutePath = resolveToCwd(path, cwd);
 			assertWorkspaceWrite(options?.workspaceRoots, "Edit", path, absolutePath);
@@ -183,7 +183,7 @@ export function createEditToolDefinition(
 					applied = applyEditsToNormalizedContent(normalizedContent, edits, path);
 				} catch (error) {
 					// Failure path only: the classifier never runs on a successful edit.
-					editMatchObserver.logFailure(absolutePath, normalizedContent, edits);
+					editMatchObserver.logFailure(absolutePath, normalizedContent, edits, ctx);
 					throw error;
 				}
 				const { baseContent, newContent } = applied;
@@ -193,7 +193,7 @@ export function createEditToolDefinition(
 				await ops.writeFile(absolutePath, finalContent);
 				throwIfAborted();
 
-				editMatchObserver.logSuccess(absolutePath, normalizedContent, edits);
+				editMatchObserver.logSuccess(absolutePath, normalizedContent, edits, ctx);
 
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RUN_LOG_DIR_ENV } from "../src/core/run-log.ts";
-import { createEditTool } from "../src/core/tools/edit.ts";
+import { createEditTool, createEditToolDefinition } from "../src/core/tools/edit.ts";
 import {
 	classifyEditMatchFailure,
 	EDIT_MATCH_RUN_LOG,
@@ -123,6 +123,43 @@ describe("edit match observation: run log lines", () => {
 		expect(spy).not.toHaveBeenCalled();
 		await runCase("not-found");
 		expect(spy).toHaveBeenCalledTimes(1);
+	});
+
+	it("seq increments by 1 per line within the file and ts is ISO", async () => {
+		const p = join(dir, "seq.txt");
+		writeFileSync(p, "a\nb\nc\n");
+		const def = createEditToolDefinition(dir);
+		const ctx = { sessionManager: { getSessionId: () => "sess-123" } } as never;
+		await def.execute("1", { path: "seq.txt", edits: [{ oldText: "a", newText: "A" }] }, undefined, undefined, ctx);
+		await expect(
+			def.execute("2", { path: "seq.txt", edits: [{ oldText: "zz", newText: "x" }] }, undefined, undefined, ctx),
+		).rejects.toThrow();
+		await def.execute("3", { path: "seq.txt", edits: [{ oldText: "b", newText: "B" }] }, undefined, undefined, ctx);
+		await def.execute("4", { path: "seq.txt", edits: [{ oldText: "c", newText: "C" }] }, undefined, undefined, ctx);
+		const lines = logLines();
+		expect(lines.map((l) => l.seq)).toEqual([1, 2, 3, 4]);
+		expect(lines.map((l) => l.ok)).toEqual([true, false, true, true]);
+		for (const l of lines) {
+			expect(l.sessionId).toBe("sess-123");
+			expect(new Date(l.ts).toISOString()).toBe(l.ts);
+		}
+	});
+
+	it("sessionId is null when the tool has no session context", async () => {
+		await runCase("exact");
+		expect(logLines()[0].sessionId).toBeNull();
+	});
+
+	it("run log off: no stage check and no classifier (same code path as main)", async () => {
+		delete process.env[RUN_LOG_DIR_ENV];
+		const stages = vi.spyOn(editMatchObserver, "stages");
+		const classify = vi.spyOn(editMatchObserver, "classify");
+		for (const c of EDIT_CASES) await runCase(c.name);
+		expect(stages).not.toHaveBeenCalled();
+		expect(classify).not.toHaveBeenCalled();
+		process.env[RUN_LOG_DIR_ENV] = logDir;
+		await runCase("exact");
+		expect(stages).toHaveBeenCalledTimes(1);
 	});
 
 	it("writes nothing when the run log is off", async () => {
