@@ -103,6 +103,7 @@ If no task compacts at all on TB 4.0, the whole spec is parked (weak-evidence ou
 - Benchmark TB 4.0, 66 tasks x n >= 5 per arm, one flag per arm vs all-off control.
 - Base SHA = main at time of A/B (record it).
 - Pass: task-clustered 95% CI lower bound of pass-rate delta > -3 points, total tokens <= 1.10x control, wall time <= 1.25x control.
+- Cache guardrail (C1 changes earlier request content, so it can break prompt-cache hits): report cache-read tokens and cost per arm from the provider usage fields. Pass also requires cost <= 1.10x control; a cache-read token drop is reported with its task-clustered 95% CI and is not waived by a pass-rate gain.
 - Secondary (report only): compactions per task, tokens after compaction.
 - Paid runs need 인호's dollar cap; nothing runs before that.
 
