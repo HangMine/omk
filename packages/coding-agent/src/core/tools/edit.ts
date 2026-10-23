@@ -4,6 +4,13 @@ import type { AgentTool } from "omk-agent-core";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 import {
+	EditDiagnosticsRun,
+	ensureEditDiagnosticsSession,
+	isEditDiagnosticsEnabled,
+	isEditDiagnosticsReported,
+	type NewDiagnosticsDetails,
+} from "./edit-diagnostics.ts";
+import {
 	applyEditsToNormalizedContent,
 	detectLineEnding,
 	type Edit,
@@ -58,6 +65,8 @@ export interface EditToolDetails {
 	patch: string;
 	/** Line number of the first change in the new file (for editor navigation) */
 	firstChangedLine?: number;
+	/** Spec 107, only when OMK_EDIT_DIAGNOSTICS=1 and the file has a checker. */
+	newDiagnostics?: NewDiagnosticsDetails;
 }
 
 /**
@@ -123,6 +132,7 @@ export function createEditToolDefinition(
 	cwd: string,
 	options?: EditToolOptions,
 ): ToolDefinition<typeof editSchema, EditToolDetails | undefined, EditRenderState> {
+	ensureEditDiagnosticsSession();
 	const ops = options?.operations ?? defaultEditOperations;
 	return {
 		name: "edit",
@@ -147,7 +157,12 @@ export function createEditToolDefinition(
 				throw new Error(`Edit blocked by active loadout policy: ${path}`);
 			}
 
-			return withFileMutationQueue(absolutePath, async () => {
+			const diag =
+				// Custom operations (e.g. SSH) edit a remote file; the checker only sees local paths.
+				options?.operations === undefined && isEditDiagnosticsEnabled() && EditDiagnosticsRun.applies(path)
+					? new EditDiagnosticsRun("edit", cwd, path, absolutePath, signal)
+					: undefined;
+			const result = await withFileMutationQueue(absolutePath, async () => {
 				// Do not reject from an abort event listener here: that would release the
 				// mutation queue while an in-flight filesystem operation may still finish.
 				// Checking signal.aborted after each await observes the same aborts while
@@ -190,8 +205,11 @@ export function createEditToolDefinition(
 				throwIfAborted();
 
 				const finalContent = bom + restoreLineEndings(newContent, originalEnding);
+				await diag?.baseline();
+				throwIfAborted();
 				await ops.writeFile(absolutePath, finalContent);
 				throwIfAborted();
+				await diag?.afterWrite();
 
 				editMatchObserver.logSuccess(absolutePath, normalizedContent, edits, ctx);
 
@@ -200,13 +218,28 @@ export function createEditToolDefinition(
 				return {
 					content: [
 						{
-							type: "text",
+							type: "text" as const,
 							text: `Successfully replaced ${edits.length} block(s) in ${path}.`,
 						},
 					],
-					details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine },
+					details: {
+						diff: diffResult.diff,
+						patch,
+						firstChangedLine: diffResult.firstChangedLine,
+					} as EditToolDetails,
 				};
 			});
+			if (!diag) return result;
+			// Post-check runs outside the mutation queue (spec 107 Q6).
+			const report = await diag.report();
+			if (signal?.aborted) throw new Error("Operation aborted");
+			// Shadow: results went to the run log only; the model sees exactly the OFF result.
+			if (!isEditDiagnosticsReported()) return result;
+			const text = report.text ? `${result.content[0].text}\n${report.text}` : result.content[0].text;
+			return {
+				content: [{ type: "text" as const, text }],
+				details: { ...result.details, newDiagnostics: report.details },
+			};
 		},
 	};
 }
