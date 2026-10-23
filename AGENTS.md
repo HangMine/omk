@@ -118,11 +118,15 @@ Still required in this mode:
 - One concern per PR. No new dependency without review. Pin the measurement baseline SHA
   before an A/B. Never skip or bypass CI, and do not edit workflow files without the
   owner's OK.
-- Standing release order from the owner: once a user-facing feature has merged and this
-  file is updated to describe it, cut a patch release (bump the last number by 1, e.g.
-  1.5.6 to 1.5.7) through a release PR (CHANGELOG plus version only), then tag and
-  publish. Do not create the GitHub Release by hand; let the release workflow create it
-  so it can attach binaries.
+- Releases: patch releases (bump the last number by 1, e.g. 1.5.6 to 1.5.7) are always
+  allowed, including the tag and npm publish; minor and major releases need the owner's OK.
+  Cut a patch only when at least one user-facing PR has merged since the last tag, `main`
+  CI is green, and `npm ci`, build, test, and `npm pack --dry-run` pass in a clean clone.
+  Use a release PR that changes only CHANGELOG and versions. In the CHANGELOG, mark
+  default-off features as "flag, default off" and make no performance claims without an
+  A/B result. After the release PR merges, push only the tag: the release workflow
+  publishes to npm and creates the GitHub Release with binaries. Never publish or create
+  the Release by hand.
 - Paid benchmark runs wait for a dollar cap the owner sets.
 - Never print, log, or commit secrets.
 - Code copied from other projects must be MIT or Apache-2.0: name the source at the top of
