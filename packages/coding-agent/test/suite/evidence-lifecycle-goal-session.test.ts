@@ -25,7 +25,7 @@ import goalController from "../../src/core/extensions/builtin/goal-controller.ts
 import { outputRecallDir } from "../../src/core/goal-output-recall.ts";
 import { DELETED_RECALL_LINK } from "../../src/core/goal-output-recall-links.ts";
 import { createReadTool } from "../../src/core/tools/read.ts";
-import { createHarness, getUserTexts, type Harness } from "./harness.ts";
+import { createHarness, getAssistantTexts, getUserTexts, type Harness } from "./harness.ts";
 
 const CHECK = "printf 'F821 undefined name x\\n'; exit 4";
 const harnesses: Harness[] = [];
@@ -329,5 +329,23 @@ describe("spec 118 D2 recall delete-after-use through a live session", () => {
 		);
 		await harness.session.bindExtensions({});
 		expect(existsSync(file)).toBe(true);
+	});
+
+	it("flag delete: recovery that throws (unreadable log) never fails session start; prompt unaffected", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "delete");
+		const harness = await goalHarness();
+		const dir = outputRecallDir(harness.tempDir);
+		// A directory where the deletion log should be: readFileSync throws EISDIR inside recovery.
+		mkdirSync(evidenceDeletionLogPath(dir, "broken"), { recursive: true });
+		await expect(harness.session.bindExtensions({})).resolves.toBeUndefined();
+		const failures = harness.sessionManager
+			.getEntries()
+			.filter((e) => e.type === "custom" && e.customType === "evidence_recovery_failed");
+		expect(failures.map((e) => (e as unknown as { data: unknown }).data)).toEqual([{ code: "EISDIR" }]);
+		expect(JSON.stringify(failures)).not.toContain(harness.tempDir);
+		harness.setResponses([fauxAssistantMessage("still fine")]);
+		await harness.session.prompt("hello");
+		await idle(harness);
+		expect(getAssistantTexts(harness)).toContain("still fine");
 	});
 });

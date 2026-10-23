@@ -49,7 +49,17 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 	// Spec 118 D2 (`delete` only): finish interrupted deletes at startup; hide deleted links on resume (EV9).
 	if (evidenceLifecycleDeleteEnabled()) {
 		omk.on("session_start", (_event, ctx) => {
-			recoverEvidenceDeletions(outputRecallDir(ctx.cwd));
+			// Recovery must never fail session start. Logged as an error code only (no path, no message text).
+			try {
+				recoverEvidenceDeletions(outputRecallDir(ctx.cwd));
+			} catch (error) {
+				const code = (error as NodeJS.ErrnoException | undefined)?.code;
+				try {
+					omk.appendEntry("evidence_recovery_failed", { code: typeof code === "string" ? code : "unknown" });
+				} catch {
+					// observation only
+				}
+			}
 		});
 		omk.on("context", (event, ctx) => {
 			const messages = rewriteRecallLinksInMessages(event.messages, ctx.cwd);
