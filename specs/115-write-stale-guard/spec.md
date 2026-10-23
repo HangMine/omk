@@ -77,10 +77,11 @@ New env flag `OMK_WRITE_STALE_GUARD`, **default off**. Read per tool call (`proc
   (Tech Lead decision).
 - **`shadow`**: never refuses. On "would refuse", if `OMK_RUN_LOG_DIR` is set, call
   `appendRunLog` with `{ event: "write_stale_guard", mode: "shadow", reason, sessionId,
-  parentSessionId, seq, path | pathSha256 }`. **Path (Tech Lead decision):** if the canonical
-  path is inside cwd, log `path` as the cwd-relative path; if it is outside cwd, log only
-  `pathSha256` (sha256 of the canonical path). Never log an absolute path. **No file content
-  and no hashes of the model's content.** The write then runs as with the flag off; tool output,
+  parentSessionId, seq, pathHash }`. **No path at all (Tech Lead decision):** the record holds
+  only `pathHash`, computed with `editPathHash(absolutePath)` from
+  `src/core/tools/edit-match-observe.ts` (#235: sha256 of `node:path` `normalize(absolutePath)`,
+  first 16 hex chars), reused, not reimplemented, so records join with `edit-match.jsonl`.
+  **No file content and no hashes of the model's content.** The write then runs as with the flag off; tool output,
   details and description stay identical to off.
 - **`1`** (only after the shadow rate and an A/B): throw, no write, with the same run-log
   record (`mode: "enforce"`). Messages:
@@ -115,7 +116,7 @@ New `packages/coding-agent/test/spec115-write-stale-guard.test.ts`:
 5. `1`: read, external `fs.writeFileSync` change, write → throws, file keeps the external bytes.
 6. **Hash refresh:** `1`: read → write → write → ok; read → edit → write → ok; write new file → write again → ok.
 7. **Refusal message text:** `not_read` and `changed_on_disk` messages contain the path and "Read the file first".
-8. **Shadow logs, output identical:** `shadow` with `OMK_RUN_LOG_DIR` set: write over unread file succeeds; tool result/details deep-equal to flag off; run log has exactly one `write_stale_guard` record with `reason: "not_read"` and no file content. Same for `changed_on_disk`. Path in cwd → record has cwd-relative `path` and no `pathSha256`; path outside cwd → record has only `pathSha256`, no `path`; no record contains an absolute path. Without `OMK_RUN_LOG_DIR`: nothing written, no error.
+8. **Shadow logs, output identical:** `shadow` with `OMK_RUN_LOG_DIR` set: write over unread file succeeds; tool result/details deep-equal to flag off; run log has exactly one `write_stale_guard` record with `reason: "not_read"` and no file content. Same for `changed_on_disk`. Record has no `path` field and no path text; its `pathHash` equals `editPathHash(absolutePath)` for the same file (joins with `edit-match.jsonl`). Without `OMK_RUN_LOG_DIR`: nothing written, no error.
 9. **LRU cap:** read 1001 distinct files; the first is evicted (a write to it is a "would refuse"), the last 1000 are kept; touching an entry moves it to most-recent.
 10. `1`: symlink path and `a/../b` path map to one ledger key.
 11. `1`: empty existing file → ok.
