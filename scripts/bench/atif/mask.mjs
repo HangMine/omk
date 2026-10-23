@@ -7,19 +7,34 @@
 export const SECRET_NAME = /KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i;
 /** Shorter values (flags like "1", "true") would shred unrelated text. */
 export const MIN_SECRET_LENGTH = 8;
+/** Key shapes are masked at any length; MIN_SECRET_LENGTH applies to env values only. */
 export const KEY_PATTERNS = [
-	/\bsk-[A-Za-z0-9_-]{16,}/g,
-	/\bxai-[A-Za-z0-9_-]{16,}/g,
-	/\bgh[pousr]_[A-Za-z0-9]{20,}/g,
-	/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/g,
+	/\bsk-[A-Za-z0-9_-]+/g,
+	/\bxai-[A-Za-z0-9_-]+/g,
+	/\bgh[pousr]_[A-Za-z0-9]+/g,
+	/\bgithub_pat_[A-Za-z0-9_]+/g,
+	/\bBearer\s+[A-Za-z0-9._~+/=-]+/g,
 ];
 
-/** @param {Record<string, string | undefined>} env */
-export function collectSecrets(env) {
+/** Extra secret env names from the agent environment: comma/space separated list. */
+export function parseNameList(text) {
+	return (text ?? "")
+		.split(/[\s,]+/)
+		.map((n) => n.trim())
+		.filter(Boolean);
+}
+
+/**
+ * @param {Record<string, string | undefined>} env exporter (host) environment; values come from here
+ * @param {string[]} extraNames names treated as secret even if SECRET_NAME does not match
+ *   (`--mask-env-names` / `OMK_ATIF_MASK_ENV_NAMES`)
+ */
+export function collectSecrets(env, extraNames = []) {
+	const forced = new Set([...extraNames, ...parseNameList(env.OMK_ATIF_MASK_ENV_NAMES)]);
 	const out = [];
 	for (const [name, value] of Object.entries(env)) {
 		if (typeof value !== "string" || value.length < MIN_SECRET_LENGTH) continue;
-		if (!SECRET_NAME.test(name)) continue;
+		if (!SECRET_NAME.test(name) && !forced.has(name)) continue;
 		out.push({ name, value });
 	}
 	// Longest first so a secret that contains another is masked whole.

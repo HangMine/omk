@@ -1,13 +1,13 @@
 /** Spec 110 tests: mapping, step order, agent-only fields, lossless round-trip, counts, masking. */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { exportTrajectory, main, parseJsonl, readRunLog } from "./atif-export.mjs";
 import { reverseTrajectory } from "./atif/reverse.mjs";
-import { collectSecrets, maskString } from "./atif/mask.mjs";
+import { collectSecrets, maskString, rescan } from "./atif/mask.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (name) => join(here, "fixtures", "atif", name);
@@ -165,6 +165,55 @@ describe("spec 110 masking (criterion 4)", () => {
 			const { hits } = exportTrajectory({ eventsText: readFileSync(eventsPath, "utf8"), runLogDir: join(fx("plain"), "run-log"), env: FAKE, version: "1" });
 			assert.deepEqual(hits, []);
 			assert.ok(!JSON.stringify(JSON.parse(bytes)).includes('"SHORT_KEY"'));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("masks key shapes at any length, even below the env-value minimum", () => {
+		const text = "a sk-x b xai-y c ghp_z d Bearer q e github_pat_w";
+		assert.equal(maskString(text, []), "a [REDACTED:PATTERN] b [REDACTED:PATTERN] c [REDACTED:PATTERN] d [REDACTED:PATTERN] e [REDACTED:PATTERN]");
+		assert.deepEqual(rescan(maskString(text, []), []), []);
+		assert.ok(rescan("sk-1", []).length > 0, "rescan sees short key shapes too");
+	});
+
+	it("masks and rescans extra.omk.eventLog (raw catch-all events)", () => {
+		const events = parseJsonl(readFileSync(join(fx("plain"), "events.jsonl"), "utf8"));
+		events.push({ type: "message_update", note: leak(FAKE.TYPESAFE_API_KEY), [FAKE.GITHUB_TOKEN]: FAKE.DB_PASSWORD });
+		const eventsText = events.map((e) => JSON.stringify(e)).join("\n");
+		const { json, hits } = exportTrajectory({ eventsText, runLogDir: join(fx("plain"), "run-log"), env: FAKE, version: "1" });
+		const raw = JSON.parse(json).extra.omk.eventLog.at(-1).raw;
+		assert.equal(raw.type, "message_update", "event landed in eventLog");
+		assert.match(raw.note, /\[REDACTED:TYPESAFE_API_KEY\]/);
+		assert.deepEqual(hits, []);
+		for (const k of ["TYPESAFE_API_KEY", "GITHUB_TOKEN", "DB_PASSWORD"]) assert.ok(!json.includes(FAKE[k]), k);
+	});
+
+	it("masks agent-env secret names given by --mask-env-names / OMK_ATIF_MASK_ENV_NAMES", () => {
+		const env = { HARBOR_TRIAL_NONCE: "nonce-value-abcdef", MODEL_ENDPOINT_ID: "endpoint-id-987654" };
+		const { dir, eventsPath } = leakyTrial();
+		const text = readFileSync(eventsPath, "utf8").replace("Listing.", `${env.HARBOR_TRIAL_NONCE} ${env.MODEL_ENDPOINT_ID}`);
+		writeFileSync(eventsPath, text);
+		const out = join(dir, "t.json");
+		try {
+			assert.equal(collectSecrets(env).length, 0, "names do not match the default regex");
+			assert.equal(main(["--events", eventsPath, "--mask-env-names", "HARBOR_TRIAL_NONCE", "--out", out], { ...env, OMK_ATIF_MASK_ENV_NAMES: "MODEL_ENDPOINT_ID" }), 0);
+			const bytes = readFileSync(out, "utf8");
+			assert.ok(bytes.includes("[REDACTED:HARBOR_TRIAL_NONCE]") && bytes.includes("[REDACTED:MODEL_ENDPOINT_ID]"));
+			assert.ok(!bytes.includes(env.HARBOR_TRIAL_NONCE) && !bytes.includes(env.MODEL_ENDPOINT_ID));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("exits 2 and writes no file when the rescan finds a hit", () => {
+		const { dir, eventsPath } = leakyTrial();
+		const out = join(dir, "t.json");
+		try {
+			// Test-only hook re-injects a secret after masking, so only the rescan can catch it.
+			const afterMask = (t) => ({ ...t, extra: { ...t.extra, leaked: FAKE.TYPESAFE_API_KEY } });
+			assert.equal(main(["--events", eventsPath, "--out", out], FAKE, { afterMask }), 2);
+			assert.equal(existsSync(out), false);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
