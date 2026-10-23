@@ -18,6 +18,7 @@ import {
 } from "./bash-local-operations.ts";
 import type { BashOperations } from "./bash-operations.ts";
 import { formatBashOutput } from "./bash-output.ts";
+import { logBashOutput } from "./bash-output-observe.ts";
 import { OutputAccumulator, type OutputSnapshot } from "./output-accumulator.ts";
 import { filterRtkOutput, shouldFilterRtkOutput } from "./rtk-output.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -206,6 +207,8 @@ export function createBashToolDefinition(
 				const filter = exitCode !== undefined && shouldFilterRtkOutput(spawnContext.command, snapshot, exitCode);
 				if (filter) snapshot = output.snapshot({ persist: true });
 				await output.closeTempFile();
+				// Run log only (no-op without OMK_RUN_LOG_DIR); numbers only, never throws.
+				logBashOutput(snapshot.truncation, ctx);
 				return filter ? filterRtkOutput(spawnContext.command, snapshot, signal) : snapshot;
 			};
 
