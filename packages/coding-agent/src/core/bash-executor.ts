@@ -63,9 +63,8 @@ export async function executeBashWithOperations(
 	let tempFilePath: string | undefined;
 	let tempFileStream: WriteStream | undefined;
 	let totalBytes = 0;
-	// Set once the rolling buffer drops a leading chunk: the buffer is then no longer the full output,
-	// even when what remains is small enough that truncateTail alone would report "not truncated".
-	let droppedLeadingOutput = false;
+	/** Set once any leading output was evicted from the rolling buffer (output is incomplete). */
+	let droppedLeading = false;
 
 	const ensureTempFile = () => {
 		if (tempFilePath) {
@@ -122,9 +121,23 @@ export async function executeBashWithOperations(
 		outputChunks.push(text);
 		outputBytes += text.length;
 		while (outputBytes > maxOutputBytes && outputChunks.length > 1) {
-			const removed = outputChunks.shift()!;
-			outputBytes -= removed.length;
-			droppedLeadingOutput = true;
+			const excess = outputBytes - maxOutputBytes;
+			const first = outputChunks[0];
+			droppedLeading = true;
+			if (first.length <= excess) {
+				outputChunks.shift();
+				outputBytes -= first.length;
+				continue;
+			}
+			// Trim the oldest chunk instead of dropping it whole, so the buffer always holds the last
+			// maxOutputBytes chars (>= maxOutputBytes bytes) even when one long line spans several chunks.
+			// Never start on a lone low surrogate (keeps the kept text valid UTF-16/UTF-8).
+			let cut = excess;
+			const code = first.charCodeAt(cut);
+			if (code >= 0xdc00 && code <= 0xdfff) cut++;
+			outputChunks[0] = first.slice(cut);
+			outputBytes -= cut;
+			break;
 		}
 
 		// Stream to callback
@@ -142,7 +155,7 @@ export async function executeBashWithOperations(
 
 		const fullOutput = outputChunks.join("");
 		const truncationResult = truncateTail(fullOutput);
-		const truncated = truncationResult.truncated || droppedLeadingOutput;
+		const truncated = truncationResult.truncated || droppedLeading;
 		if (truncated) {
 			ensureTempFile();
 		} else {
@@ -160,7 +173,7 @@ export async function executeBashWithOperations(
 		if (tempFilePath) registerEvidenceArtifact({ producer: "bash-executor-log", path: tempFilePath });
 
 		return {
-			output: truncationResult.truncated ? truncationResult.content : fullOutput,
+			output: truncated ? truncationResult.content : fullOutput,
 			exitCode: cancelled ? undefined : (result.exitCode ?? undefined),
 			cancelled,
 			truncated,
@@ -171,7 +184,7 @@ export async function executeBashWithOperations(
 		if (options?.signal?.aborted) {
 			const fullOutput = outputChunks.join("");
 			const truncationResult = truncateTail(fullOutput);
-			const truncated = truncationResult.truncated || droppedLeadingOutput;
+			const truncated = truncationResult.truncated || droppedLeading;
 			if (truncated) {
 				ensureTempFile();
 			} else {
@@ -185,7 +198,7 @@ export async function executeBashWithOperations(
 			}
 			if (tempFilePath) registerEvidenceArtifact({ producer: "bash-executor-log", path: tempFilePath });
 			return {
-				output: truncationResult.truncated ? truncationResult.content : fullOutput,
+				output: truncated ? truncationResult.content : fullOutput,
 				exitCode: undefined,
 				cancelled: true,
 				truncated,
