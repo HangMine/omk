@@ -144,7 +144,11 @@ export function createBashToolDefinition(
 				}
 			}
 
-			const output = new OutputAccumulator({ tempFilePrefix: "omk-bash" });
+			// Spec 113: read per call; default off (byte-identical to tail-only output).
+			const output = new OutputAccumulator({
+				tempFilePrefix: "omk-bash",
+				headTail: process.env.OMK_EXEC_TRUNCATE_MIDDLE === "1",
+			});
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;
 			let lastUpdateAt = 0;
