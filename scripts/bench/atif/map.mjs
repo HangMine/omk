@@ -2,6 +2,8 @@
  * Spec 110: omk `--mode json` events + run-log lines -> one ATIF Trajectory object.
  * Pure function (no fs, no env). Every input field lands either in an ATIF slot or under
  * an `omk` key in the nearest `extra`; `reverse.mjs` proves it (round-trip test).
+ * `agent.tool_definitions` reflects seq 1 only; later tool-list/system changes appear only in
+ * `extra.omk.sessionInfoChanges[]` and per-step `extra.omk.sessionInfo`; no mid-run system steps are inserted.
  */
 import { flattenContent, joinPieces, omit } from "./content.mjs";
 
