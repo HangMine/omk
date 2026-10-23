@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeBashWithOperations } from "../src/core/bash-executor.ts";
 import { createDurableGoal } from "../src/core/durable-goal.ts";
@@ -74,10 +74,11 @@ afterEach(() => {
 });
 
 describe("spec 106 D1 flag", () => {
-	it("is on only for exactly `observe`", () => {
+	it("is on only for exactly `observe` or (spec 118) `delete`", () => {
 		expect(evidenceLifecycleObserveEnabled({})).toBe(false);
 		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "1" })).toBe(false);
-		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "delete" })).toBe(false);
+		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "delete" })).toBe(true);
+		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "Delete" })).toBe(false);
 		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "observe" })).toBe(true);
 	});
 
@@ -350,5 +351,18 @@ describe("spec 106 EV11 recall path reuse", () => {
 		deleteGoalRecallFiles(cwd, "a");
 		expect(logs()).toHaveLength(2);
 		expect(logs().every((n) => n.startsWith("acceptance-a-1-0-1-"))).toBe(true);
+	});
+
+	it("spec 118 G0: unset and observe write no counter sidecar or deletion log; a pass deletes nothing", () => {
+		for (const flag of [undefined, "observe"]) {
+			vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", flag);
+			const cwd = tempRoot("omk-g0-");
+			const artifact = recall(cwd, "g");
+			observeRecallRecheck("g", true);
+			expect(existsSync(artifact.absolutePath)).toBe(true);
+			expect(readdirSync(outputRecallDir(cwd)).sort()).toEqual([".gitignore", basename(artifact.absolutePath)]);
+			if (flag === "observe") expect(evidenceLifecycleReport()).toMatchObject({ mode: "observe", deletes: 0 });
+			if (flag === "observe") expect(evidenceLifecycleReport()).not.toHaveProperty("deletion");
+		}
 	});
 });
