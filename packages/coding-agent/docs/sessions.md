@@ -106,7 +106,7 @@ console.log(session.memoryStatus); // counts/state, never quote text
 if (admission.verdict === "accept") await session.forgetMemory(admission.recordId);
 ```
 
-Recall requires `OMK_VERIFIED_MEMORY=1` and Context Budget V2 (global
+Recall requires `OMK_VERIFIED_MEMORY` (default on; `0` opts out) and Context Budget V2 (global
 `contextBudget.enabled` or `OMK_CONTEXT_GOVERNOR=1`). Both remain opt-in; no setting
 or environment file is changed. Each provider request, including tool continuations,
 rechecks source digest/span, workspace identity, expiry and revocation. The V2

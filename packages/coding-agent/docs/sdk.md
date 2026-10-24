@@ -37,7 +37,7 @@ control](sessions.md#local-live-session-control) for permissions, limits and can
 
 `await session.rememberSource({ path, startLine, endLine, ttlMs? })` pins a bounded
 source quote. `await session.forgetMemory(id)` revokes it. Recall is separately
-opt-in with `OMK_VERIFIED_MEMORY=1` and Context Budget V2. It is transient tool-result
+on by default (`OMK_VERIFIED_MEMORY=0` opts out) when Context Budget V2 is on. It is transient tool-result
 data, not system/skill authority or automatic fact extraction. Inspect
 `session.memoryStatus`; see [Project source-quote memory](sessions.md#project-source-quote-memory).
 

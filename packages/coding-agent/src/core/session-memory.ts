@@ -2,6 +2,7 @@ import type { Agent, AgentMessage } from "omk-agent-core";
 import { estimateProjectedContextTokens } from "./compaction/index.ts";
 import type { SystemPromptContextBudgetOptions } from "./context-budget-system-prompt.ts";
 import { createTokenCounterForMode } from "./context-budget-token-counter.ts";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import { memoryContextTransform } from "./memory-context-transform.ts";
 import { memoryTokenCounter } from "./memory-token-counter.ts";
 import {
@@ -76,7 +77,7 @@ export class SessionMemory {
 
 	private enrich(messages: AgentMessage[]): AgentMessage[] {
 		this.currentStatus = { state: "disabled", eligible: 0, omitted: 0 };
-		if (process.env.OMK_VERIFIED_MEMORY !== "1") return messages;
+		if (!isDefaultOnEnvFlag(process.env.OMK_VERIFIED_MEMORY)) return messages;
 		const options = this.options();
 		const model = this.agent.state.model;
 		if (!options || !model || !Number.isSafeInteger(model.contextWindow) || model.contextWindow <= 0) return messages;
