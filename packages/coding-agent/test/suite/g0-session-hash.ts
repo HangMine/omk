@@ -3,13 +3,15 @@
  * AgentSession.steer(), /goal setup, one bash tool call that times out, the goal loop to its round limit)
  * with a fixed clock, seeded randomness and counter ids, then prints sha256 of the session JSONL and of the provider request contexts. Imports only modules that exist on main
  * (a4bfeb5a97), so the same file runs on main and on a branch; with OMK_GOAL_AUTONOMY unset both must match.
+ * OMK_PACKAGE_DIR is pinned to the symlink $TMPDIR/omk-g0-pkg, so hashes match across checkout paths.
  *
  *   cd packages/coding-agent && OMK_BASH_SANDBOX=off npx tsx test/suite/g0-session-hash.ts
  */
 import nodeCrypto, { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const FIXED_MS = Date.UTC(2026, 9, 24, 0, 0, 0);
 const RealDate = Date;
@@ -54,6 +56,23 @@ Object.defineProperty(globalThis.crypto, "getRandomValues", {
 	},
 	configurable: true,
 });
+
+// The system prompt links the package README/docs/examples via getPackageDir(), which checks OMK_PACKAGE_DIR first.
+// Point it at a fixed symlink to this checkout's package so the bytes do not depend on the checkout path.
+const packageRoot = resolve(import.meta.dirname, "../..");
+const fixedPackageDir = join(tmpdir(), "omk-g0-pkg");
+let linkTarget: string | undefined;
+try {
+	linkTarget = lstatSync(fixedPackageDir).isSymbolicLink() ? readlinkSync(fixedPackageDir) : "<not a symlink>";
+} catch {
+	linkTarget = undefined;
+}
+if (linkTarget === "<not a symlink>") throw new Error(`${fixedPackageDir} exists and is not a symlink`);
+if (linkTarget !== packageRoot) {
+	if (linkTarget !== undefined) rmSync(fixedPackageDir);
+	symlinkSync(packageRoot, fixedPackageDir, "dir");
+}
+process.env.OMK_PACKAGE_DIR = fixedPackageDir;
 
 const { fauxAssistantMessage, fauxToolCall } = await import("omk-ai");
 const { default: goalController } = await import("../../src/core/extensions/builtin/goal-controller.ts");
@@ -164,15 +183,11 @@ try {
 	const file = harness.sessionManager.getSessionFile();
 	if (!file) throw new Error("no session file");
 	const sha = (data: string) => createHash("sha256").update(data).digest("hex");
-	// The checkout path is in the system prompt (OMK docs links); it is the only per-worktree byte.
-	const repoRoot = resolve(import.meta.dirname, "../../../..");
 	// Ids come from a call counter shared with randomBytes, so their values shift by one or two with timing
 	// (Tech Lead's #268 finding). Canonicalize every UUID by first appearance, and the faux api's random suffix.
 	const ids = new Map<string, string>();
 	const canonical = (text: string) =>
 		text
-			.split(repoRoot)
-			.join("<repo>")
 			.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (uuid) => {
 				const key = uuid.toLowerCase();
 				if (!ids.has(key)) ids.set(key, `<id-${ids.size + 1}>`);
@@ -198,10 +213,8 @@ try {
 	console.log(`session types ${sessionTypes.join(",")}`);
 	console.log(`provider requests sha256 ${sha(requestText)} (${requests.length} requests)`);
 	console.log(`request types ${requestTypes.join(",")}`);
-	// The path is replaced, but its length still moves systemPromptCacheBoundary and the faux usage counts:
-	// compare only checkouts whose repo path has the same length.
 	console.log(
-		`info (not hashed): randomUUID calls ${uuidCalls}, distinct ids ${ids.size}, repo path length ${repoRoot.length}`,
+		`info (not hashed): randomUUID calls ${uuidCalls}, distinct ids ${ids.size}, OMK_PACKAGE_DIR ${fixedPackageDir} -> ${packageRoot}`,
 	);
 	// G0_DUMP=<dir> writes the canonical bytes for a diff when the hashes differ.
 	const dump = process.env.G0_DUMP;
