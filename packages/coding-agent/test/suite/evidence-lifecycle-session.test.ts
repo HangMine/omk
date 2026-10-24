@@ -43,7 +43,7 @@ function spill(harness?: Harness): string {
 
 describe("spec 106 D1 session sink", () => {
 	it("flag off: no evidence_lifecycle entry, even after settle and dispose", async () => {
-		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", undefined);
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // default is observe; flag-off cases opt out explicitly
 		const harness = await createHarness();
 		harnesses.push(harness);
 		spill();
@@ -71,8 +71,8 @@ describe("spec 106 D1 session sink", () => {
 				mode: "observe",
 				deletes: 0,
 				present: 1,
-				unknownHoldShare: 1,
-				unknownHoldShareByProducer: { spill: { present: 1, unknown: 1, share: 1 } },
+				unknownHoldShare: 0,
+				unknownHoldShareByProducer: { spill: { present: 1, unknown: 0, share: 0 } },
 			},
 		});
 		const serialized = JSON.stringify(harness.sessionManager.getEntries());

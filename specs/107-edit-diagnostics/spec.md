@@ -31,13 +31,14 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
 | `diagnostics.ts` | Export a new internal helper `collectFileDiagnostics(cwd, path, { timeoutMs, signal, bypassCache: true })` that reuses `detectLanguages`/`CHECKERS` (`:290-318`) and returns `{ lines, skipped }`. Existing tool behavior unchanged. |
 | new `edit-diagnostics.ts` | `isEditDiagnosticsEnabled()`, `diffNewDiagnostics(before, after)`, `formatNewDiagnostics(...)`. Attribution comment here. |
 | `edit.ts:149-197` | Inside `withFileMutationQueue`, if flag on: baseline before `ops.writeFile` (`:184`), post-check after it; append the report to the text content; add `details.newDiagnostics`. |
-| `write.ts:72-95` | Same; baseline only if the file existed (new file ⇒ empty baseline). |
+| `write.ts:72-95` | Same; baseline only if the file existed (new file ⇒ empty baseline, see §3 item 4a). |
 | `index.ts` | No change (tools are already constructed with `cwd`). |
 
 ### 3.3 Algorithm
 1. Language from extension only (`.ts/.tsx/.py/.go/.rs`); other files ⇒ skip both checks (zero cost).
 2. **Baseline** (pre-write) and **post** run with `bypassCache: true`. Required: the 5 s TTL cache in `checkLanguage` (`:320-332`) keys on `language+cwd+path`, so a cached result would return the *pre-edit* diagnostics as the post-edit result.
-3. New = post minus baseline under the key `(path, severity, message)` — **line/column excluded** so diagnostics that merely shift because lines were inserted above are not reported as new. Multiset semantics (count per key).
+3. New = post minus baseline under the key `(path, severity, normalized message)` — **line/column excluded** so diagnostics that merely shift because lines were inserted above are not reported as new. **Decided (Tech Lead, 2026-10-22 KST):** before keying, comparing or hashing, the message is normalized by removing line/column numbers and position notations (e.g. `(12,5)`, `:12:5`, `line 12`, `col 5`); the run-log message hash uses the same normalized message. Test: inserting lines above an existing error reports 0 new errors. Multiset semantics (count per key).
+4a. **New file without baseline (decided, Tech Lead 2026-10-22 KST):** when `write` creates a file that did not exist, there is no baseline. **Only errors inside that new file are counted; errors in all other files are excluded**, because without a baseline every existing project error would look new.
 4. **Scope (Q2, decided):** errors from the edited file **and** errors in other files that are NEW vs the pre-edit baseline (tsc is project-wide, so cross-file breakage such as a removed export is visible). Order: edited file first, then other files. Cap **5 files and 20 entries in total**, then `... N more`.
    **Severity (Q5, decided):** errors only. Warnings are neither listed nor counted in the text.
 5. Text appended to the existing success message, e.g.
@@ -88,12 +89,14 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
   - **Default-on only via a separate spec** that gets a PASS on path 1.
 - **Pilot:** its size is **fixed before it starts**. It uses separate runs on the **SAME 89 tasks** (not separate tasks), so K stays 89. It exists **only** to measure ρ and p_d, from which Bench Analyst computes how many free runs the clustered CI needs to clear −3 pp. Pilot data is **never reused** for the verdict.
   - If that number exceeds what free runs can do, record **"inconclusive"** here in a commit **before the main run, skip the main run**, and keep the flag opt-in. n is **never extended after the fact**.
-- **Conditional path 2 — increase K:** add tasks (e.g. a SWE-bench Verified subset, 2–3 reps per task). **Reopens only after 인호 sets a $ cap.** The benchmark runs from bench scripts, **not as an omk dependency**; Library Scout checks the dataset license first. **The path is chosen before the pilot.** On this path only: if the $ cap cannot reach the required n, δ is tightened to the smallest effect the achievable n can detect, fixed before the main run; n is never extended after the fact. (On the default non-inferiority path the margin stays −3pp and over-budget means "inconclusive".)
+- **Conditional path 1 — increase K:** add tasks (e.g. a SWE-bench Verified subset, 2–3 reps per task). **Reopens only after 인호 sets a $ cap.** The benchmark runs from bench scripts, **not as an omk dependency**; Library Scout checks the dataset license first. **The path is chosen before the pilot.** On this path only: if the $ cap cannot reach the required n, δ is tightened to the smallest effect the achievable n can detect, fixed before the main run; n is never extended after the fact. (On the default non-inferiority path the margin stays −3pp and over-budget means "inconclusive".)
 - Task set: frozen list (ids + hash committed before first run), tasks in TS/Python only (where checkers exist).
 - **Verdict is on resolve rate (non-inferiority) plus the cost guardrails.** Mechanism metrics below cannot rescue a failed or inconclusive result.
 - **Supporting mechanism metrics (pre-registered; mechanism-only — never evidence for resolve-rate claims):**
   1. **New errors remaining at end:** diagnostics are run **outside the tool-call record**, identically for both arms, at session end. Counted as the **net increase vs the pre-edit baseline** (task starting state), **paired per task** (ON vs OFF). Tasks in languages without a diagnostics checker are **excluded from the denominator**, and the excluded count is reported.
-  2. **Next-edit fix rate:** denominator = edits that produced new diagnostics. *Fixed* = after the next edit, the diagnostic with the **same file + same rule** is gone. Disappearance due to **file deletion is counted separately** (not as fixed). The OFF arm is computed the same way with diagnostics run but **hidden** from the model.
+  2. **Next-edit fix rate (report-only, NOT part of the verdict):** denominator = edits that produced new diagnostics. *Fixed* = after the next edit, the diagnostic with the **same file + same normalized message key** is gone. Disappearance due to **file deletion is counted separately** (not as fixed). The "hidden" comparison comes from a **separate shadow run** (`OMK_EDIT_DIAGNOSTICS=shadow`), never from the OFF arm.
+- **Shadow mode (decided, Tech Lead 2026-10-22 KST):** `OMK_EDIT_DIAGNOSTICS=shadow`, off by default. The checker runs, but results go **only** to the run log (`edit-diag` event with `mode: "shadow"`); the model-facing tool result text and `details` are **byte-identical to OFF** (tested, including the first request payload in a faux session). Shadow is **not** the control arm: running the checker changes time and tokens. **The A/B stays OFF vs ON.**
+- **Telemetry:** every `edit-diag` event logs `mode` (`on`|`shadow`), `baselineMs`, `postMs` and `diagMs` (= baseline + post checker time). `diagMs` is report-only; it is never subtracted from wall time (CPU/I/O contention would remain).
 - **Arms pinned** to the same `origin/main` SHA that contains `e4cefedb15` (bash truncation fix) once merged; the only difference is the env flag.
 - **Equal-path-length build dirs** for both arms (e.g. `/workspace/omk-ab-on` / `/workspace/omk-ab-of`… same length) so prompt bytes do not differ by path.
 - **Diff the first request payload** of ON vs OFF on one task: must be byte-identical (flag changes only tool results, never the system prompt/tool schema). Any diff ⇒ stop, fix, re-pin.
@@ -101,7 +104,8 @@ After `edit`/`write` the model gets only `Successfully replaced N block(s)` (`ed
 
 ## 5. Guardrails (must not regress, judged on the same pairs)
 - tokens/turn (median, p90): ON ≤ OFF × 1.10.
-- wall time/task (median, p90): ON ≤ OFF × 1.25; per-edit diagnostics latency p90 reported separately.
+- **Pre-registration (checker coverage):** before any measurement, pin the exact `tsc`, `pyright` and `ruff` versions in the bench image (recorded in the run manifest), and log a per-task `checkerRan` (boolean) in the run log. The verdict uses all tasks; the `checkerRan=true` subset is report-only. In ON and shadow arms the session record (`edit-diag-session.jsonl`) is created at session start and always written once at process end, even with zero edits or no checker-backed files (`checkerRan=false`, `checks=0`). A task whose session line is missing is a **log error**: it is flagged and excluded from the `checkerRan` analysis, never counted as `checkerRan=false`. Log-error tasks still count in the resolve-rate verdict, which uses grading results on all tasks; they are excluded only from the mechanism metric (the `checkerRan` subset). Report the log-error rate per arm; if either arm exceeds 5%, the mechanism metric is marked "uninterpretable".
+- wall time/task (median, p90): ON ≤ OFF × 1.25, measured as-is on pure OFF vs ON arms (no subtraction, no shadow in the control arm); per-edit diagnostics latency (`diagMs`) p90 reported separately.
 - turns/task: report; no hard gate.
 - edit/write tool error rate: must be unchanged (report-only must never turn a success into an error).
 - Diagnostics-skipped rate by reason (timeout/missing checker) reported; if timeout > 50% of TS edits the result is "not measurable", not "no effect".
@@ -125,7 +129,7 @@ Unit (`test/edit-diagnostics.test.ts`, fake checker injected, no real tsc):
 - file changed between snapshot and report ⇒ report skipped; mutation lock released before post-check (a second queued edit is not blocked by the post-check).
 - result never rejected/reverted.
 - (cache bypass and exact path match are covered by the `fix/diagnostics-cache-path` PR tests.)
-- write to new file ⇒ empty baseline.
+- write to new file ⇒ empty baseline; only errors inside the new file are counted.
 - abort during post-check ⇒ child killed, queue released.
 Suite (`test/suite/edit-diagnostics-flag.test.ts`, faux provider per `test/suite/README.md`):
 - session with flag on: faux model edits a TS fixture with a type error; the next request's tool-result message contains the new diagnostic; with flag off it does not; first request payload identical in both.

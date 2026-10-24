@@ -63,6 +63,8 @@ inside `parameters`) goes through spec 110's
 masking pass (secret-named env vars, `sk-`/`xai-`/`ghp_`/`Bearer` shapes) before
 `trajectory.json` is written. Mapping: `systemPrompt` → first step `source:"system"`
 `message`; `tools` → `agent.tool_definitions`.
+Spec 110 maps the first (seq 1) line only: seq 2 and later `omk_session_info` lines are kept only in
+`extra.omk.eventLog` (masked); mapping them is a follow-up.
 
 ## Success criteria
 

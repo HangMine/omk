@@ -13,7 +13,8 @@
  * the worker cwd's gated items hash the same (`workerProjectTrustEnv`), or "0" when
  * the parent runs with it forced off. Workers inherit `OMK_SKILL_SEARCH` and
  * `OMK_SKILL_SELECT` (spec 058 R1) but never get automatic skill candidate
- * messages (spec 050 R7).
+ * messages (spec 050 R7). Skill auto-load (spec 117) is always off in workers: they get only the parent's
+ * admitted skills through `--skill`.
  * `OMK_WORKER_EXTENSIONS` passes through unchanged (spec 057 R8), so a worker that
  * spawns its own workers applies the same rule.
  * Typed todo checks (spec 049) belong to the lead; workers always get `OMK_TODO_VERIFY` off.
@@ -41,6 +42,7 @@ export function subagentWorkerEnv(
 	env.OMK_DELIVERABLE_GUARD = "0";
 	// Spec 050 R7: workers keep OMK_SKILL_SEARCH (the `skill_search` tool) but get no automatic candidates.
 	env.OMK_SKILL_SEARCH_SUGGEST = "0";
+	env.OMK_SKILL_AUTO_LOAD = "0"; // spec 117: auto-load is default on, so workers opt out explicitly (AL7)
 	env.OMK_TODO_VERIFY = "0";
 	env.OMK_ADAPTIVE_EFFORT = "0";
 	delete env.OMK_RUN_LOG_PARENT_SESSION;

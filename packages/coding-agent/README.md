@@ -47,7 +47,7 @@ OMK stores user configuration under `~/.omk/agent/` and project configuration un
 Install `omk-book-to-skill` to compile documents into reusable skills without adding Python extractors to OMK core:
 
 ```bash
-omk install npm:omk-book-to-skill@1.5.6
+omk install npm:omk-book-to-skill@1.5.8
 ```
 
 It provides compile, update, and verification commands plus a local SHA-256 provenance manifest. See [Book to Skill](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/book-to-skill.md).
@@ -114,6 +114,8 @@ Type `/` in the editor to open command completion.
 ### Default Harness Safeguards
 
 OMK warns from the third repeated identical tool call and blocks the sixth. It also repairs unmatched tool pairs before provider requests and adds guidance for supported Kimi, GLM, and Grok models. `OMK_IDENTICAL_LOOP`, `OMK_TOOL_PAIR_REPAIR`, and `OMK_PROMPT_PRESET` opt out; `OMK_GOAL_CONTROLLER` controls `/goal` and continuation. Headless runs also get a one-time finish check after workspace changes (`OMK_FINISH_CHECK`, with `OMK_TIME_BUDGET_SEC` for an early-save reminder). An active goal continues after each settled turn; with an approved acceptance check it completes when the check passes on the current workspace. See [acceptance checks](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/run-protocol.md#acceptance-checks).
+
+These harness features are on by default; set the variable to `0`, `false` or `off` to restore the earlier behavior: `OMK_EDIT_DIAGNOSTICS`, `OMK_EXEC_TRUNCATE_MIDDLE`, `OMK_JSON_SESSION_INFO` (adds `omk_session_info` lines to `--mode json`), `OMK_GOAL_AUTONOMY`, `OMK_SKILL_ADMISSION`, `OMK_SKILL_AUTO_LOAD` and `OMK_EVIDENCE_LIFECYCLE` (default conditional delete of verified goal-recall files only; `observe` deletes nothing). See [environment variables](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/environment-variables.md).
 
 See [Usage](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/usage.md) and [Keybindings](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/keybindings.md) for the complete interactive reference.
 
@@ -258,7 +260,7 @@ npm test
 
 See [Development](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/development.md) and [CONTRIBUTING.md](https://github.com/dmae97/omk/blob/main/CONTRIBUTING.md).
 
-Release notes: [v1.5.6](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.5.6.md). Public releases: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). Source-version notes can describe a candidate until its tag workflow completes.
+Release notes: [v1.5.8](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v1.5.8.md). Public releases: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). Source-version notes can describe a candidate until its tag workflow completes.
 
 ## License
 

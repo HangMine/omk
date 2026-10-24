@@ -147,6 +147,11 @@ logging (if Q1 needs a new log field, that's a separate spec).
 - **Q3:** `--mode json` carries no tool schemas or system prompt, so `agent.tool_definitions`
   (optional in ATIF) is omitted and the Q1 hash placeholder is used unless an
   `omk_session_info` line (spec 112) is present.
+  The first (seq 1) line maps to the system step and `agent.tool_definitions`.
+  Follow-up (done): seq 2 and later lines are kept verbatim (masked) in
+  `Trajectory.extra.omk.sessionInfoChanges[]` (eventLog `ref:"sessionInfoChange"`), and when a run
+  has at least one such line every agent step gets `extra.omk.sessionInfo = {seq, systemHash,
+  toolsHash}` of the line active when it ran. No extra `source:"system"` steps are inserted.
 - **Q7:** non-blocking.
 
 ## Open questions

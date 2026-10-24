@@ -47,3 +47,26 @@ test("pi-inventory catches static, type-only, dynamic, require and re-export", (
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("pi-inventory discovers .mts/.cts/.tsx/.mjs via git ls-files and skips non-code files", () => {
+	const { root, out, run } = setup();
+	try {
+		// Build specifiers at runtime so this file itself does not show up in the real inventory.
+		const S = (n) => ["@mariozechner", `pi-x-${n}`].join("/");
+		const imp = (p) => `import { x } from "${p}";\nexport const y = x;\n`;
+		writeFileSync(join(root, "src", "e.mts"), imp(S("mts")));
+		writeFileSync(join(root, "src", "f.cts"), imp(S("cts")));
+		writeFileSync(join(root, "src", "g.tsx"), imp(S("tsx")));
+		writeFileSync(join(root, "src", "h.mjs"), imp(S("mjs")));
+		writeFileSync(join(root, "src", "notes.md"), imp(S("md")));
+		writeFileSync(join(root, "src", "untracked.ts"), imp(S("untracked")));
+		execFileSync("git", ["-C", root, "add", "src/e.mts", "src/f.cts", "src/g.tsx", "src/h.mjs", "src/notes.md"], { env: cleanEnv });
+		assert.equal(run().status, 0);
+		const specs = JSON.parse(readFileSync(out, "utf8")).imports.map((i) => i.specifier);
+		for (const s of [S("mts"), S("cts"), S("tsx"), S("mjs")]) assert.ok(specs.includes(s), s);
+		assert.ok(!specs.includes(S("md")));
+		assert.ok(!specs.includes(S("untracked")));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

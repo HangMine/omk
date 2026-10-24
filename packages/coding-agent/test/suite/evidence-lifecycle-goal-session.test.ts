@@ -5,7 +5,8 @@
  * nothing is unattributed; two sessions in one process do not mix. Flag off: no ALS is ever constructed.
  */
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,13 +15,17 @@ import { DurableGoalStore } from "../../src/core/durable-goal-store.ts";
 import {
 	evidenceRegistrySessionCount,
 	evidenceRegistryStats,
+	listEvidenceArtifacts,
 	resetEvidenceLifecycleForTest,
 } from "../../src/core/evidence-lifecycle.ts";
+import { evidenceDeletionLogPath } from "../../src/core/evidence-lifecycle-delete.ts";
 import { evidenceScopeStatsForTest, resetEvidenceScopeForTest } from "../../src/core/evidence-lifecycle-scope.ts";
 import { EVIDENCE_LIFECYCLE_ENTRY_TYPE } from "../../src/core/evidence-lifecycle-session.ts";
 import goalController from "../../src/core/extensions/builtin/goal-controller.ts";
+import { outputRecallDir } from "../../src/core/goal-output-recall.ts";
+import { DELETED_RECALL_LINK } from "../../src/core/goal-output-recall-links.ts";
 import { createReadTool } from "../../src/core/tools/read.ts";
-import { createHarness, getUserTexts, type Harness } from "./harness.ts";
+import { createHarness, getAssistantTexts, getUserTexts, type Harness } from "./harness.ts";
 
 const CHECK = "printf 'F821 undefined name x\\n'; exit 4";
 const harnesses: Harness[] = [];
@@ -164,7 +169,7 @@ describe("spec 106 D1 evidence attribution through a live session", () => {
 	});
 
 	it("flag off: the AsyncLocalStorage is never constructed or entered and no entry is written", async () => {
-		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", undefined);
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // default is observe; flag-off cases opt out explicitly
 		const harness = await goalHarness();
 		await runGoalSession(harness);
 		await harness.session.executeBash("true");
@@ -206,5 +211,141 @@ describe("spec 106 D1 evidence attribution through a live session", () => {
 		expect(last.registered).toBe(1);
 		expect(last.unattributed).toBe(0);
 		expect(evidenceRegistryStats("unattributed").registered).toBe(0);
+	});
+});
+
+/** Fails until `fixed` exists in the goal workspace (the "repair"). */
+const REPAIRABLE = "test -f fixed || { printf 'F821 undefined name x\\n'; exit 4; }";
+
+function recallLogs(harness: Harness): string[] {
+	const dir = outputRecallDir(harness.tempDir);
+	return existsSync(dir) ? readdirSync(dir).filter((n) => /^acceptance-.*\.log$/u.test(n)) : [];
+}
+
+function lastUsage(harness: Harness): { input: number; output: number } {
+	const ends = harness.eventsOfType("message_end").map((e) => e.message);
+	const last = ends.filter((m) => m.role === "assistant").at(-1) as { usage: { input: number; output: number } };
+	return last.usage;
+}
+
+async function failOnce(harness: Harness): Promise<string> {
+	await harness.session.prompt(`/goal verify ${REPAIRABLE}`);
+	const [first] = recallLogs(harness);
+	if (first === undefined) throw new Error("no recall written");
+	return join(outputRecallDir(harness.tempDir), first);
+}
+
+describe("spec 118 D2 recall delete-after-use through a live session", () => {
+	it("flag delete: fail → repair → passing re-run deletes the recall; later context shows no live link", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "delete");
+		const harness = await goalHarness();
+		const recall = await failOnce(harness);
+		expect(existsSync(recall)).toBe(true);
+		const contexts: string[] = [];
+		// "go" settles with the check still failing ⇒ a continuation follow-up names the recall file; the
+		// repair turn fixes the cause and its settle re-runs the check, which now passes.
+		harness.setResponses([
+			fauxAssistantMessage("looking"),
+			() => {
+				writeFileSync(join(harness.tempDir, "fixed"), "ok\n");
+				return fauxAssistantMessage("fixed it");
+			},
+		]);
+		await harness.session.prompt("go");
+		await idle(harness);
+		// Realistic fake usage: the faux provider estimates tokens from the real prompt and reply.
+		expect(lastUsage(harness).input).toBeGreaterThan(0);
+		expect(lastUsage(harness).output).toBeGreaterThan(0);
+		expect(getUserTexts(harness).some((t) => t.includes("Full output: .omk/goals/recall/"))).toBe(true);
+		expect(existsSync(recall)).toBe(false);
+		expect(recallLogs(harness)).toEqual([]);
+		const records = listEvidenceArtifacts(harness.sessionManager.getSessionId()).filter(
+			(r) => r.producer === "goal-recall",
+		);
+		expect(records.length).toBeGreaterThanOrEqual(2);
+		expect(records.every((r) => r.status === "deleted_after_use")).toBe(true);
+		const log = evidenceDeletionLogPath(outputRecallDir(harness.tempDir), harness.sessionManager.getSessionId());
+		expect(existsSync(log)).toBe(true);
+		harness.setResponses([
+			(context) => {
+				contexts.push(JSON.stringify(context.messages));
+				return fauxAssistantMessage("after");
+			},
+		]);
+		await harness.session.prompt("next");
+		await idle(harness);
+		// EV9: the follow-up that named the file is replayed with the deleted marker, never the path.
+		expect(contexts.at(-1)).toContain(DELETED_RECALL_LINK);
+		expect(contexts.at(-1)).not.toContain(".omk/goals/recall/acceptance-");
+	});
+
+	it("flag delete: cancel mid-goal keeps the recall file", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "delete");
+		const harness = await goalHarness();
+		const recall = await failOnce(harness);
+		harness.setResponses([fauxAssistantMessage("working")]);
+		const running = harness.session.prompt("go");
+		await harness.session.abort();
+		await running.catch(() => undefined);
+		harness.setResponses([]);
+		await idle(harness);
+		expect(existsSync(recall)).toBe(true);
+	});
+
+	it("flag delete: dispose mid-goal keeps the recall file", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "delete");
+		const harness = await goalHarness();
+		const recall = await failOnce(harness);
+		harness.session.dispose();
+		expect(existsSync(recall)).toBe(true);
+	});
+
+	it("flag delete: session start (startup bind) finishes an interrupted delete from the intent log", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "delete");
+		const harness = await goalHarness();
+		const dir = outputRecallDir(harness.tempDir);
+		mkdirSync(dir, { recursive: true });
+		const file = join(dir, "acceptance-session-0-1-1-deadbeef.log");
+		writeFileSync(file, "x");
+		const log = evidenceDeletionLogPath(dir, "crashed-session");
+		const pathSha256 = createHash("sha256").update(file).digest("hex");
+		writeFileSync(log, `${JSON.stringify({ v: 1, event: "intent", artifactId: "ev-1", pathSha256, bytes: 1 })}\n`);
+		await harness.session.bindExtensions({});
+		expect(existsSync(file)).toBe(false);
+		expect(readFileSync(log, "utf8")).toContain('"event":"deleted"');
+	});
+
+	it("flag observe: session start does not touch an intent log (recovery is delete-only)", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
+		const harness = await goalHarness();
+		const dir = outputRecallDir(harness.tempDir);
+		mkdirSync(dir, { recursive: true });
+		const file = join(dir, "acceptance-session-0-1-1-deadbeef.log");
+		writeFileSync(file, "x");
+		const pathSha256 = createHash("sha256").update(file).digest("hex");
+		writeFileSync(
+			evidenceDeletionLogPath(dir, "s"),
+			`${JSON.stringify({ event: "intent", pathSha256, bytes: 1 })}\n`,
+		);
+		await harness.session.bindExtensions({});
+		expect(existsSync(file)).toBe(true);
+	});
+
+	it("flag delete: recovery that throws (unreadable log) never fails session start; prompt unaffected", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "delete");
+		const harness = await goalHarness();
+		const dir = outputRecallDir(harness.tempDir);
+		// A directory where the deletion log should be: readFileSync throws EISDIR inside recovery.
+		mkdirSync(evidenceDeletionLogPath(dir, "broken"), { recursive: true });
+		await expect(harness.session.bindExtensions({})).resolves.toBeUndefined();
+		const failures = harness.sessionManager
+			.getEntries()
+			.filter((e) => e.type === "custom" && e.customType === "evidence_recovery_failed");
+		expect(failures.map((e) => (e as unknown as { data: unknown }).data)).toEqual([{ code: "EISDIR" }]);
+		expect(JSON.stringify(failures)).not.toContain(harness.tempDir);
+		harness.setResponses([fauxAssistantMessage("still fine")]);
+		await harness.session.prompt("hello");
+		await idle(harness);
+		expect(getAssistantTexts(harness)).toContain("still fine");
 	});
 });

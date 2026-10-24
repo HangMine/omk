@@ -2,9 +2,10 @@
  * Spec 106 D1: which session owns an evidence artifact. AgentSession runs prompts and user bash inside
  * `withEvidenceSession(sessionId, …)`; producers (read/bash tools, executor, goal recall) read the owner
  * from this async context. No context ⇒ the explicit `unattributed` bucket, never another session.
- * Flag off ⇒ the AsyncLocalStorage is never constructed or entered; `withEvidenceSession` just calls `fn`.
+ * Flag off (`OMK_EVIDENCE_LIFECYCLE=0`; default is `observe`) ⇒ the AsyncLocalStorage is never constructed or entered; `withEvidenceSession` just calls `fn`.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
+import { evidenceLifecycleObserveEnabled } from "./evidence-lifecycle-types.ts";
 
 export const EVIDENCE_UNATTRIBUTED = "unattributed";
 
@@ -12,7 +13,7 @@ let owner: AsyncLocalStorage<string> | undefined;
 let runs = 0;
 
 export function withEvidenceSession<T>(sessionId: string, fn: () => T): T {
-	if (process.env.OMK_EVIDENCE_LIFECYCLE !== "observe") return fn();
+	if (!evidenceLifecycleObserveEnabled()) return fn();
 	owner ??= new AsyncLocalStorage<string>();
 	runs += 1;
 	return owner.run(sessionId, fn);

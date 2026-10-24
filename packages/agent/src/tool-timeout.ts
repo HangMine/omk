@@ -1,3 +1,4 @@
+import { type ToolTerminalCause, toolTerminalCauseOf } from "./tool-terminal-cause.ts";
 /**
  * Per-tool execution timeout and cancellation for the agent loop.
  *
@@ -123,6 +124,8 @@ export interface RunToolCallWithTimeoutResult {
 	executionStarted: boolean;
 	/** Terminal cause when the runtime (not the tool) committed the result. */
 	terminalDisposition?: ToolTimeoutDisposition;
+	/** Spec 119: in-memory only; the tool itself threw a {@link ToolTerminalError}. */
+	terminalCause?: ToolTerminalCause;
 }
 
 /**
@@ -237,7 +240,13 @@ export async function runToolCallWithTimeout<TDetails = any>(
 		if (settlement.kind === "resolved") {
 			return { result: settlement.result, isError: false, executionStarted: true };
 		}
-		return { result: toErrorResult(settlement.error), isError: true, executionStarted: true };
+		const terminalCause = toolTerminalCauseOf(settlement.error);
+		return {
+			result: toErrorResult(settlement.error),
+			isError: true,
+			executionStarted: true,
+			...(terminalCause !== undefined ? { terminalCause } : {}),
+		};
 	}
 
 	// A terminal cause won. Observe the real promise's eventual settlement exactly

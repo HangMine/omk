@@ -54,6 +54,7 @@ import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth
 import { parseBangInvocation } from "./bang-skill-invocation.ts";
 import type { BashResult } from "./bash-executor.ts";
 import { type CompactionSettings, compactionHysteresisConfigFor } from "./compaction/compaction-headroom.ts";
+import { observeCompaction } from "./compaction/compaction-observe.ts";
 import * as compactionPolicy from "./compaction/concurrent-write-policy.ts";
 import {
 	type CompactionHysteresisState,
@@ -198,6 +199,7 @@ import {
 	routesOutsideScope,
 	userMessage,
 } from "./deferred-turn-input.ts";
+import { goalAutonomySteerInput } from "./goal-continuation.ts";
 import type { CustomMessage } from "./messages.ts";
 import { selectContextFilesForModel } from "./model-prompt-policy.ts";
 import type { ModelRegistry } from "./model-registry.ts";
@@ -525,7 +527,6 @@ interface ToolDefinitionEntry {
 }
 
 type BegunCompaction = import("./session-compaction-service.ts").BegunCompaction;
-type CommittedCompaction = import("./session-compaction-service.ts").CommittedCompaction;
 
 const PENDING_TOOL_RESULT_TOKENS = {
 	text: 1024,
@@ -640,7 +641,7 @@ export class AgentSession {
 	private _followUpMessages: string[] = [];
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
-	private readonly _promptSkillFreeze = new PromptSkillFreeze();
+	private readonly _promptSkillFreeze = new PromptSkillFreeze(() => this.sessionManager);
 	private readonly _deferredTurnInput = new DeferredTurnInput();
 
 	// Compaction state
@@ -2296,6 +2297,7 @@ export class AgentSession {
 		return createSubagentLaneAuthority({
 			runId: this._activeRunId ?? `session-${this.sessionManager.getSessionId() ?? "unknown"}`,
 			promptRunId: this._promptLifecycle.activePromptRunId,
+			sessionId: this.sessionManager.getSessionId() ?? null,
 			decision: this._lastResourceAdmission,
 			permitPool: this.workloadPermitPool,
 			inventory,
@@ -2727,18 +2729,17 @@ export class AgentSession {
 	 */
 	async steer(text: string, images?: ImageContent[]): Promise<void> {
 		this._shutdown.assertOpen();
-		const inputText = text;
-
 		// Check for extension commands (cannot be queued)
-		if (inputText.startsWith("/")) {
-			this._throwIfExtensionCommand(inputText);
-		}
+		if (text.startsWith("/")) this._throwIfExtensionCommand(text);
+		// Spec 119 (`OMK_GOAL_AUTONOMY=1` only): an RPC steer takes the same `input` hook as an interactive one.
+		const steered = await goalAutonomySteerInput(this._extensionRunner, text, images);
+		if (steered === undefined) return;
 
 		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(inputText, "steer");
+		let expandedText = this._expandSkillCommand(steered.text, "steer");
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
-		await this._queueSteer(expandedText, images);
+		await this._queueSteer(expandedText, steered.images);
 	}
 
 	/**
@@ -3466,14 +3467,6 @@ export class AgentSession {
 		return this._compactionService.beginTransaction(compactionModel, emergency);
 	}
 
-	private _commitCompaction(
-		begun: BegunCompaction,
-		result: CompactionResult,
-		fromExtension: boolean,
-	): CommittedCompaction {
-		return this._compactionService.commit(begun, result, fromExtension);
-	}
-
 	private _pendingToolResultReserve(settings: CompactionSettings): number {
 		const pendingIds = this.agent.state.pendingToolCalls;
 		const calls = new Map<string, { readonly name: string; readonly args: unknown }>();
@@ -3739,9 +3732,10 @@ export class AgentSession {
 				tokensBefore,
 				details,
 			};
-			const committed = this._commitCompaction(begun, compactionResult, fromExtension);
+			const committed = this._compactionService.commit(begun, compactionResult, fromExtension);
 			committedCompaction = true;
 			this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
+			observeCompaction(this.sessionManager, "manual", fromExtension, pathEntries, preparation, compactionResult);
 
 			if (this._extensionRunner) {
 				await this._extensionRunner.emit({
@@ -4138,8 +4132,9 @@ export class AgentSession {
 				tokensBefore,
 				details,
 			};
-			const committed = this._commitCompaction(begun, result, fromExtension);
+			const committed = this._compactionService.commit(begun, result, fromExtension);
 			this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
+			observeCompaction(this.sessionManager, reason, fromExtension, pathEntries, preparation, result);
 
 			if (this._extensionRunner) {
 				await this._extensionRunner.emit({
@@ -5349,8 +5344,7 @@ export class AgentSession {
 		const result: Array<{ entryId: string; text: string }> = [];
 
 		for (const entry of entries) {
-			if (entry.type !== "message") continue;
-			if (entry.message.role !== "user") continue;
+			if (entry.type !== "message" || entry.message.role !== "user") continue;
 
 			const text = this._extractUserMessageText(entry.message.content);
 			if (text) {

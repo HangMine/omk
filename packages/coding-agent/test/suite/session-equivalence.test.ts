@@ -1,7 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Harness } from "./harness.ts";
 import { compareBytes, enterFixedEnvironment, readOrWriteGolden } from "./session-equivalence.ts";
 import { SCENARIOS } from "./session-equivalence-scenarios.ts";
+
+beforeEach(() => {
+	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // characterizes the pre-106 path; lifecycle defaults on
+});
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
 
 /** Deterministic run/request ids: `randomUUID` counts instead of drawing entropy. */
 vi.mock("node:crypto", async (importOriginal) => {

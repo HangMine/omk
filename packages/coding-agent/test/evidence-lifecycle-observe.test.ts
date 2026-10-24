@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeBashWithOperations } from "../src/core/bash-executor.ts";
 import { createDurableGoal } from "../src/core/durable-goal.ts";
@@ -62,9 +62,10 @@ function expectNoRawBytes(paths: readonly string[]): void {
 
 beforeEach(() => {
 	resetEvidenceLifecycleForTest();
-	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", undefined);
+	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // default is observe; flag-off cases opt out explicitly
 	vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", undefined);
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
+	vi.stubEnv("OMK_GOAL_AUTONOMY", "0"); // pre-119 controller path; autonomy is default on
 });
 
 afterEach(() => {
@@ -74,10 +75,14 @@ afterEach(() => {
 });
 
 describe("spec 106 D1 flag", () => {
-	it("is on only for exactly `observe`", () => {
-		expect(evidenceLifecycleObserveEnabled({})).toBe(false);
-		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "1" })).toBe(false);
-		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "delete" })).toBe(false);
+	it("is on by default (observe); only 0/false/off opt out", () => {
+		expect(evidenceLifecycleObserveEnabled({})).toBe(true);
+		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "1" })).toBe(true);
+		for (const off of ["0", "false", " OFF "]) {
+			expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: off })).toBe(false);
+		}
+		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "delete" })).toBe(true);
+		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "Delete" })).toBe(true);
 		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "observe" })).toBe(true);
 	});
 
@@ -97,14 +102,19 @@ describe("spec 106 D1 flag", () => {
 describe("spec 106 D1 observe", () => {
 	beforeEach(() => vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe"));
 
-	it("spill: registered with an unknown hold, 0 raw bytes, nothing would be deleted", () => {
+	it("spill: registered awaiting its consumers (spec 118 D3), 0 raw bytes, nothing would be deleted", () => {
 		const spilled = spill();
 		const [record] = listEvidenceArtifacts();
-		expect(record).toMatchObject({ producer: "read-spill", holds: ["unknown"], status: "present", bytes: 260 });
+		expect(record).toMatchObject({
+			producer: "read-spill",
+			holds: ["awaiting-consumer"],
+			status: "present",
+			bytes: 260,
+		});
 		expect(record?.contentSha256).toMatch(/^[0-9a-f]{64}$/u);
-		expect(record?.requiredConsumers).toBeUndefined();
+		expect(record?.requiredConsumers).toEqual(["tool-result-commit", "turn-settled"]);
 		const report = evidenceLifecycleReport();
-		expect(report).toMatchObject({ registered: 1, present: 1, unknownHoldShare: 1, deletes: 0 });
+		expect(report).toMatchObject({ registered: 1, present: 1, unknownHoldShare: 0, deletes: 0 });
 		expect(report.wouldDelete.count).toBe(0);
 		expect(existsSync(spilled.path)).toBe(true);
 		expectNoRawBytes([spilled.path]);
@@ -139,12 +149,14 @@ describe("spec 106 D1 observe", () => {
 		const cwd = tempRoot("omk-d1-share-");
 		recall(cwd, "g");
 		observeRecallRecheck("g", true);
-		spill();
+		// `bash-spill` is the one unmapped producer left (spec 118 D3 decision 3).
+		const bashSpill = spillTruncatedOutput({ kind: "bash", preview: "p", full: SECRET, truncated: true, path: "/b" });
+		cleanup.push(dirname(bashSpill.path));
 		const report = evidenceLifecycleReport();
 		expect(report.present).toBe(2);
 		expect(report.unknownHoldShare).toBe(0.5);
 		expect(report.holdReasons).toEqual({ unknown: 1 });
-		expect(report.byProducer).toEqual({ "goal-recall": 1, "read-spill": 1 });
+		expect(report.byProducer).toEqual({ "goal-recall": 1, "bash-spill": 1 });
 		expect(report.unknownHoldShareByProducer).toEqual({
 			recall: { present: 1, unknown: 0, share: 0 },
 			spill: { present: 1, unknown: 1, share: 1 },
@@ -189,8 +201,8 @@ describe("spec 106 D1 observe", () => {
 		if (result.fullOutputPath) cleanup.push(result.fullOutputPath);
 		const records = listEvidenceArtifacts();
 		expect(records.map((r) => [r.artifactId, r.producer, r.holds])).toEqual([
-			["ev-1", "tool-output-log", ["unknown"]],
-			["ev-2", "bash-executor-log", ["unknown"]],
+			["ev-1", "tool-output-log", ["awaiting-consumer"]],
+			["ev-2", "bash-executor-log", ["user-visible"]],
 		]);
 		expect(records.every((r) => r.bytes > 0)).toBe(true);
 		expectNoRawBytes([snapshot.fullOutputPath ?? "", result.fullOutputPath ?? ""]);
@@ -350,5 +362,18 @@ describe("spec 106 EV11 recall path reuse", () => {
 		deleteGoalRecallFiles(cwd, "a");
 		expect(logs()).toHaveLength(2);
 		expect(logs().every((n) => n.startsWith("acceptance-a-1-0-1-"))).toBe(true);
+	});
+
+	it("spec 118 G0: 0 and observe write no counter sidecar or deletion log; a pass deletes nothing", () => {
+		for (const flag of ["0", "observe"]) {
+			vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", flag);
+			const cwd = tempRoot("omk-g0-");
+			const artifact = recall(cwd, "g");
+			observeRecallRecheck("g", true);
+			expect(existsSync(artifact.absolutePath)).toBe(true);
+			expect(readdirSync(outputRecallDir(cwd)).sort()).toEqual([".gitignore", basename(artifact.absolutePath)]);
+			if (flag === "observe") expect(evidenceLifecycleReport()).toMatchObject({ mode: "observe", deletes: 0 });
+			if (flag === "observe") expect(evidenceLifecycleReport()).not.toHaveProperty("deletion");
+		}
 	});
 });

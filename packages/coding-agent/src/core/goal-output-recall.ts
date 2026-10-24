@@ -25,7 +25,13 @@ import {
 	writeSync,
 } from "node:fs";
 import { basename, join, relative } from "node:path";
-import { evidenceLifecycleObserveEnabled, noteEvidenceRemovedByExistingPolicy } from "./evidence-lifecycle.ts";
+import {
+	evidenceLifecycleDeleteEnabled,
+	evidenceLifecycleObserveEnabled,
+	noteEvidenceRemovedByExistingPolicy,
+} from "./evidence-lifecycle.ts";
+import { evidencePruneHold } from "./evidence-lifecycle-delete.ts";
+import { reserveRecallAttempt } from "./evidence-recall-counter.ts";
 import { registerRecallEvidence } from "./goal-output-recall-evidence.ts";
 import { formatSize } from "./tools/truncate.ts";
 
@@ -96,7 +102,9 @@ function keepNewest(files: readonly string[], keep: number): void {
 		}
 	});
 	dated.sort((a, b) => a.mtime - b.mtime || a.file.localeCompare(b.file));
+	// Spec 118 D2 (`delete`): a held artifact over the cap survives; `heldBytes` records it.
 	for (const { file } of dated.slice(0, Math.max(0, dated.length - keep))) {
+		if (evidencePruneHold(file) !== undefined) continue;
 		noteEvidenceRemovedByExistingPolicy(file);
 		removeQuietly(file);
 	}
@@ -172,7 +180,11 @@ export class OutputArtifactWriter {
 			const stem = `acceptance-${safeName(target.goalId)}-${target.round}-${target.revision}`;
 			// A re-run in the same round and revision gets the next attempt number; earlier output is kept.
 			// Numbers only grow, so a file removed by the count cap is never reused.
-			const first = nextAttempt(dir, stem);
+			const scanned = nextAttempt(dir, stem);
+			// Spec 118 D2 (`delete`): the sidecar counter is reserved atomically before the file is created.
+			const first = evidenceLifecycleDeleteEnabled()
+				? reserveRecallAttempt(dir, stem, scanned - 1).attempt
+				: scanned;
 			// Spec 106 EV11 (flag `observe`): a nonce so a path whose files were all pruned is never reused.
 			const nonce = evidenceLifecycleObserveEnabled() ? `-${randomBytes(4).toString("hex")}` : "";
 			for (let attempt = first; attempt < first + MAX_ATTEMPTS; attempt++) {
@@ -285,7 +297,7 @@ export function deleteGoalRecallFiles(cwd: string, goalId: string): void {
 	const pattern = goalFilePattern(goalId);
 	try {
 		for (const name of readdirSync(dir)) {
-			if (!pattern.test(name)) continue;
+			if (!pattern.test(name) || evidencePruneHold(join(dir, name)) !== undefined) continue;
 			noteEvidenceRemovedByExistingPolicy(join(dir, name));
 			removeQuietly(join(dir, name));
 		}
