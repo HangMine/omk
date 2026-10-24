@@ -1,4 +1,5 @@
 /** Spec 106 D1 / 118 D2: flag parsing and the counts-only report shape (split out for the module-size cap). */
+import { isEnvFlagOptOut } from "./env-flag.ts";
 export type EvidenceProducer = "goal-recall" | "read-spill" | "bash-spill" | "tool-output-log" | "bash-executor-log";
 
 /** `unknown`: no producer/consumer mapping exists yet, so nothing may be deleted on its behalf (D2 gap). */
@@ -23,10 +24,15 @@ export const EXECUTOR_LOG_CONSUMERS = [] as const;
 
 export type EvidenceLifecycleMode = "off" | "observe" | "delete";
 
-/** Strict `===`: any other value (typo, `Delete`, `1`) fails closed to off. */
+/**
+ * Default `observe` (records only, deletes nothing). `0`/`false`/`off` (trimmed, case-insensitive) opt out.
+ * Only the exact string `delete` deletes; any other value (unset, typo, `Delete`, `1`) is `observe`, never delete.
+ */
 export function evidenceLifecycleMode(env: NodeJS.ProcessEnv = process.env): EvidenceLifecycleMode {
 	const value = env.OMK_EVIDENCE_LIFECYCLE;
-	return value === "observe" || value === "delete" ? value : "off";
+	if (value === "delete") return "delete";
+	if (isEnvFlagOptOut(value)) return "off";
+	return "observe";
 }
 
 /** `delete` implies everything `observe` does (spec 118 decision 1). */

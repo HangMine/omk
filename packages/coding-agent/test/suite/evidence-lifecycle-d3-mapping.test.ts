@@ -31,7 +31,7 @@ const harnesses: Harness[] = [];
 
 beforeEach(() => {
 	resetEvidenceLifecycleForTest();
-	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", undefined);
+	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // default is observe; flag-off cases opt out explicitly
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
 });
 afterEach(() => {

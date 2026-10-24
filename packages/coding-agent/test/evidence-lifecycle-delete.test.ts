@@ -103,8 +103,12 @@ afterEach(() => {
 });
 
 describe("spec 118 flag", () => {
-	it("delete implies observe; unknown values fail closed to off (G13)", () => {
-		for (const value of ["Delete", "1", "true", "delete ", ""]) {
+	it("delete implies observe; default and unknown values are observe, never delete (G13)", () => {
+		for (const value of [undefined, "Delete", "1", "true", "delete ", ""]) {
+			expect(evidenceLifecycleMode({ OMK_EVIDENCE_LIFECYCLE: value })).toBe("observe");
+			expect(evidenceLifecycleDeleteEnabled({ OMK_EVIDENCE_LIFECYCLE: value })).toBe(false);
+		}
+		for (const value of ["0", "false", "off", " Off "]) {
 			expect(evidenceLifecycleMode({ OMK_EVIDENCE_LIFECYCLE: value })).toBe("off");
 			expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: value })).toBe(false);
 		}
@@ -114,8 +118,11 @@ describe("spec 118 flag", () => {
 		expect(evidenceLifecycleDeleteEnabled({ OMK_EVIDENCE_LIFECYCLE: "delete" })).toBe(true);
 	});
 
-	it("unknown value: a passing recheck deletes nothing and writes no sidecar", () => {
-		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "Delete");
+	it.each([
+		["unknown value", "Delete"],
+		["default (unset)", undefined],
+	])("%s: a passing recheck deletes nothing and writes no sidecar", (_n, value) => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", value);
 		const cwd = tempCwd();
 		const artifact = recall(cwd, "g");
 		observeRecallRecheck("g", true);

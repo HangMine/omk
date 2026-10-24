@@ -91,6 +91,7 @@ function store(cwd: string): DurableGoalStore {
 
 beforeEach(() => {
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
+	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // characterizes the pre-106 path; lifecycle defaults on
 	vi.stubEnv("OMK_GOAL_AUTONOMY", "0"); // pre-119 controller path; autonomy is default on
 });
 

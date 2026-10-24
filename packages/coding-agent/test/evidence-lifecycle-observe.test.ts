@@ -62,7 +62,7 @@ function expectNoRawBytes(paths: readonly string[]): void {
 
 beforeEach(() => {
 	resetEvidenceLifecycleForTest();
-	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", undefined);
+	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // default is observe; flag-off cases opt out explicitly
 	vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", undefined);
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
 	vi.stubEnv("OMK_GOAL_AUTONOMY", "0"); // pre-119 controller path; autonomy is default on
@@ -75,11 +75,14 @@ afterEach(() => {
 });
 
 describe("spec 106 D1 flag", () => {
-	it("is on only for exactly `observe` or (spec 118) `delete`", () => {
-		expect(evidenceLifecycleObserveEnabled({})).toBe(false);
-		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "1" })).toBe(false);
+	it("is on by default (observe); only 0/false/off opt out", () => {
+		expect(evidenceLifecycleObserveEnabled({})).toBe(true);
+		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "1" })).toBe(true);
+		for (const off of ["0", "false", " OFF "]) {
+			expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: off })).toBe(false);
+		}
 		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "delete" })).toBe(true);
-		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "Delete" })).toBe(false);
+		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "Delete" })).toBe(true);
 		expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: "observe" })).toBe(true);
 	});
 

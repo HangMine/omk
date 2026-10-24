@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "../src/core/event-bus.ts";
 import { GoalAcceptanceFlow } from "../src/core/extensions/builtin/goal-controller-acceptance.ts";
 import type { GoalAcceptance } from "../src/core/goal-acceptance.ts";
@@ -139,6 +139,8 @@ describe("B1: every surface renders the same projection", () => {
 });
 
 describe("goal-controller-acceptance wiring", () => {
+	beforeEach(() => vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0")); // mock ctx has no session id; lifecycle defaults on
+	afterEach(() => vi.unstubAllEnvs());
 	const result: GoalAcceptanceResult = {
 		receiptId: "r-9",
 		digest: "d",
