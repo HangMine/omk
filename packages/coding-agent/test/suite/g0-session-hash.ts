@@ -6,15 +6,6 @@
  *
  *   cd packages/coding-agent && OMK_BASH_SANDBOX=off npx tsx test/suite/g0-session-hash.ts
  */
-
-/**
- * Spec 119 G0 byte check. Runs one fixed faux-model scenario (an edit abort, a write abort, one RPC
- * AgentSession.steer(), /goal setup, one bash tool call that times out, the goal loop to its round limit)
- * with a fixed clock, seeded randomness and counter ids, then prints sha256 of the session JSONL and of the provider request contexts. Imports only modules that exist on main
- * (a4bfeb5a97), so the same file runs on main and on a branch; with OMK_GOAL_AUTONOMY unset both must match.
- *
- *   cd packages/coding-agent && OMK_BASH_SANDBOX=off npx tsx test/suite/g0-session-hash.ts
- */
 import nodeCrypto, { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
@@ -44,8 +35,10 @@ const nextBytes = (bytes: Uint8Array): Uint8Array => {
 	idCounter += 1;
 	return bytes;
 };
+let uuidCalls = 0;
 const fixedUuid = (): `${string}-${string}-${string}-${string}-${string}` => {
 	idCounter += 1;
+	uuidCalls += 1;
 	const hex = idCounter.toString(16).padStart(12, "0");
 	return `00000000-0000-4000-8000-${hex}`;
 };
@@ -173,16 +166,49 @@ try {
 	const sha = (data: string) => createHash("sha256").update(data).digest("hex");
 	// The checkout path is in the system prompt (OMK docs links); it is the only per-worktree byte.
 	const repoRoot = resolve(import.meta.dirname, "../../../..");
-	const neutral = (text: string) => text.split(repoRoot).join("<repo>");
-	const session = neutral(readFileSync(file, "utf8"));
-	console.log(`session.jsonl sha256 ${sha(session)} (${session.split("\n").filter(Boolean).length} lines)`);
-	// G0_DUMP=<dir> writes the raw bytes for a diff when the hashes differ.
+	// Ids come from a call counter shared with randomBytes, so their values shift by one or two with timing
+	// (Tech Lead's #268 finding). Canonicalize every UUID by first appearance, and the faux api's random suffix.
+	const ids = new Map<string, string>();
+	const canonical = (text: string) =>
+		text
+			.split(repoRoot)
+			.join("<repo>")
+			.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (uuid) => {
+				const key = uuid.toLowerCase();
+				if (!ids.has(key)) ids.set(key, `<id-${ids.size + 1}>`);
+				return ids.get(key) as string;
+			})
+			.replace(/"faux:\d+:[a-z0-9]+"/g, '"faux:<api>"');
+	type Msg = { role?: string; details?: { omk?: { disposition?: string } } };
+	const label = (m: Msg | undefined) =>
+		m?.role === "toolResult" ? `toolResult(${m.details?.omk?.disposition ?? "?"})` : (m?.role ?? "none");
+	const session = canonical(readFileSync(file, "utf8"));
+	const lines = session.split("\n").filter(Boolean);
+	const sessionTypes = lines.map((line) => {
+		const entry = JSON.parse(line) as { type: string; message?: Msg; customType?: string };
+		if (entry.type === "message") return label(entry.message);
+		return entry.customType ? `${entry.type}:${entry.customType}` : entry.type;
+	});
+	const requestText = canonical(requests.join("\n"));
+	const requestTypes = requests.map((r) => {
+		const messages = (JSON.parse(r) as { messages?: Msg[] }).messages ?? [];
+		return `${messages.length}:${label(messages.at(-1))}`;
+	});
+	console.log(`session.jsonl sha256 ${sha(session)} (${lines.length} entries)`);
+	console.log(`session types ${sessionTypes.join(",")}`);
+	console.log(`provider requests sha256 ${sha(requestText)} (${requests.length} requests)`);
+	console.log(`request types ${requestTypes.join(",")}`);
+	// The path is replaced, but its length still moves systemPromptCacheBoundary and the faux usage counts:
+	// compare only checkouts whose repo path has the same length.
+	console.log(
+		`info (not hashed): randomUUID calls ${uuidCalls}, distinct ids ${ids.size}, repo path length ${repoRoot.length}`,
+	);
+	// G0_DUMP=<dir> writes the canonical bytes for a diff when the hashes differ.
 	const dump = process.env.G0_DUMP;
 	if (dump) {
 		writeFileSync(`${dump}/session.jsonl`, session);
-		writeFileSync(`${dump}/requests.jsonl`, `${neutral(requests.join("\n"))}\n`);
+		writeFileSync(`${dump}/requests.jsonl`, `${requestText}\n`);
 	}
-	console.log(`provider requests sha256 ${sha(neutral(requests.join("\n")))} (${requests.length} requests)`);
 } finally {
 	harness.cleanup();
 }

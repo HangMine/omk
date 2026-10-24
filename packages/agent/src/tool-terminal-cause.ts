@@ -18,6 +18,11 @@ export function toolTerminalCauseOf(error: unknown): ToolTerminalCause | undefin
 	return error instanceof ToolTerminalError ? error.terminalCause : undefined;
 }
 
+/** Mirrors coding-agent `goalAutonomyEnabled()` (strict `=== "1"`); the agent package cannot import it. */
+export function toolTerminalCauseRecordingEnabled(): boolean {
+	return process.env.OMK_GOAL_AUTONOMY === "1";
+}
+
 const MAX_CAUSES = 1024;
 const causes = new Map<string, ToolTerminalCause>();
 

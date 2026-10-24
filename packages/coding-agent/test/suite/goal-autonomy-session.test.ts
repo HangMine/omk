@@ -67,11 +67,12 @@ describe("spec 119 through a live AgentSession", () => {
 		expect(text).toContain("Command timed out after 1 seconds");
 		expect(text).not.toMatch(/terminalCause|ToolTerminalError|goal_autonomy/);
 		expect(JSON.stringify(h.events)).not.toMatch(/terminalCause/);
-		expect(takeToolTerminalCause("bt-off")).toBe("timeout");
+		// Flag off: the boundary does not record a cause at all.
 		expect(takeToolTerminalCause("bt-off")).toBeUndefined();
 	});
 
-	it("bash abort through the session records an in-memory aborted cause", async () => {
+	it("flag on: bash abort through the session records an in-memory aborted cause, read once", async () => {
+		vi.stubEnv("OMK_GOAL_AUTONOMY", "1");
 		const h = await make(false);
 		h.setResponses([
 			fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 10" }, { id: "ba-off" }), {
@@ -87,6 +88,7 @@ describe("spec 119 through a live AgentSession", () => {
 		await run.catch(() => undefined);
 		await idle(h);
 		expect(takeToolTerminalCause("ba-off")).toBe("aborted");
+		expect(takeToolTerminalCause("ba-off")).toBeUndefined();
 	});
 
 	it("AU4: flag on, a timed-out bash call stops the goal with outcome-unknown and no retry", async () => {
