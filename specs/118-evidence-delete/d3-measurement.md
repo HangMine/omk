@@ -8,7 +8,7 @@ All `file:line` references are `packages/coding-agent/src/…` on that SHA.
 | Producer | Report group | Registers at | Created by | Real return path (EV12) | Existing cleanup |
 |---|---|---|---|---|---|
 | `read-spill` | `spill` | `core/tools/artifact-spill.ts:33-37` | `core/tools/read.ts:177-185` (byte-truncated read) | tool result text `[Full read output spilled to …]` (`artifact-spill.ts:40`) + `details.fullOutputPath` (`read.ts:185`) → model context | none (file in `omk-spill-*` tmp dir, `artifact-spill.ts:23`) |
-| `bash-spill` | `spill` | `core/tools/artifact-spill.ts:34` (`kind: "bash"`) | **no caller in `src`** (only `read.ts:177` calls `spillTruncatedOutput`) | — | — |
+| `bash-spill` | `spill` | `core/tools/artifact-spill.ts:34` (`kind: "bash"`) | no call site in `src` (only `read.ts:177` calls `spillTruncatedOutput`); **excluded from D3** | — | — |
 | `tool-output-log` (`omk-bash-*.log`) | `bash` | `core/tools/output-accumulator.ts:163` (after stream `finish`) | bash tool, `core/tools/bash.ts:149-152`, `finish()` at `bash.ts:203` | `details.fullOutputPath` on updates (`bash.ts:161-166`) and final result (`bash.ts:206`); timeout partial text `Full output: …` (`packages/agent/src/tool-execution-boundary.ts:96-97`) | only written when truncated (`output-accumulator.ts:122`) |
 | `bash-executor-log` | `executor` | `core/bash-executor.ts:173` (normal), `:199` (abort) | `AgentSession.executeBash` → `core/agent-session.ts:5076` → `core/session-bash-service.ts:172` | `BashResult.fullOutputPath` (`bash-executor.ts:180,205`) → `bashExecution` message (`session-bash-service.ts:206`) → LLM text `[Output truncated. Full output: …]` (`packages/agent/src/harness/messages.ts:102-103`) unless `excludeFromContext`; shown to user in interactive (`modes/interactive/interactive-mode.ts:6427,6468`) and returned over RPC (`modes/rpc/rpc-mode.ts:560`) | not truncated or thrown ⇒ `discardTempFile` (`bash-executor.ts:83-97,163,192,210`) — must be kept (EV12) |
 
@@ -30,13 +30,13 @@ Reading: `unattributed` = 0 is met. `unknown` = 0 **cannot** be met on main by c
 
 ## 3. Preconditions (fixed, before any D3 delete code is enabled)
 
-1. D3 mapping PR lands with flag `observe` behaviour only (registers `requiredConsumers`, no deletes).
-2. On that build, the free faux run above (plus the executor abort path and a timeout partial) gives, per mapped producer, `unknown` = 0 except artifacts holding `user-visible`; `unattributed` = 0; `overflow` = 0.
-3. Flag unset ⇒ G0 byte-identical (no entry, no registration; `evidence-lifecycle.ts:147-148`).
+1. D3 mapping PR lands; it registers `requiredConsumers` / holds only, no deletes.
+2. Counted on an `observe` run **after** the mapping lands (not a flag-off run): the free faux run of §2 plus the executor abort path and a timeout partial gives, per mapped producer, `unknown` = 0 except artifacts holding `user-visible`; `unattributed` = 0; `overflow` = 0.
+3. The same mapping PR carries a separate flag-off G0 byte-identity check against main: normalized hash (UUIDs replaced in first-seen order with `<id-1>`, `<id-2>`… for both `id` and `parentId`), entry count, and the type/disposition order list. All three must match. Flag unset ⇒ no entry, no registration (`evidence-lifecycle.ts:147-148`).
 
 ## 4. Metrics
 
-- **Primary:** bytes of mapped-producer artifacts still present at session end, per producer, from the last `evidence_lifecycle` entry per session. Today the report has only total `presentBytes` (`evidence-lifecycle-types.ts:36`); D3 adds `presentBytesByProducer` (counts only).
+- **Primary:** bytes of mapped-producer artifacts still present at session end, per producer, from the last `evidence_lifecycle` entry per session. Today the report has only total `presentBytes` (`evidence-lifecycle-types.ts:36`); The same mapping PR adds `presentBytesByProducer` (counts only), written to the `evidence_lifecycle` entry only when the flag is `observe`/`delete`; flag off ⇒ no field and no computation.
 - **Verdict:** 0 required-evidence loss: 0 `missing_unexpectedly`, 0 read of a deleted path by a later tool call, 0 delete of an artifact with any hold (incl. `user-visible`).
 - **Guards/secondary (report only):** `heldBytes` / reasons, `delete_pending` by reason, `wouldDelete` from the `observe` arm, executor discard still firing for non-truncated output.
 
@@ -44,8 +44,8 @@ Reading: `unattributed` = 0 is met. `unknown` = 0 **cannot** be met on main by c
 
 - `read-spill`: deleted only after the tool result is committed and the turn settled with no later `read` of the spill path; text marker never points to a deleted file without `deleted_after_use`.
 - `tool-output-log`: same, covering both update and final `details.fullOutputPath` and the timeout partial path.
-- `bash-executor-log`: interactive/RPC result ⇒ `user-visible` hold, never auto-deleted; `excludeFromContext` not treated as ACK; existing `discardTempFile` behaviour unchanged.
-- `bash-spill`: stays unmapped (`unknown`) until a caller exists.
+- `bash-executor-log`: every interactive/RPC result ⇒ `user-visible` hold, never auto-deleted, **including** `excludeFromContext` results (that option only controls model context, not whether the user saw the path). If ownership or visibility is unclear ⇒ fail closed (no delete). Existing `discardTempFile` behaviour unchanged.
+- `bash-spill`: no call site in `src`, excluded from D3. Removing the dead code is a separate later PR.
 
 ## 6. Gates
 
@@ -58,9 +58,9 @@ G0–G13 of `spec.md` §4 plus EV12 above, all 100% on deterministic tests befor
 - Team gates: task-clustered CI lower bound of pass-rate delta ≥ −3pp; cost ≤ 1.10× base; wall ≤ 1.25× base; n ≥ 5 per arm per task; plus §4 verdict.
 - **Paid runs blocked until 인호 sets a $ cap.** Only after D2 merged (spec.md §5).
 
-## 8. Open questions (Tech Lead)
+## 8. Decisions (Tech Lead, 2026-10-24 KST)
 
-1. Replace decision 2's "flag-off run with `unknown` = 0" by §3 (mapping-on observe run)? Main cannot reach 0 by design.
-2. Add `presentBytesByProducer` to the report in the D3 mapping PR, or keep total `presentBytes`?
-3. `bash-spill`: drop from D3 scope, or keep the type as unmapped?
-4. Executor in RPC/interactive: always `user-visible`, or only when not `excludeFromContext`?
+1. The precondition (`unknown` = 0 except `user-visible`, `unattributed` = 0, `overflow` = 0) is counted on an `observe` run after the mapping lands, not on a flag-off run (supersedes the wording of `spec.md` §8 decision 2 for D3). The mapping PR also includes the flag-off G0 check of §3.3.
+2. `presentBytesByProducer` ships in the mapping PR; only with flag `observe`/`delete`; flag off has no field and no computation.
+3. `bash-spill`: no call site in `src`, excluded from D3; dead-code removal is a separate later PR.
+4. Executor results in RPC/interactive always hold `user-visible`, even with `excludeFromContext`. When unsure, fail closed (no delete).
