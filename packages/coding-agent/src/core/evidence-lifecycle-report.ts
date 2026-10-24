@@ -40,6 +40,7 @@ export function evidenceLifecycleReport(sessionId: string = currentEvidenceSessi
 		executor: { present: 0, unknown: 0 },
 	};
 	const byProducer: Partial<Record<EvidenceProducer, number>> = {};
+	const presentBytesByProducer: Partial<Record<EvidenceProducer, number>> = {};
 	const holdReasons: Partial<Record<EvidenceHoldReason, number>> = {};
 	let [present, presentBytes, removed, unknown, blockedExhausted, deletes] = [0, 0, 0, 0, 0, 0];
 	const pendingReasons: Record<string, number> = {};
@@ -56,6 +57,7 @@ export function evidenceLifecycleReport(sessionId: string = currentEvidenceSessi
 		}
 		present += 1;
 		presentBytes += record.bytes;
+		presentBytesByProducer[record.producer] = (presentBytesByProducer[record.producer] ?? 0) + record.bytes;
 		const group = groups[PRODUCER_GROUP[record.producer]];
 		group.present += 1;
 		if (record.holds.includes("unknown")) {
@@ -72,6 +74,7 @@ export function evidenceLifecycleReport(sessionId: string = currentEvidenceSessi
 		registered: stats.registered,
 		present,
 		presentBytes,
+		presentBytesByProducer,
 		removedByExistingPolicy: removed,
 		byProducer,
 		holdReasons,

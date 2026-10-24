@@ -46,6 +46,8 @@ export interface EvidenceArtifactRecord {
 	readonly verified?: boolean;
 	readonly retryHold: boolean;
 	readonly recoveryHold: boolean;
+	/** Spec 118 D3: pinned because the user saw the path (never auto-deleted). */
+	readonly userVisible?: boolean;
 	readonly holds: readonly EvidenceHoldReason[];
 	readonly status: EvidenceArtifactStatus;
 	/** Classification only: the owning goal was blocked with rounds exhausted. Holds are NOT released. */
@@ -70,6 +72,7 @@ export interface MutableRecord {
 	verified?: boolean;
 	retryHold: boolean;
 	recoveryHold: boolean;
+	userVisible?: boolean;
 	goalActive: boolean;
 	blockedExhausted: boolean;
 	status: EvidenceArtifactStatus;
@@ -127,6 +130,7 @@ function holdsOf(record: MutableRecord): EvidenceHoldReason[] {
 	if (record.requiredConsumers.some((consumer) => !record.consumed.has(consumer))) holds.push("awaiting-consumer");
 	if (record.retryHold) holds.push("retry");
 	if (record.recoveryHold) holds.push("recovery");
+	if (record.userVisible === true) holds.push("user-visible");
 	return holds;
 }
 
@@ -141,6 +145,8 @@ export interface RegisterEvidenceInput {
 	readonly goalActive?: boolean;
 	readonly retryHold?: boolean;
 	readonly recoveryHold?: boolean;
+	/** Spec 118 D3 decision 4: pin `user-visible` (fail closed: there is no way to unset it). */
+	readonly userVisible?: boolean;
 }
 
 /** No-op (returns undefined) unless the flag is `observe`. Never throws into the producer. */
@@ -166,6 +172,7 @@ export function registerEvidenceArtifact(input: RegisterEvidenceInput): string |
 			consumed: new Set(),
 			retryHold: input.retryHold ?? false,
 			recoveryHold: input.recoveryHold ?? false,
+			...(input.userVisible === true ? { userVisible: true } : {}),
 			goalActive: input.goalActive ?? false,
 			blockedExhausted: false,
 			status: "present",
@@ -240,6 +247,7 @@ function freeze(record: MutableRecord): EvidenceArtifactRecord {
 		...(record.verified !== undefined ? { verified: record.verified } : {}),
 		retryHold: record.retryHold,
 		recoveryHold: record.recoveryHold,
+		...(record.userVisible === true ? { userVisible: true } : {}),
 		holds: holdsOf(record),
 		status: record.status,
 		blockedExhausted: record.blockedExhausted,

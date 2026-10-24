@@ -13,13 +13,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripAnsi } from "../utils/ansi.ts";
 import { sanitizeBinaryOutput } from "../utils/shell.ts";
-import { registerEvidenceArtifact } from "./evidence-lifecycle.ts";
+import { EXECUTOR_LOG_CONSUMERS, registerEvidenceArtifact } from "./evidence-lifecycle.ts";
 import type { BashOperations } from "./tools/bash.ts";
 import { DEFAULT_MAX_BYTES, truncateTail } from "./tools/truncate.ts";
 
 // ============================================================================
 // Types
 // ============================================================================
+
+/**
+ * Spec 118 D3 decision 4: executor output only reaches users through interactive/RPC
+ * (`AgentSession.executeBash`), so it is always pinned `user-visible`, `excludeFromContext` included
+ * (that option controls model context, not what the user saw). Unknown callers fail closed the same way.
+ */
+function registerExecutorLog(path: string): void {
+	registerEvidenceArtifact({
+		producer: "bash-executor-log",
+		path,
+		requiredConsumers: EXECUTOR_LOG_CONSUMERS,
+		userVisible: true,
+	});
+}
 
 export interface BashExecutorOptions {
 	/** Callback for streaming output chunks (already sanitized) */
@@ -170,7 +184,7 @@ export async function executeBashWithOperations(
 			});
 		}
 		const cancelled = options?.signal?.aborted ?? false;
-		if (tempFilePath) registerEvidenceArtifact({ producer: "bash-executor-log", path: tempFilePath });
+		if (tempFilePath) registerExecutorLog(tempFilePath);
 
 		return {
 			output: truncated ? truncationResult.content : fullOutput,
@@ -196,7 +210,7 @@ export async function executeBashWithOperations(
 					tempFileStream!.end(() => resolve());
 				});
 			}
-			if (tempFilePath) registerEvidenceArtifact({ producer: "bash-executor-log", path: tempFilePath });
+			if (tempFilePath) registerExecutorLog(tempFilePath);
 			return {
 				output: truncated ? truncationResult.content : fullOutput,
 				exitCode: undefined,
