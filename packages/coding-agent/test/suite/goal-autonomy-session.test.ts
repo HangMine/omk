@@ -1,0 +1,151 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { takeToolTerminalCause } from "omk-agent-core";
+import { fauxAssistantMessage, fauxToolCall } from "omk-ai";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createDurableGoal } from "../../src/core/durable-goal.ts";
+import { DurableGoalStore } from "../../src/core/durable-goal-store.ts";
+import goalController from "../../src/core/extensions/builtin/goal-controller.ts";
+import { createBashTool } from "../../src/core/tools/bash.ts";
+import { createHarness, getUserTexts, type Harness } from "./harness.ts";
+
+const store = (h: Harness) => new DurableGoalStore(join(h.tempDir, ".omk", "goals", "current.json"));
+
+async function idle(h: Harness): Promise<void> {
+	await vi.waitFor(
+		async () => {
+			await h.session.agent.waitForIdle();
+			expect(h.session.isStreaming).toBe(false);
+		},
+		{ timeout: 20_000, interval: 50 },
+	);
+	await h.session.agent.waitForIdle();
+}
+
+function toolResults(h: Harness): Array<{ toolCallId: string; details?: { omk?: unknown } }> {
+	return h.session.messages.filter((m) => m.role === "toolResult") as never;
+}
+
+describe("spec 119 through a live AgentSession", () => {
+	const harnesses: Harness[] = [];
+	beforeEach(() => vi.stubEnv("OMK_BASH_SANDBOX", "off"));
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		while (harnesses.length > 0) harnesses.pop()?.cleanup();
+	});
+
+	async function make(withGoal: boolean): Promise<Harness> {
+		const h = await createHarness({
+			persistSession: true,
+			tools: [createBashTool(process.cwd())],
+			...(withGoal ? { extensionFactories: [goalController] } : {}),
+		});
+		harnesses.push(h);
+		return h;
+	}
+
+	it("G0: flag off, a bash timeout keeps the main envelope; the cause stays in memory only", async () => {
+		const h = await make(false);
+		h.setResponses([
+			fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 5", timeout: 1 }, { id: "bt-off" }), {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage("done"),
+		]);
+		await h.session.prompt("run it");
+		await idle(h);
+		const [result] = toolResults(h);
+		expect(result.details?.omk).toEqual({
+			schema: "tool-result/v2",
+			synthetic: false,
+			disposition: "failed",
+			executionStarted: true,
+		});
+		const file = h.sessionManager.getSessionFile();
+		expect(file).toBeDefined();
+		const text = readFileSync(file as string, "utf8");
+		expect(text).toContain("Command timed out after 1 seconds");
+		expect(text).not.toMatch(/terminalCause|ToolTerminalError|goal_autonomy/);
+		expect(JSON.stringify(h.events)).not.toMatch(/terminalCause/);
+		expect(takeToolTerminalCause("bt-off")).toBe("timeout");
+		expect(takeToolTerminalCause("bt-off")).toBeUndefined();
+	});
+
+	it("bash abort through the session records an in-memory aborted cause", async () => {
+		const h = await make(false);
+		h.setResponses([
+			fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 10" }, { id: "ba-off" }), {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage("after"),
+		]);
+		const run = h.session.prompt("run it");
+		await vi.waitFor(() => expect(h.events.some((e) => e.type === "tool_execution_start")).toBe(true), {
+			timeout: 10_000,
+		});
+		await h.session.abort();
+		await run.catch(() => undefined);
+		await idle(h);
+		expect(takeToolTerminalCause("ba-off")).toBe("aborted");
+	});
+
+	it("AU4: flag on, a timed-out bash call stops the goal with outcome-unknown and no retry", async () => {
+		vi.stubEnv("OMK_GOAL_AUTONOMY", "1");
+		const h = await make(true);
+		await store(h).create(
+			createDurableGoal({ id: "session", objective: "Fix it", maxRounds: 8, now: new Date().toISOString() }),
+		);
+		h.setResponses([
+			fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 5", timeout: 1 }, { id: "bt-on" }), {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage("done"),
+			fauxAssistantMessage("must not run"),
+		]);
+		await h.session.prompt("go");
+		await idle(h);
+		expect(getUserTexts(h)).toEqual(["go"]);
+		expect((await store(h).current())?.status).toBe("blocked");
+		const entries = h.sessionManager.getEntries().filter((e) => e.type === "custom") as Array<{
+			customType: string;
+			data: unknown;
+		}>;
+		expect(entries.at(-1)).toMatchObject({ customType: "goal_autonomy_stop", data: { reason: "outcome-unknown" } });
+		expect(h.getPendingResponseCount()).toBe(1);
+	});
+
+	it("AU2/G8: an explicit steer mid-goal pauses it; only /goal resume continues", async () => {
+		vi.stubEnv("OMK_GOAL_AUTONOMY", "1");
+		const h = await make(true);
+		await store(h).create(
+			createDurableGoal({
+				id: "session",
+				objective: "Write the report",
+				maxRounds: 8,
+				now: new Date().toISOString(),
+			}),
+		);
+		h.setResponses([
+			async () => {
+				await h.session.prompt("actually, change direction", { streamingBehavior: "steer" });
+				return fauxAssistantMessage("first");
+			},
+			fauxAssistantMessage("ack steer"),
+			...Array.from({ length: 9 }, (_, i) => fauxAssistantMessage(`round ${i}`)),
+		]);
+		await h.session.prompt("go");
+		await idle(h);
+		expect((await store(h).current())?.status).toBe("paused");
+		expect(getUserTexts(h)).toEqual(["go", "actually, change direction"]);
+
+		await h.session.prompt("/goal resume");
+		// Resumed under the round cap: one resume message, then one continuation per settled round up to 8.
+		await vi.waitFor(() => expect(getUserTexts(h).length).toBe(11), { timeout: 15_000, interval: 50 });
+		await idle(h);
+		expect(getUserTexts(h).slice(2)).toEqual([
+			"Continue the active goal (0/8): Write the report",
+			...Array.from({ length: 8 }, (_, i) => `Continue the active goal (${i + 1}/8): Write the report`),
+		]);
+		expect((await store(h).current())?.completedRounds).toBe(8);
+	});
+});

@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "omk-ai";
 import { truncateTail } from "./harness/utils/truncate.ts";
 import { createImmutableSnapshot } from "./plain-data.ts";
+import { recordToolTerminalCause, type ToolTerminalCause } from "./tool-terminal-cause.ts";
 import type {
 	AgentContext,
 	AgentLoopConfig,
@@ -118,6 +119,8 @@ export interface ExecutedToolCallOutcome {
 	isError: boolean;
 	executionStarted: boolean;
 	terminalDisposition?: ToolTimeoutDisposition;
+	/** Spec 119: in-memory only; the tool threw a {@link ToolTerminalError}. */
+	terminalCause?: ToolTerminalCause;
 	isRealPromiseSettled: () => boolean;
 	commitTerminal: () => void;
 }
@@ -231,6 +234,9 @@ export async function finalizeExecutedToolCall(options: FinalizeToolCallOptions)
 					synthetic: syntheticFailure,
 					executionStarted: executed.executionStarted,
 				});
+	// Spec 119: in memory only, never on the result, envelope or events.
+	const cause = executed.terminalCause ?? terminalDisposition;
+	if (cause !== undefined && executed.executionStarted) recordToolTerminalCause(prepared.toolCall.id, cause);
 	return {
 		toolCall: prepared.toolCall,
 		result,
