@@ -1,4 +1,4 @@
-import type { AgentTool } from "omk-agent-core";
+import { type AgentTool, ToolTerminalError } from "omk-agent-core";
 import { type Static, Type } from "typebox";
 import { getShellEnv } from "../../utils/shell.ts";
 import { DEFAULT_BUILTIN_TOOL_TIMEOUTS } from "../agent-tool-settings.ts";
@@ -236,7 +236,7 @@ export function createBashToolDefinition(
 					const snapshot = await finishOutput();
 					const { text } = formatOutput(snapshot, "");
 					if (err instanceof Error && err.message === "aborted") {
-						throw new Error(appendStatus(text, "Command aborted"));
+						throw new ToolTerminalError("aborted", appendStatus(text, "Command aborted"));
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
 						// Prefer the executor's reported seconds (timeout:N) so mocks and
@@ -248,7 +248,7 @@ export function createBashToolDefinition(
 							clamp?.clamped === true
 								? bashBudgetTimeoutMessage({ ...clamp, timeoutSec: secs ?? clamp.timeoutSec })
 								: `Command timed out after ${secs} seconds`;
-						throw new Error(appendStatus(text, status));
+						throw new ToolTerminalError("timeout", appendStatus(text, status));
 					}
 					throw err;
 				}
