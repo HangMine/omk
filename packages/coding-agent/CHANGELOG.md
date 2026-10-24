@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.5.8] - 2026-10-24
+
+### Added
+
+- Goal autonomy behind `OMK_GOAL_AUTONOMY=1` (flag, default off). `/goal budget <usd|-> [<deadline ISO>|-]` sets a user-only cost and deadline budget that includes subagent lane cost; the goal stops with `budget-limit`, `deadline`, `outcome-unknown` or `scope-changed`, steering pauses it, and only `/goal resume` restarts it. Stop reasons are custom entries; the `omk.goal.v1` schema is unchanged (#266, #268).
+- Strong-only skill auto-load behind `OMK_SKILL_AUTO_LOAD` (flag, default off), with an observe-only `skill-autoload.jsonl` log (#262).
+- Evidence recall delete-after-use behind `OMK_EVIDENCE_LIFECYCLE=delete` (flag, default off; `observe` only records) (#263).
+
+With all new flags off, behavior is the same as 1.5.7.
+
+### Fixed
+
+- Evidence recall delete recovery can no longer fail `session_start` (#264).
+- `session_info` JSON test no longer flakes (#265).
+
+### Changed
+
+- Research count scripts for spec 117 and 119 on synthetic fixtures (#267), NaN/Infinity tolerance (#269), header comment fix (#271).
+- Spec 118 D3 measurement addendum, design only (#272).
+- `AGENTS.md` lists the goal autonomy flag.
+
 ## [1.5.7] - 2026-10-23
 
 ### Added
