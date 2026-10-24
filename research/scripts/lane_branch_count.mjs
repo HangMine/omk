@@ -2,7 +2,7 @@
 // Usage: node lane_branch_count.mjs results.json runlog.jsonl...
 // runlog arg may be "taskId=path" (per-trial log dir) or records may carry taskId.
 // Qualify: a task with >=1 run whose lane plan had >=2 independent branches:
-//   maxBatchLanes>=2 OR dependencyRoots>=2 (fields proposed; current main only logs `lanes`).
+//   maxBatchLanes>=2 OR dependencyRoots>=2 (main logs `maxBatchLanes` and `dependencyRoots` since #261; older logs have only `lanes`).
 // Records with only `lanes` are "unknownShape" (never counted as qualifying).
 // Output keys are sha256(taskId)[:12]; no ids/paths printed.
 import { readFileSync } from "node:fs";

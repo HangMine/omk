@@ -199,6 +199,7 @@ import {
 	routesOutsideScope,
 	userMessage,
 } from "./deferred-turn-input.ts";
+import { goalAutonomySteerInput } from "./goal-continuation.ts";
 import type { CustomMessage } from "./messages.ts";
 import { selectContextFilesForModel } from "./model-prompt-policy.ts";
 import type { ModelRegistry } from "./model-registry.ts";
@@ -2728,18 +2729,17 @@ export class AgentSession {
 	 */
 	async steer(text: string, images?: ImageContent[]): Promise<void> {
 		this._shutdown.assertOpen();
-		const inputText = text;
-
 		// Check for extension commands (cannot be queued)
-		if (inputText.startsWith("/")) {
-			this._throwIfExtensionCommand(inputText);
-		}
+		if (text.startsWith("/")) this._throwIfExtensionCommand(text);
+		// Spec 119 (`OMK_GOAL_AUTONOMY=1` only): an RPC steer takes the same `input` hook as an interactive one.
+		const steered = await goalAutonomySteerInput(this._extensionRunner, text, images);
+		if (steered === undefined) return;
 
 		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(inputText, "steer");
+		let expandedText = this._expandSkillCommand(steered.text, "steer");
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
-		await this._queueSteer(expandedText, images);
+		await this._queueSteer(expandedText, steered.images);
 	}
 
 	/**

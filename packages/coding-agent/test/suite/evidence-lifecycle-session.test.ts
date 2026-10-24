@@ -71,8 +71,8 @@ describe("spec 106 D1 session sink", () => {
 				mode: "observe",
 				deletes: 0,
 				present: 1,
-				unknownHoldShare: 1,
-				unknownHoldShareByProducer: { spill: { present: 1, unknown: 1, share: 1 } },
+				unknownHoldShare: 0,
+				unknownHoldShareByProducer: { spill: { present: 1, unknown: 0, share: 0 } },
 			},
 		});
 		const serialized = JSON.stringify(harness.sessionManager.getEntries());

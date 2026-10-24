@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
-import type { AgentTool } from "omk-agent-core";
+import { type AgentTool, ToolTerminalError } from "omk-agent-core";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
@@ -94,7 +94,7 @@ export function createWriteToolDefinition(
 				// Checking signal.aborted after each await observes the same aborts while
 				// keeping the queue locked until the current operation has settled.
 				const throwIfAborted = (): void => {
-					if (signal?.aborted) throw new Error("Operation aborted");
+					if (signal?.aborted) throw new ToolTerminalError("aborted", "Operation aborted");
 				};
 
 				throwIfAborted();
@@ -125,7 +125,7 @@ export function createWriteToolDefinition(
 			if (!diag) return result;
 			// Post-check runs outside the mutation queue (spec 107 Q6).
 			const report = await diag.report();
-			if (signal?.aborted) throw new Error("Operation aborted");
+			if (signal?.aborted) throw new ToolTerminalError("aborted", "Operation aborted");
 			// Shadow: results went to the run log only; the model sees exactly the OFF result.
 			if (!isEditDiagnosticsReported()) return result;
 			const text = report.text ? `${result.content[0].text}\n${report.text}` : result.content[0].text;

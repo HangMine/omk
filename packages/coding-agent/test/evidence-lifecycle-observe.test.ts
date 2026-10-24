@@ -98,14 +98,19 @@ describe("spec 106 D1 flag", () => {
 describe("spec 106 D1 observe", () => {
 	beforeEach(() => vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe"));
 
-	it("spill: registered with an unknown hold, 0 raw bytes, nothing would be deleted", () => {
+	it("spill: registered awaiting its consumers (spec 118 D3), 0 raw bytes, nothing would be deleted", () => {
 		const spilled = spill();
 		const [record] = listEvidenceArtifacts();
-		expect(record).toMatchObject({ producer: "read-spill", holds: ["unknown"], status: "present", bytes: 260 });
+		expect(record).toMatchObject({
+			producer: "read-spill",
+			holds: ["awaiting-consumer"],
+			status: "present",
+			bytes: 260,
+		});
 		expect(record?.contentSha256).toMatch(/^[0-9a-f]{64}$/u);
-		expect(record?.requiredConsumers).toBeUndefined();
+		expect(record?.requiredConsumers).toEqual(["tool-result-commit", "turn-settled"]);
 		const report = evidenceLifecycleReport();
-		expect(report).toMatchObject({ registered: 1, present: 1, unknownHoldShare: 1, deletes: 0 });
+		expect(report).toMatchObject({ registered: 1, present: 1, unknownHoldShare: 0, deletes: 0 });
 		expect(report.wouldDelete.count).toBe(0);
 		expect(existsSync(spilled.path)).toBe(true);
 		expectNoRawBytes([spilled.path]);
@@ -140,12 +145,14 @@ describe("spec 106 D1 observe", () => {
 		const cwd = tempRoot("omk-d1-share-");
 		recall(cwd, "g");
 		observeRecallRecheck("g", true);
-		spill();
+		// `bash-spill` is the one unmapped producer left (spec 118 D3 decision 3).
+		const bashSpill = spillTruncatedOutput({ kind: "bash", preview: "p", full: SECRET, truncated: true, path: "/b" });
+		cleanup.push(dirname(bashSpill.path));
 		const report = evidenceLifecycleReport();
 		expect(report.present).toBe(2);
 		expect(report.unknownHoldShare).toBe(0.5);
 		expect(report.holdReasons).toEqual({ unknown: 1 });
-		expect(report.byProducer).toEqual({ "goal-recall": 1, "read-spill": 1 });
+		expect(report.byProducer).toEqual({ "goal-recall": 1, "bash-spill": 1 });
 		expect(report.unknownHoldShareByProducer).toEqual({
 			recall: { present: 1, unknown: 0, share: 0 },
 			spill: { present: 1, unknown: 1, share: 1 },
@@ -190,8 +197,8 @@ describe("spec 106 D1 observe", () => {
 		if (result.fullOutputPath) cleanup.push(result.fullOutputPath);
 		const records = listEvidenceArtifacts();
 		expect(records.map((r) => [r.artifactId, r.producer, r.holds])).toEqual([
-			["ev-1", "tool-output-log", ["unknown"]],
-			["ev-2", "bash-executor-log", ["unknown"]],
+			["ev-1", "tool-output-log", ["awaiting-consumer"]],
+			["ev-2", "bash-executor-log", ["user-visible"]],
 		]);
 		expect(records.every((r) => r.bytes > 0)).toBe(true);
 		expectNoRawBytes([snapshot.fullOutputPath ?? "", result.fullOutputPath ?? ""]);
