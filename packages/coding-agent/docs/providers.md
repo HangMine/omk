@@ -237,6 +237,11 @@ For project presets, Imagine guidance, and the exact `grok-4.6`, `grok-4.5`, and
 
 ## API Keys
 
+DeepSeek models use the existing provider transports and credentials. OMK's
+[DeepSeek harness](deepseek-harness.md) adds a model-scoped local engine, including
+recognized gateway model IDs, without installing the upstream `dsh` runtime or
+changing the API endpoint.
+
 ### Environment Variables or Auth File
 
 Use `/login` in interactive mode and select a provider to store an API key in `auth.json`, or set credentials via environment variable:

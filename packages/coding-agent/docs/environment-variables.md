@@ -71,7 +71,7 @@ When disabled, OMK removes inherited values for these variables so nested OMK pr
 
 ## OMK Process Configuration
 
-These variables are read by OMK itself. The four built-in harness flags below are enabled when unset. Any of `0`, `false`, `off`, `disable`, or `disabled` disables the corresponding built-in; matching is case-insensitive and ignores surrounding whitespace. `--no-extensions` does not disable these first-party built-ins.
+These variables are read by OMK itself. The default-on built-in harness flags below are enabled when unset. Any of `0`, `false`, `off`, `disable`, or `disabled` disables the corresponding built-in; matching is case-insensitive and ignores surrounding whitespace. `--no-extensions` does not disable these first-party built-ins.
 
 | Variable | Description |
 | --- | --- |
@@ -107,6 +107,7 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `OMK_IDENTICAL_LOOP` | Default-on consecutive-loop guard. Warns from the third identical `tool+args` call and blocks the sixth. Set a disabling value to opt out |
 | `OMK_TOOL_PAIR_REPAIR` | Default-on outbound-context repair. Removes unmatched tool-use and tool-result blocks before provider requests without rewriting the transcript. Set a disabling value to opt out |
 | `OMK_PROMPT_PRESET` | Default-on model-specific guidance for supported Claude/Anthropic, Kimi, GLM/ZAI, and Grok/xAI models. Set a disabling value to opt out |
+| `OMK_DEEPSEEK_HARNESS` | Default-on `deepseek_harness` engine for native DeepSeek and recognized DeepSeek model IDs on gateways. Adds scoped execution guidance and pressure-triggered outbound tool-result pruning, without changing history, credentials, or transport. Set a disabling value to opt out; independent from `OMK_PROMPT_PRESET`. See [DeepSeek harness](deepseek-harness.md) |
 | `OMK_CLAUDE_CONTEXT_FILES` | Claude models omit all discovered context documents by default to prevent unrelated context from causing provider false positives. Set to `1`, `true`, `on`, or `yes` to restore them |
 | `OMK_GOAL_CONTROLLER` | Default-on working-directory `/goal` command and automatic continuation. Goals created by `/goal` use an eight-round cap. Set a disabling value to opt out |
 | `OMK_FINISH_CHECK` | Finish discipline. By default, headless runs (`-p`, no UI) get scope, early-save, edge-case and environment rules in the system prompt, plus one automatic verification turn after a run that changed the workspace. `1`/`always` also enables it in interactive sessions; a disabling value turns it off |

@@ -156,6 +156,7 @@ Use `/goal <objective>` to create or update the durable goal for the current wor
 | Identical-loop guard | Warns from the third consecutive identical tool call and blocks the sixth | `OMK_IDENTICAL_LOOP=0` |
 | Tool-pair repair | Removes unmatched tool-use and tool-result blocks from outbound context | `OMK_TOOL_PAIR_REPAIR=0` |
 | Model prompt presets | Adds model-specific execution guidance for GPT-6 Astra and supported Claude, Kimi, GLM, and Grok models | `OMK_PROMPT_PRESET=0` |
+| DeepSeek engine | Adds DeepSeek-only guidance and prunes oversized successful tool results in outbound context at 80% context pressure; original history stays intact | `OMK_DEEPSEEK_HARNESS=0` |
 | Goal controller | Registers `/goal`, continues active goals within their round limit after each settled turn, and completes a goal when its approved acceptance check passes | `OMK_GOAL_CONTROLLER=0` |
 | Finish check | In headless runs, adds scope, early-save, edge-case and environment rules to the system prompt and one verification turn after a run that changed the workspace; with `OMK_TIME_BUDGET_SEC`, also tells the run to save outputs at 75% of the budget | `OMK_FINISH_CHECK=0` |
 | Deliverable guard (experimental) | Off by default. With `OMK_DELIVERABLE_GUARD=on`, headless runs keep the last valid copy of each output file the prompt names, are reminded at 40% of `OMK_TIME_BUDGET_SEC` when one is missing, and get a missing or broken file restored at 90% and when the run settles | Off unless set |
@@ -163,6 +164,15 @@ Use `/goal <objective>` to create or update the durable goal for the current wor
 These built-ins remain active with `--no-extensions`. A custom `ResourceLoader` owns its own extension set and does not receive them automatically.
 
 Claude models use a clean prompt context by default: OMK keeps tools, skills, and the Claude preset but omits all discovered context documents. This avoids provider false positives caused by unrelated instruction text. Set `OMK_CLAUDE_CONTEXT_FILES=1` to restore those files for Claude.
+
+### DeepSeek
+
+The default-on `deepseek_harness` engine follows the current selected model,
+including recognized DeepSeek IDs on gateways. It does not run `dsh`, change
+provider settings or permissions, or upload session logs. Its independent
+`OMK_DEEPSEEK_HARNESS=0` opt-out leaves other built-ins unchanged. See
+[DeepSeek harness](deepseek-harness.md) for the upstream assessment, exact model
+boundary, pruning limits, and verification scope.
 
 ### GPT-6 Astra
 
