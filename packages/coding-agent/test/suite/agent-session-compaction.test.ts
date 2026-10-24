@@ -722,13 +722,16 @@ describe("AgentSession compaction characterization", () => {
 		await expect(sessionInternals._runAutoCompaction("threshold", false)).resolves.toBe(true);
 	});
 
-	it("does not retry overflow recovery more than twice", async () => {
+	it.each([
+		"prompt is too long",
+		"Prompt input exceeds the safe model context window (estimated=658105, limit=656800).",
+	])("does not retry overflow recovery more than twice: %s", async (errorMessage) => {
 		const harness = await createHarness();
 		harnesses.push(harness);
 		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
 		const overflowMessage = createAssistant(harness, {
 			stopReason: "error",
-			errorMessage: "prompt is too long",
+			errorMessage,
 			timestamp: Date.now(),
 		});
 		const runAutoCompactionSpy = vi.spyOn(sessionInternals, "_runAutoCompaction").mockResolvedValue(false);

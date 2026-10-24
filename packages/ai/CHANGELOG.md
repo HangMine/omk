@@ -5,6 +5,7 @@
 ### Fixed
 
 - WorkBuddy refusals with a `{ code, msg, requestId }` body now preserve the provider's message, code and request ID instead of reporting `<status> status code (no body)`. Normalization is scoped to WorkBuddy; HTTP status, headers, successful streams, OpenAI-shaped errors and empty bodies retain their existing behavior.
+- Recognize OMK's local safe-context-window capacity rejection as context overflow, allowing session classification and bounded compaction recovery to share the provider-overflow path.
 
 ## [1.5.8] - 2026-10-24
 
