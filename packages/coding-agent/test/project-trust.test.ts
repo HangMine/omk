@@ -14,7 +14,7 @@ import {
 	utimesSync,
 	writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyCommandProjectTrustGate, applyProjectTrustGate } from "../src/cli/project-trust-gate.ts";
@@ -30,7 +30,7 @@ import {
 	TRUST_PROJECT_ENV,
 	workerProjectTrustEnv,
 } from "../src/core/project-trust.ts";
-import { forgetProjectTrustDecision } from "../src/core/project-trust-store.ts";
+import { forgetProjectTrustDecision, readStoredProjectTrust } from "../src/core/project-trust-store.ts";
 import { type Settings, SettingsManager } from "../src/core/settings-manager.ts";
 
 let root: string;
@@ -291,6 +291,56 @@ describe("decideProjectTrust", () => {
 		const store = JSON.parse(readFileSync(projectTrustStorePath(home), "utf8"));
 		expect(Object.keys(store.projects).sort()).toEqual([project, other].sort());
 		expect(() => statSync(lock)).toThrow();
+	});
+});
+
+describe("project trust store lock ownership", () => {
+	function ownedLock(pid: number, token = "owner-token"): { lock: string; owner: string } {
+		const lock = `${projectTrustStorePath(home)}.lock`;
+		const owner = join(lock, "owner.json");
+		mkdirSync(lock, { recursive: true });
+		writeFileSync(owner, JSON.stringify({ pid, host: os.hostname(), token }), { mode: 0o600 });
+		const old = new Date(Date.now() - 60_000);
+		utimesSync(lock, old, old);
+		return { lock, owner };
+	}
+
+	it("never reclaims a live owner's lock just because its mtime looks stale", () => {
+		const { lock } = ownedLock(process.pid);
+		const started = performance.now();
+		// The live owner holds the lock for the whole 2s wait, so this update must not steal it.
+		forgetProjectTrustDecision(project, home);
+		expect(performance.now() - started).toBeGreaterThanOrEqual(1800);
+		expect(statSync(lock).isDirectory()).toBe(true);
+	});
+
+	it.each([
+		["a malformed owner record", "{not-json"],
+		["an owner on another host", JSON.stringify({ pid: 0x7fffffff, host: "another-host", token: "remote-owner" })],
+	])("does not reclaim %s", (_name, contents) => {
+		const lock = `${projectTrustStorePath(home)}.lock`;
+		mkdirSync(lock, { recursive: true });
+		writeFileSync(join(lock, "owner.json"), contents, { mode: 0o600 });
+		const old = new Date(Date.now() - 60_000);
+		utimesSync(lock, old, old);
+		const started = performance.now();
+		forgetProjectTrustDecision(project, home);
+		expect(performance.now() - started).toBeGreaterThanOrEqual(1800);
+		expect(statSync(lock).isDirectory()).toBe(true);
+	});
+
+	it("reclaims a dead owner's lock, including a legacy lock without an owner record", () => {
+		const dead = ownedLock(0x7fffffff);
+		recordProjectTrustDecision(inspectProjectCode(project, { packages: ["npm:a"] })!, "trusted", home);
+		expect(() => statSync(dead.lock)).toThrow();
+		expect(readStoredProjectTrust(project, home)?.decision).toBe("trusted");
+
+		const legacy = `${projectTrustStorePath(home)}.lock`;
+		mkdirSync(legacy);
+		const old = new Date(Date.now() - 60_000);
+		utimesSync(legacy, old, old);
+		forgetProjectTrustDecision(project, home);
+		expect(() => statSync(legacy)).toThrow();
 	});
 });
 
