@@ -55,6 +55,7 @@ describe("Kimi K3.1 Pro on Kimi For Coding", () => {
 			baseUrl: "https://api.kimi.com/coding",
 			reasoning: true,
 			contextWindow: 1048576,
+			// From models.dev `limit.output`; not confirmed in the Kimi For Coding docs.
 			maxTokens: 131072,
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			compat: { supportsDisabledThinking: false, supportsTemperature: false },

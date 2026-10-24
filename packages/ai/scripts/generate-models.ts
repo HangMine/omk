@@ -125,6 +125,8 @@ const KIMI_CODING_MODELS_DEV_KEYS = ["kimi-code-plan-global", "kimi-code-plan-cn
  * https://www.kimi.com/code/docs/en/kimi-code/models.html
  * https://platform.kimi.ai/docs/guide/kimi-k3-1-pro-quickstart
  */
+// maxTokens for these ids (131072) comes from models.dev `limit.output`; the Kimi For Coding
+// docs do not state an output limit, so the value is unconfirmed upstream (kept per review).
 const KIMI_CODING_ALWAYS_THINKING_IDS = new Set(["k3.1-pro", "k3.1-pro-highspeed"]);
 const KIMI_CODING_ALWAYS_THINKING_COMPAT = { supportsDisabledThinking: false, supportsTemperature: false } as const;
 
