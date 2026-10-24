@@ -124,7 +124,7 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `OMK_SKILL_SEARCH_SUGGEST` | `0` turns off the automatic skill candidates of `OMK_SKILL_SEARCH` while keeping the `skill_search` tool. Subagent workers always get `0` |
 | `OMK_GROK_HARNESS` | Default-on native `xai` provider dispatch to the `grok-harness` loadout. `0`, `false`, `off`, or `no` disables it |
 | `OMK_DEVIN_HARNESS` | Default-on `devin` provider dispatch to the `devin-harness` loadout. `0`, `false`, `off`, or `no` disables it; independent from `OMK_GROK_HARNESS` |
-| `OMK_DOMAIN_ROUTING` | Set to `1` to enable general prompt-based domain routing. Native xAI and Devin harness dispatch do not require it |
+| `OMK_DOMAIN_ROUTING` | Default on: general prompt-based domain routing picks a tool loadout profile from the first prompt; `0`/`false`/`off` opts out. Native xAI and Devin harness dispatch do not require it |
 | `VISUAL`, `EDITOR` | External editor fallback when `externalEditor` is unset |
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
 | `OMK_RESOURCE_GOVERNOR` | Resource-governor mode: `off`, `observe` (default), `adaptive`, or `strict`. Feeds `/resource [probe\|policy]` and `omk doctor resources [--json]`; see the resource governor section in [Settings](settings.md) |
