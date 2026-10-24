@@ -118,6 +118,16 @@ const KIMI_STATIC_HEADERS = {
 /** models.dev keys that carry the Kimi For Coding plan catalog, newest naming first. */
 const KIMI_CODING_MODELS_DEV_KEYS = ["kimi-code-plan-global", "kimi-code-plan-cn", "kimi-for-coding"] as const;
 
+/**
+ * Kimi For Coding models whose thinking cannot be turned off and whose sampling is fixed.
+ * K3.1 Pro rejects a thinking-disabled request and fixes `temperature`/`top_p`, so the
+ * Messages payload must omit `thinking: { type: "disabled" }` and `temperature`.
+ * https://www.kimi.com/code/docs/en/kimi-code/models.html
+ * https://platform.kimi.ai/docs/guide/kimi-k3-1-pro-quickstart
+ */
+const KIMI_CODING_ALWAYS_THINKING_IDS = new Set(["k3.1-pro", "k3.1-pro-highspeed"]);
+const KIMI_CODING_ALWAYS_THINKING_COMPAT = { supportsDisabledThinking: false, supportsTemperature: false } as const;
+
 const KIMI_CODING_THINKING_LEVEL_MAP = {
 	off: null,
 	minimal: null,
@@ -1613,6 +1623,9 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					// Kimi For Coding's Anthropic-compatible API - SDK appends /v1/messages
 					baseUrl: "https://api.kimi.com/coding",
 					headers: { ...KIMI_STATIC_HEADERS },
+					...(KIMI_CODING_ALWAYS_THINKING_IDS.has(normalizedId)
+						? { compat: { ...KIMI_CODING_ALWAYS_THINKING_COMPAT } }
+						: {}),
 					reasoning: m.reasoning === true,
 					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
 					cost: {
