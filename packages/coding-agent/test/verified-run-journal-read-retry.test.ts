@@ -173,8 +173,8 @@ describe("live journal readers under a concurrent writer (spec 056)", () => {
 	function hammer(read: () => unknown, ms = 1500): { reads: number; failures: string[] } {
 		const failures: string[] = [];
 		let reads = 0;
-		const deadline = Date.now() + ms;
-		while (Date.now() < deadline) {
+		const deadline = performance.now() + ms;
+		while (performance.now() < deadline) {
 			reads += 1;
 			try {
 				read();
