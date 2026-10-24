@@ -1,5 +1,6 @@
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
@@ -298,6 +299,17 @@ describe("spec 118 D2 path safety (G5)", () => {
 		observeRecallRecheck("g", true);
 		expect(readFileSync(target, "utf8")).toBe("keep");
 		expect(recordOf(1)?.deleteReason).toBe("symlink");
+	});
+
+	it("recall dir symlinked outside the workspace ⇒ 0 deletes; outside file untouched", () => {
+		const cwd = tempCwd();
+		const outside = tempCwd();
+		mkdirSync(join(cwd, ".omk", "goals"), { recursive: true });
+		symlinkSync(outside, join(cwd, ".omk", "goals", "recall"));
+		recall(cwd, "g");
+		observeRecallRecheck("g", true);
+		expect(readdirSync(outside).filter((n) => n.endsWith(".log"))).toHaveLength(1);
+		expect(recordOf(1)?.deleteReason).toBe("outside");
 	});
 
 	it("another session's artifact id is not found from this session", () => {

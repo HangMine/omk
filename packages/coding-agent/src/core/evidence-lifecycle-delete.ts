@@ -65,6 +65,12 @@ function verifyPath(record: MutableRecord): string | undefined {
 	const path = record.path as string;
 	const dir = dirname(resolve(path));
 	if (!dir.endsWith(`${sep}.omk${sep}goals${sep}recall`) || !RECALL_NAME.test(basename(path))) return "outside";
+	// `.omk`, `goals` and `recall` must be real directories: a symlinked one could point outside the workspace.
+	try {
+		for (const d of [dir, dirname(dir), dirname(dirname(dir))]) if (lstatSync(d).isSymbolicLink()) return "outside";
+	} catch {
+		return "missing";
+	}
 	try {
 		const stat = lstatSync(path);
 		if (stat.isSymbolicLink()) return "symlink";
