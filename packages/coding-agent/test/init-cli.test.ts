@@ -9,6 +9,16 @@ const packageDir = fileURLToPath(new URL("..", import.meta.url));
 const cliPath = join(packageDir, "src", "cli.ts");
 const sourceRunner = fileURLToPath(new URL("../../../node_modules/tsx/dist/cli.mjs", import.meta.url));
 const sourceConfig = fileURLToPath(new URL("../../../tsconfig.json", import.meta.url));
+const projectDocuments = [
+	"AGENTS.md",
+	"CLAUDE.md",
+	"PRD.md",
+	"ARCHITECTURE.md",
+	"DESIGN.md",
+	"RULES.md",
+	"TASKS.md",
+	"PROGRESS.md",
+];
 let root: string;
 let agentDir: string;
 let workspace: string;
@@ -83,15 +93,52 @@ describe("omk init --global", () => {
 		expect(readFileSync(join(agentDir, "settings.json"), "utf8")).toBe('{"theme":"light"}\n');
 	});
 
-	it.each([{ args: [] }, { args: ["--force"] }, { args: ["--global", "--unknown"] }])(
-		"rejects unscoped or unknown arguments $args",
-		({ args }) => {
-			// Given unsupported arguments, when invoking setup.
-			const result = runInit(args);
-			// Then usage is reported without starting a model session or writing files.
-			expect(result.status).toBe(2);
-			expect(`${result.stdout}${result.stderr}`).toContain("Usage: omk init --global");
-			expect(existsSync(agentDir)).toBe(false);
-		},
-	);
+	it.each([
+		{ args: [] },
+		{ args: ["--force"] },
+		{ args: ["--global", "--unknown"] },
+		{ args: ["--global", "--project"] },
+	])("rejects unscoped or unknown arguments $args", ({ args }) => {
+		// Given unsupported arguments, when invoking setup.
+		const result = runInit(args);
+		// Then usage is reported without starting a model session or writing files.
+		expect(result.status).toBe(2);
+		expect(`${result.stdout}${result.stderr}`).toContain("Usage: omk init --global");
+		expect(existsSync(agentDir)).toBe(false);
+	});
+});
+
+describe("omk init --project", () => {
+	it("previews project documents without writing into an empty repository", () => {
+		const result = runInit(["--project", "--dry-run"]);
+		expect(result.error).toBeUndefined();
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
+		expect(result.stdout).toContain("PRD.md");
+		expect(result.stdout).toContain("PROGRESS.md");
+		expect(readdirSync(workspace)).toEqual([]);
+		expect(existsSync(agentDir)).toBe(false);
+	});
+
+	it("creates the standard document set and preserves existing project content", () => {
+		writeFileSync(join(workspace, "PRD.md"), "# Existing product requirements\n");
+		const result = runInit(["--project"]);
+		expect(result.error).toBeUndefined();
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
+		expect(readdirSync(workspace).sort()).toEqual([...projectDocuments].sort());
+		expect(existsSync(agentDir)).toBe(false);
+		for (const name of projectDocuments) {
+			if (name === "PRD.md") continue;
+			expect(readFileSync(join(workspace, name), "utf8")).toBe(
+				readFileSync(join(packageDir, "examples", "project-context", name), "utf8"),
+			);
+		}
+		expect(readFileSync(join(workspace, "PRD.md"), "utf8")).toBe("# Existing product requirements\n");
+
+		const repeated = runInit(["--project"]);
+		expect(repeated.status).toBe(0);
+		expect(readdirSync(workspace).sort()).toEqual([...projectDocuments].sort());
+		expect(readFileSync(join(workspace, "PRD.md"), "utf8")).toBe("# Existing product requirements\n");
+	});
 });

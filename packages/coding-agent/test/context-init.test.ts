@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
 	mkdirSync,
@@ -13,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runInitCli } from "../src/commands/init-cli.ts";
+import { bootstrapEmptyProjectContext, runInitCli } from "../src/commands/init-cli.ts";
 import { loadProjectContextFiles } from "../src/core/resource-loader.ts";
 
 const templatesDir = fileURLToPath(new URL("../examples/context", import.meta.url));
@@ -199,6 +200,118 @@ describe("user context initialization", () => {
 		// Then INTERNET stays on-demand and CLAUDE does not duplicate the global instructions.
 		expect(files.filter((file) => file.isGlobal).map((file) => file.path)).toEqual([join(agentDir, "AGENTS.md")]);
 		expect(files.at(-1)?.path).toBe(join(workspace, "AGENTS.md"));
+	});
+
+	it("loads standard project documents from the repository root without duplicating compatibility files", () => {
+		// Given a repository with product and agent documents at its root.
+		const workspace = join(root, "project");
+		const nested = join(workspace, "src", "feature");
+		mkdirSync(nested, { recursive: true });
+		writeFileSync(join(workspace, "AGENTS.md"), "# Project instructions\n");
+		writeFileSync(join(workspace, "CLAUDE.md"), "@AGENTS.md\n");
+		writeFileSync(join(workspace, "INTERNET.md"), "# On-demand network policy\n");
+		writeFileSync(join(workspace, "README.md"), "# Not an instruction document\n");
+		for (const name of ["PRD.md", "ARCHITECTURE.md", "DESIGN.md", "RULES.md", "TASKS.md", "PROGRESS.md"]) {
+			writeFileSync(join(workspace, name), `# ${name}\n`);
+		}
+		// When loading context from a nested working directory.
+		const files = loadProjectContextFiles({ cwd: nested, agentDir });
+		// Then the canonical project documents load once, while compatibility and on-demand files stay out.
+		expect(files.map((file) => file.path)).toEqual(
+			["AGENTS.md", "PRD.md", "ARCHITECTURE.md", "DESIGN.md", "RULES.md", "TASKS.md", "PROGRESS.md"].map((name) =>
+				join(workspace, name),
+			),
+		);
+	});
+
+	it("bootstraps a bare interactive launch only in an empty Git repository", () => {
+		const projectTemplates = fileURLToPath(new URL("../examples/project-context", import.meta.url));
+		const workspace = join(root, "empty-repo");
+		mkdirSync(workspace);
+		const initialized = spawnSync("git", ["init", "--quiet", workspace], { encoding: "utf8" });
+		expect(initialized.status).toBe(0);
+
+		const outcome = bootstrapEmptyProjectContext([], {
+			cwd: workspace,
+			templatesDir: projectTemplates,
+			env: {},
+			writeLine: (line) => lines.push(line),
+		});
+		expect(outcome).toEqual({ ran: true, exitCode: 0 });
+		expect(readdirSync(workspace).sort()).toEqual(
+			[
+				".git",
+				"AGENTS.md",
+				"ARCHITECTURE.md",
+				"CLAUDE.md",
+				"DESIGN.md",
+				"PRD.md",
+				"PROGRESS.md",
+				"RULES.md",
+				"TASKS.md",
+			].sort(),
+		);
+	});
+
+	it("honors the launcher's bare-interactive marker after lean arguments are injected", () => {
+		const projectTemplates = fileURLToPath(new URL("../examples/project-context", import.meta.url));
+		const workspace = join(root, "marked-empty-repo");
+		mkdirSync(workspace);
+		expect(spawnSync("git", ["init", "--quiet", workspace]).status).toBe(0);
+		const outcome = bootstrapEmptyProjectContext(["-ne"], {
+			cwd: workspace,
+			templatesDir: projectTemplates,
+			env: { OMK_BARE_INTERACTIVE: "1" },
+			writeLine: (line) => lines.push(line),
+		});
+		expect(outcome).toEqual({ ran: true, exitCode: 0 });
+		expect(readdirSync(workspace)).toContain("PRD.md");
+	});
+
+	it("does not bootstrap non-empty repositories, non-Git directories, or opted-out launches", () => {
+		const projectTemplates = fileURLToPath(new URL("../examples/project-context", import.meta.url));
+		const workspace = join(root, "project");
+		mkdirSync(workspace);
+		writeFileSync(join(workspace, "README.md"), "# Existing project\n");
+		const cases = [
+			{ cwd: workspace, args: [] as string[], env: {} },
+			{ cwd: root, args: [] as string[], env: {} },
+			{ cwd: workspace, args: ["--print"], env: {} },
+			{ cwd: workspace, args: [] as string[], env: { OMK_PROJECT_CONTEXT_BOOTSTRAP: "0" } },
+		];
+		for (const testCase of cases) {
+			expect(
+				bootstrapEmptyProjectContext(testCase.args, {
+					cwd: testCase.cwd,
+					templatesDir: projectTemplates,
+					env: testCase.env,
+					writeLine: (line) => lines.push(line),
+				}),
+			).toEqual({ ran: false, exitCode: 0 });
+		}
+		expect(readdirSync(workspace)).toEqual(["README.md"]);
+	});
+
+	it("ships a portable project template set", () => {
+		const projectTemplates = fileURLToPath(new URL("../examples/project-context", import.meta.url));
+		const names = readdirSync(projectTemplates).sort();
+		expect(names).toEqual(
+			[
+				"AGENTS.md",
+				"ARCHITECTURE.md",
+				"CLAUDE.md",
+				"DESIGN.md",
+				"PRD.md",
+				"PROGRESS.md",
+				"RULES.md",
+				"TASKS.md",
+			].sort(),
+		);
+		for (const name of names) {
+			const text = readFileSync(join(projectTemplates, name), "utf8");
+			expect(text).not.toMatch(/\/(?:home|Users)\/[^/\s]+|[A-Z]:\\Users\\/);
+			expect(text.length).toBeLessThan(6000);
+		}
 	});
 
 	it("ships a portable template set with no machine-specific absolute paths", () => {

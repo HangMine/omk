@@ -172,9 +172,9 @@ See [Compaction](https://github.com/dmae97/omk/blob/main/packages/coding-agent/d
 
 Run `omk init --global --dry-run` to preview portable user instructions, then
 `omk init --global` to create missing files without overwriting existing context or
-settings. See [User context setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/context-files.md).
+settings. Use `omk init --project` for the repository document set. See [User context setup](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/context-files.md).
 
-OMK discovers project instructions such as `AGENTS.md` from the current directory and parent directories. Use `--no-context-files` when a clean session must not load project context.
+OMK discovers project instructions such as `AGENTS.md` from the current directory and parent directories. It also loads `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md`, and `PROGRESS.md`. Use `--no-context-files` when a clean session must not load project context.
 
 ### Prompt Caching
 

@@ -78,6 +78,7 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `OMK_CODING_AGENT_DIR` | Override the config directory; default is `~/.omk/agent` |
 | `OMK_CODING_AGENT_SESSION_DIR` | Override session storage; overridden by `--session-dir` |
 | `OMK_PACKAGE_DIR` | Override the package directory, useful for Nix/Guix store paths |
+| `OMK_PROJECT_CONTEXT_BOOTSTRAP` | Default on for a bare `omk` launch in an otherwise empty Git repository root: create the standard project context documents without overwriting files. `0`, `false`, or `off` disables the bootstrap. Commands with arguments and non-empty or non-Git directories never auto-bootstrap; `omk init --project` covers explicit setup |
 | `OMK_OFFLINE` | Disable startup network operations, including update checks and install/update telemetry |
 | `OMK_SKIP_VERSION_CHECK` | Disable the latest-version request |
 | `OMK_TRUST_PROJECT` | Project trust gate for a cloned project's code ([Project trust](packages.md#project-trust)). `1` trusts the project OMK started in, only for non-interactive runs (`-p`, `--mode json`, `--mode rpc`, workers, CI, `omk install`/`update`/`list`/`config`, `omk package doctor`), and prints one stderr line naming it. It is read once at startup and removed from OMK's environment, so the `bash` tool and other child processes do not inherit it. Interactive `omk` ignores `1` and asks. `0` keeps project code off in every mode, over a stored answer, and is inherited. Any other value is ignored |
@@ -106,7 +107,7 @@ These variables are read by OMK itself. The four built-in harness flags below ar
 | `OMK_IDENTICAL_LOOP` | Default-on consecutive-loop guard. Warns from the third identical `tool+args` call and blocks the sixth. Set a disabling value to opt out |
 | `OMK_TOOL_PAIR_REPAIR` | Default-on outbound-context repair. Removes unmatched tool-use and tool-result blocks before provider requests without rewriting the transcript. Set a disabling value to opt out |
 | `OMK_PROMPT_PRESET` | Default-on model-specific guidance for supported Claude/Anthropic, Kimi, GLM/ZAI, and Grok/xAI models. Set a disabling value to opt out |
-| `OMK_CLAUDE_CONTEXT_FILES` | Claude models omit discovered `AGENTS.md` and `CLAUDE.md` files by default to prevent unrelated context from causing provider false positives. Set to `1`, `true`, `on`, or `yes` to restore them |
+| `OMK_CLAUDE_CONTEXT_FILES` | Claude models omit all discovered context documents by default to prevent unrelated context from causing provider false positives. Set to `1`, `true`, `on`, or `yes` to restore them |
 | `OMK_GOAL_CONTROLLER` | Default-on working-directory `/goal` command and automatic continuation. Goals created by `/goal` use an eight-round cap. Set a disabling value to opt out |
 | `OMK_FINISH_CHECK` | Finish discipline. By default, headless runs (`-p`, no UI) get scope, early-save, edge-case and environment rules in the system prompt, plus one automatic verification turn after a run that changed the workspace. `1`/`always` also enables it in interactive sessions; a disabling value turns it off |
 | `OMK_TIME_BUDGET_SEC` | Wall-clock seconds the caller allows for the run, for example a benchmark task timeout. When set, the finish discipline tells the run to save outputs at 75% of the budget and skips the verification turn past 90% |

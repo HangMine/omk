@@ -162,7 +162,7 @@ Use `/goal <objective>` to create or update the durable goal for the current wor
 
 These built-ins remain active with `--no-extensions`. A custom `ResourceLoader` owns its own extension set and does not receive them automatically.
 
-Claude models use a clean prompt context by default: OMK keeps tools, skills, and the Claude preset but omits discovered `AGENTS.md` and `CLAUDE.md` files. This avoids provider false positives caused by unrelated instruction text. Set `OMK_CLAUDE_CONTEXT_FILES=1` to restore those files for Claude.
+Claude models use a clean prompt context by default: OMK keeps tools, skills, and the Claude preset but omits all discovered context documents. This avoids provider false positives caused by unrelated instruction text. Set `OMK_CLAUDE_CONTEXT_FILES=1` to restore those files for Claude.
 
 ### GPT-6 Astra
 
@@ -300,7 +300,9 @@ OMK loads `AGENTS.md` or `CLAUDE.md` at startup from:
 - parent directories, walking up from the current working directory
 - the current directory
 
-Use context files for project conventions, commands, safety rules, and preferences. Disable loading with `--no-context-files` or `-nc`.
+During the same project-directory walk, it loads `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md`, and `PROGRESS.md` once each. Use `omk init --project` to create missing project documents without overwriting existing files. A bare `omk` launch also creates them in an otherwise empty Git repository root; `OMK_PROJECT_CONTEXT_BOOTSTRAP=0` disables that bootstrap. See [User context setup](context-files.md) for the exact scope and preservation rules.
+
+Use context files for project conventions, commands, safety rules, and preferences. Disable all context document loading with `--no-context-files` or `-nc`.
 
 The core prompt builder places a fixed runtime trust boundary before loaded context and skill metadata. Global context can constrain project context, but loaded resources cannot expand user authorization or override active runtime/security controls. Context paths and text are XML-escaped before prompt assembly so resource content cannot break out of its structural envelope. This is defense in depth, not a code sandbox: extensions are executable trusted code and can explicitly rewrite the system prompt or final provider payload.
 
@@ -455,7 +457,7 @@ A long text `read` returns a bounded window and continuation marker. Truncation 
 | `--no-prompt-templates` | Disable prompt template discovery |
 | `--theme <path>` | Load a theme; repeatable |
 | `--no-themes` | Disable theme discovery |
-| `--no-context-files`, `-nc` | Disable `AGENTS.md` and `CLAUDE.md` discovery |
+| `--no-context-files`, `-nc` | Disable context document discovery and loading |
 
 Combine `--no-*` with explicit flags to load exactly what you need, ignoring settings. Example:
 
