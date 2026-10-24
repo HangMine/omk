@@ -30,7 +30,7 @@ omk sdk session send <id> "<message>" [--cwd <path>] [--session-dir <path>]
 ### Opt-in live control and project memory
 
 The transcript-only commands above are unchanged. Enroll an owned persisted POSIX
-session with `await session.startControl()` (CLI: `OMK_SESSION_CONTROL=1`), then use
+session with `await session.startControl()` (CLI: on by default; `OMK_SESSION_CONTROL=0` opts out), then use
 `sdk session send <id> "text" --live`, `status <id> --live`, or `abort <id> --live`.
 Live failures never fall back to transcript writes. See [Local live session
 control](sessions.md#local-live-session-control) for permissions, limits and cancellation semantics.
