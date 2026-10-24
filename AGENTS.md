@@ -135,6 +135,16 @@ Still required in this mode:
 - Public text makes no ranking claims. Benchmark numbers are described only as
   "self-measured under TB 4.0 rules".
 
+## Opt-in goal autonomy
+
+`OMK_GOAL_AUTONOMY=1` (flag, default off, spec 119) lets an active `/goal` stop itself with
+`budget-limit`, `deadline`, `outcome-unknown`, or `scope-changed`. The budget is set only by
+the user via `/goal budget <usd|-> [<deadline ISO>|-]` (or `/goal budget clear`) and counts
+subagent lane cost; an unknown remaining budget stops with `budget-limit`. User steering
+pauses the goal and only `/goal resume` restarts it. Stop reasons are custom entries; the
+`omk.goal.v1` schema is unchanged. With the flag off, session output is byte-identical to
+main (G0). No A/B result exists yet, so make no performance claims.
+
 ## Git and safety
 
 - Multiple sessions may share this working tree. Stage only files you changed, by explicit
