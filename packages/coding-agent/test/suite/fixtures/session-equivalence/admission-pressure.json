@@ -2729,7 +2729,8 @@
 								"text"
 							],
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					}
 				]
 			},
@@ -2857,7 +2858,8 @@
 								"text"
 							],
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					}
 				]
 			},

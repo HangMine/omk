@@ -788,7 +788,8 @@
 								"path"
 							],
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					},
 					{
 						"description": "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds. OMK_RTK_OUTPUT=1 enables bounded RTK filtering for recognized successful Vitest/TypeScript checks, with raw output retained.",
@@ -810,7 +811,8 @@
 								"command"
 							],
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					},
 					{
 						"description": "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.",
@@ -853,7 +855,8 @@
 							],
 							"type": "object"
 						},
-						"prepareArguments": "<fn>"
+						"prepareArguments": "<fn>",
+						"resolveCallTimeoutMs": "<fn>"
 					},
 					{
 						"description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
@@ -876,7 +879,8 @@
 								"content"
 							],
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					},
 					{
 						"description": "Run the project's own type/lint checkers (tsc, pyright/ruff, go vet, cargo check) and return normalized diagnostics. Missing checkers or missing project markers are reported as skipped, never as tool errors.",
@@ -920,7 +924,8 @@
 								}
 							},
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					}
 				]
 			},
@@ -1004,7 +1009,8 @@
 								"path"
 							],
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					},
 					{
 						"description": "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds. OMK_RTK_OUTPUT=1 enables bounded RTK filtering for recognized successful Vitest/TypeScript checks, with raw output retained.",
@@ -1026,7 +1032,8 @@
 								"command"
 							],
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					},
 					{
 						"description": "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.",
@@ -1069,7 +1076,8 @@
 							],
 							"type": "object"
 						},
-						"prepareArguments": "<fn>"
+						"prepareArguments": "<fn>",
+						"resolveCallTimeoutMs": "<fn>"
 					},
 					{
 						"description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
@@ -1092,7 +1100,8 @@
 								"content"
 							],
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					},
 					{
 						"description": "Run the project's own type/lint checkers (tsc, pyright/ruff, go vet, cargo check) and return normalized diagnostics. Missing checkers or missing project markers are reported as skipped, never as tool errors.",
@@ -1136,7 +1145,8 @@
 								}
 							},
 							"type": "object"
-						}
+						},
+						"resolveCallTimeoutMs": "<fn>"
 					}
 				]
 			},
