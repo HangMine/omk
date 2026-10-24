@@ -71,7 +71,7 @@ afterEach(() => {
 
 describe("lane failure isolation — flag off (legacy)", () => {
 	it("A fails ⇒ B and D both blocked (unchanged behavior)", async () => {
-		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "0");
 		const { status, complete } = await run(twoBranches, new Set(["A"]));
 		expect(status).toEqual({ A: "failed", B: "blocked-dependency", C: "completed", D: "blocked-dependency" });
 		expect(complete).toBe(false);
@@ -170,5 +170,13 @@ describe("lane failure isolation — flag on", () => {
 		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "1");
 		const { complete } = await run(twoBranches, new Set());
 		expect(complete).toBe(true);
+	});
+});
+
+describe("OMK_LANE_FAILURE_SCOPE default", () => {
+	it("is on when unset; 0/false/off opt out", async () => {
+		const { laneFailureScopeEnabled } = await import("../src/core/subagent-lane-failure-scope.ts");
+		expect(laneFailureScopeEnabled({})).toBe(true);
+		for (const v of ["0", "false", "OFF"]) expect(laneFailureScopeEnabled({ OMK_LANE_FAILURE_SCOPE: v })).toBe(false);
 	});
 });

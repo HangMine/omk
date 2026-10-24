@@ -1,10 +1,11 @@
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import type { LaneOutcome } from "./subagent-lane-contract.ts";
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 
 /**
  * Spec 106 C1 — settled-failure scope for subagent lanes.
  *
- * Default off (`OMK_LANE_FAILURE_SCOPE=1` enables). Off ⇒ the legacy rule:
+ * Default on (`OMK_LANE_FAILURE_SCOPE=0`/`false`/`off` opts out). Off ⇒ the legacy rule:
  * any non-completed outcome blocks every later batch.
  *
  * On ⇒ a settled `failed` outcome of a non-writing, parallelizable lane blocks
@@ -19,7 +20,7 @@ import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
  * workspace changes, so "no edge" is not proof of independence.
  */
 export function laneFailureScopeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	return env.OMK_LANE_FAILURE_SCOPE === "1";
+	return isDefaultOnEnvFlag(env.OMK_LANE_FAILURE_SCOPE);
 }
 
 /** Tools that can mutate the workspace; a lane granted any of them is a writer. */

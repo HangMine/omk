@@ -215,7 +215,7 @@ describe("DG2 ready frontier", () => {
 
 	it("frontier on, failure scope off: a failure stops new starts (legacy global block)", async () => {
 		vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
-		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "0");
 		const run = controlled(twoBranches);
 		await run.finish("A", "failed");
 		await run.finish("C");
@@ -521,7 +521,7 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 		try {
 			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
 			vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
-			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "0");
 			const global = controlled(twoBranches);
 			await global.finish("A", "failed");
 			await global.finish("C");
@@ -649,7 +649,7 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 		try {
 			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
 			vi.stubEnv("OMK_LANE_READY_QUEUE", "0");
-			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "0");
 			const failed = controlled(twoBranches);
 			await failed.finish("A", "failed");
 			await failed.finish("C");
