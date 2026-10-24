@@ -61,8 +61,8 @@ export interface ToolLateSettlement {
 
 /**
  * Resolve the effective per-call timeout with strict precedence:
- * per-tool `AgentTool.timeoutMs` > per-name `config.toolTimeouts[name]` >
- * global `config.toolTimeoutMs`.
+ * per-tool `AgentTool.timeoutMs` > `AgentTool.resolveCallTimeoutMs(args)` >
+ * per-name `config.toolTimeouts[name]` > global `config.toolTimeoutMs`.
  *
  * The first level that is *present* (not `undefined`) wins, so a per-tool `0`
  * deliberately disables the timeout even when a global default is set. A
@@ -71,18 +71,13 @@ export interface ToolLateSettlement {
  * uncooperative tool cannot keep an aborted run open.
  */
 export function resolveToolTimeoutMs(
-	tool: Pick<AgentTool<any>, "timeoutMs">,
+	tool: Pick<AgentTool<any>, "timeoutMs" | "resolveCallTimeoutMs">,
 	config: Pick<AgentLoopConfig, "toolTimeoutMs" | "toolTimeouts">,
 	toolName: string,
+	args?: unknown,
 ): number {
-	let chosen: number | undefined;
-	if (tool.timeoutMs !== undefined) {
-		chosen = tool.timeoutMs;
-	} else if (config.toolTimeouts?.[toolName] !== undefined) {
-		chosen = config.toolTimeouts[toolName];
-	} else {
-		chosen = config.toolTimeoutMs;
-	}
+	const chosen =
+		tool.timeoutMs ?? tool.resolveCallTimeoutMs?.(args) ?? config.toolTimeouts?.[toolName] ?? config.toolTimeoutMs;
 	if (typeof chosen !== "number" || !Number.isFinite(chosen) || chosen <= 0) {
 		return 0;
 	}
