@@ -222,8 +222,14 @@ describe("spec 071 flag off: the guard only observes", () => {
 		async (name, flag) => {
 			const requestFile = path.join(cwd, `request-${name}.jsonl`);
 			await fs.promises.rm(requestFile, { force: true });
-			await runTasks(["normal:0"], flag, { OMK_FAKE_REQUEST_FILE: requestFile });
-			const recorded = normalizeRequest((await fs.promises.readFile(requestFile, "utf8")).trim());
+			// main 1ff132d200 predates spec 106 skill admission (default on since #279), which adds `--no-skills` to
+			// worker argv; pin it off so this compares only OMK_SUBAGENT_RUNTIME against main. The pin itself is
+			// inherited into the recorded worker env, so drop exactly that one injected entry before comparing.
+			await runTasks(["normal:0"], flag, { OMK_FAKE_REQUEST_FILE: requestFile, OMK_SKILL_ADMISSION: "0" });
+			const recorded = normalizeRequest((await fs.promises.readFile(requestFile, "utf8")).trim()).replace(
+				'"OMK_SKILL_ADMISSION":"0",',
+				"",
+			);
 			const golden = JSON.parse(
 				fs.readFileSync(path.join(import.meta.dirname, "fixtures", "first-request.main-1ff132d200.json"), "utf8"),
 			) as Record<string, string>;
