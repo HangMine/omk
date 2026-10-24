@@ -250,7 +250,9 @@ describe("spec 071 flag off: the guard only observes", () => {
 			const golden = readGolden()[name];
 			for (const key of PR279_DEFAULT_ON_FLAGS) {
 				const entry = `"${key}":"0",`;
-				if (!golden.includes(entry)) recorded = recorded.replace(entry, "");
+				if (golden.includes(entry)) continue;
+				expect(recorded.split(entry).length - 1).toBe(1);
+				recorded = recorded.replace(entry, "");
 			}
 			expect(recorded).toBe(golden);
 		},
