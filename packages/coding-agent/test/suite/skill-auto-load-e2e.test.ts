@@ -91,9 +91,9 @@ describe("spec 117 e2e", () => {
 	];
 
 	it.each([
-		["unset", {}],
-		["admission only", { OMK_SKILL_ADMISSION: "1" }],
-		["auto-load without admission", { OMK_SKILL_AUTO_LOAD: "1" }],
+		["explicit 0", { OMK_SKILL_AUTO_LOAD: "0" }],
+		["admission only", { OMK_SKILL_AUTO_LOAD: "0", OMK_SKILL_ADMISSION: "1" }],
+		["auto-load without admission", { OMK_SKILL_AUTO_LOAD: "1", OMK_SKILL_ADMISSION: "0" }],
 	])(
 		"flag off (%s, run log on): first request bytes identical to the feature-absent path",
 		async (_name, env) => {
@@ -127,13 +127,22 @@ describe("spec 117 e2e", () => {
 		expect(on.input).toBeGreaterThan(absent.input);
 	}, 60_000);
 
+	it("default on (env unset): the same request delivers the body", async () => {
+		const root = tmp();
+		const skills = fixtureSkills(root);
+		vi.stubEnv("OMK_SKILL_AUTO_LOAD", undefined);
+		vi.stubEnv("OMK_SKILL_ADMISSION", undefined);
+		const on = await firstRequest(await harnessWith(skills, root), false);
+		expect(on.bytes).toContain("PDF-BODY");
+	}, 60_000);
+
 	it("flag off (admission off): prompt and read lines are both written for G1", async () => {
 		const root = tmp();
 		const log = tmp();
 		const skills = [writeSkill(root, "pdf-extract", "extract text from pdf invoice files", "PDF-BODY")];
 		vi.stubEnv("OMK_RUN_LOG_DIR", log);
-		vi.stubEnv("OMK_SKILL_AUTO_LOAD", "");
-		vi.stubEnv("OMK_SKILL_ADMISSION", "");
+		vi.stubEnv("OMK_SKILL_AUTO_LOAD", "0");
+		vi.stubEnv("OMK_SKILL_ADMISSION", "0");
 		const harness = await harnessWith(skills, root);
 		harness.setResponses([
 			fauxAssistantMessage([fauxToolCall("read", { path: skills[0]?.filePath })], { stopReason: "toolUse" }),
@@ -194,16 +203,12 @@ describe("spec 117 e2e", () => {
 		}
 	});
 
-	// Gap closed after #262 CI: the tests above only compare the lead session's in-process request, but a worker's
-	// first request is its spawn argv + system prompt + OMK_* env (subagent-loop-guard golden). Setting
-	// OMK_SKILL_AUTO_LOAD=0 in the worker env added one env key there. Flag off must add no worker env key at all.
-	it("flag off: worker env has exactly the pre-117 keys (no OMK_SKILL_AUTO_LOAD added)", () => {
+	// Auto-load is default on, so the worker env always carries OMK_SKILL_AUTO_LOAD=0 (AL7), whatever the parent has.
+	it("worker env always opts out of auto-load, independent of the parent value", () => {
 		const parent = { OMK_TRUST_PROJECT: "0", OMK_SKILL_ADMISSION: "1", PATH: "/bin" };
-		const env = subagentWorkerEnv(parent, "0");
-		expect(Object.keys(env).filter((k) => k.includes("AUTO_LOAD"))).toEqual([]);
-		const pre117 = { ...env };
-		expect(JSON.stringify(subagentWorkerEnv({ ...parent, OMK_SKILL_AUTO_LOAD: "1" }, "0"))).toBe(
-			JSON.stringify(pre117),
-		);
+		for (const v of [undefined, "0", "1"]) {
+			const env = subagentWorkerEnv(v === undefined ? parent : { ...parent, OMK_SKILL_AUTO_LOAD: v }, "0");
+			expect(env.OMK_SKILL_AUTO_LOAD).toBe("0");
+		}
 	});
 });

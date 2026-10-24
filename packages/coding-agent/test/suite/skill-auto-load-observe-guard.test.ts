@@ -63,7 +63,7 @@ const store = () => ({
 describe("spec 117 observe-only guard", () => {
 	it("selector throws with the flag off: no error, undefined, prompt unchanged", async () => {
 		const { skills, log } = fixture();
-		const env = { OMK_RUN_LOG_DIR: log };
+		const env = { OMK_RUN_LOG_DIR: log, OMK_SKILL_AUTO_LOAD: "0" };
 		selector.throws = true;
 		expect(() =>
 			autoLoadSkills({ store: store(), skills, query: "extract text from the pdf invoice files", env }),
