@@ -11,6 +11,9 @@ const o = run("outcome_unknown_count.mjs", [f("sessA.jsonl"), f("sessB.jsonl")])
 assert.equal(o.total.calls, 8); assert.equal(o.total.timeout, 2); assert.equal(o.total.aborted, 3);
 assert.equal(o.total.envelope, 2); assert.equal(o.total.toolText, 3); assert.equal(o.tasksWithOutcomeUnknown, 2);
 assert.deepEqual(o.total.byTool, { bash: 2, edit: 1, write: 2 });
-const out = JSON.stringify(g) + JSON.stringify(o);
+const l = run("lane_branch_count.mjs", [f("lane_summary_nan.json"), `ta=${f("lane_ta.jsonl")}`, `tb=${f("lane_tb.jsonl")}`]);
+assert.equal(l.tasksSeen, 3); assert.equal(l.qualifying, 1); assert.equal(l.laneLines, 3);
+assert.equal(l.skippedNonNumeric, 3); assert.equal(l.unknownShapeTasks, 1);
+const out = JSON.stringify(g) + JSON.stringify(o) + JSON.stringify(l);
 assert.ok(!/fixtures|\/fake|"sa"|"s1"/.test(out), "no paths/ids leaked");
 console.log("all ok");
