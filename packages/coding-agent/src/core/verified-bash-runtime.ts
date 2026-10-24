@@ -81,18 +81,26 @@ export function resolveSessionWorkspaceScope(cwd: string, options?: { maxPaths?:
  */
 export function resolveSessionWorkspaceScopeReport(
 	cwd: string,
-	options?: { readonly maxPaths?: number; readonly fresh?: boolean },
+	options?: {
+		readonly maxPaths?: number;
+		readonly fresh?: boolean;
+		/** Goal-specific exclusions are applied before the cap and are never cached. */
+		readonly excludePath?: (artifactPath: string, root: string) => boolean;
+	},
 ): SessionWorkspaceScopeReport {
 	const maxPaths = options?.maxPaths ?? SCOPE_MAX_PATHS;
 	const key = `${maxPaths}\0${cwd}`;
-	const cached = options?.fresh ? undefined : scopeCache.get(key);
+	const customFilter = options?.excludePath !== undefined;
+	const cached = options?.fresh || customFilter ? undefined : scopeCache.get(key);
 	if (cached && Date.now() - cached.at < SCOPE_TTL_MS) return cached.report;
-	const report = computeSessionWorkspaceScope(cwd, maxPaths);
-	if (scopeCache.size >= SCOPE_CACHE_MAX) {
-		const oldest = scopeCache.keys().next().value;
-		if (oldest !== undefined) scopeCache.delete(oldest);
+	const report = computeSessionWorkspaceScope(cwd, maxPaths, options?.excludePath);
+	if (!customFilter) {
+		if (scopeCache.size >= SCOPE_CACHE_MAX) {
+			const oldest = scopeCache.keys().next().value;
+			if (oldest !== undefined) scopeCache.delete(oldest);
+		}
+		scopeCache.set(key, { at: Date.now(), report });
 	}
-	scopeCache.set(key, { at: Date.now(), report });
 	return report;
 }
 
@@ -108,7 +116,11 @@ function unavailableScope(root: string): SessionWorkspaceScopeReport {
 	};
 }
 
-function computeSessionWorkspaceScope(cwd: string, maxPaths: number): SessionWorkspaceScopeReport {
+function computeSessionWorkspaceScope(
+	cwd: string,
+	maxPaths: number,
+	excludePath?: (artifactPath: string, root: string) => boolean,
+): SessionWorkspaceScopeReport {
 	try {
 		const top = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], {
 			encoding: "utf8",
@@ -141,6 +153,7 @@ function computeSessionWorkspaceScope(cwd: string, maxPaths: number): SessionWor
 			// survivors (untracked nested repositories, whose contents are outside
 			// the parent's dirty digest) and names the receipt parser rejects, such
 			// as a mangled `\\wsl.localhost\...` directory containing a backslash.
+			if (excludePath?.(artifact, root)) continue;
 			if (isNormalizedArtifactPath(artifact)) paths.add(artifact);
 			else excluded.add(artifact);
 		}

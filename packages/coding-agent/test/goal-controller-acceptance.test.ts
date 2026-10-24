@@ -8,7 +8,7 @@ import { DurableGoalStore } from "../src/core/durable-goal-store.ts";
 import goalController, { type GoalControllerOptions } from "../src/core/extensions/builtin/goal-controller.ts";
 import type { ExtensionAPI, ExtensionCommandContext, RegisteredCommand } from "../src/core/extensions/types.ts";
 import { GoalAcceptance } from "../src/core/goal-acceptance.ts";
-import { GoalVerifier } from "../src/core/goal-verification.ts";
+import { GOAL_SCOPE_MAX_PATHS, GoalVerifier } from "../src/core/goal-verification.ts";
 import { createWorkspaceSandboxPolicy } from "../src/core/sandbox/default-policy.ts";
 
 interface Harness {
@@ -135,6 +135,26 @@ describe("/goal acceptance checks", () => {
 
 		expect(lastNotice(h)).toContain("the workspace changed after the acceptance check passed; run /goal verify");
 		expect((await store(cwd).current())?.status).toBe("active");
+	});
+
+	it("refuses whole-workspace completion when the verified scope is truncated", async () => {
+		const cwd = gitRepo();
+		for (let index = 0; index <= GOAL_SCOPE_MAX_PATHS; index++) {
+			writeFileSync(join(cwd, `task-${index}.txt`), "work\n");
+		}
+		const goalStore = store(cwd);
+		await goalStore.create(
+			createDurableGoal({ id: "session", objective: "Ship the app", maxRounds: 2, now: new Date().toISOString() }),
+		);
+		const goal = await goalStore.current();
+		if (!goal) throw new Error("goal missing");
+		const acceptance = new GoalAcceptance();
+		acceptance.approve(goal, "true");
+		const checked = await acceptance.check(goalStore, goal, cwd);
+		expect(checked.result.workspace.completeness).toBe("partial_truncated");
+
+		await expect(acceptance.complete(goalStore, checked.goal, cwd)).rejects.toThrow(/workspace scope is incomplete/);
+		expect((await goalStore.current())?.status).toBe("active");
 	});
 
 	it("reports a failing check with its output tail and attaches nothing", async () => {
@@ -304,6 +324,58 @@ describe("/goal acceptance checks", () => {
 
 		expect(lastNotice(h)).toBe("goal reference is stale");
 		expect(h.messages).toEqual([]);
+	});
+
+	it("pins a delayed passing receipt to the goal generation and contract that started it", async () => {
+		for (const mutation of ["objective", "maxRounds", "advance-round", "contract"] as const) {
+			const cwd = gitRepo();
+			const goalStore = store(cwd);
+			await goalStore.create(
+				createDurableGoal({ id: "session", objective: "Ship A", maxRounds: 3, now: new Date().toISOString() }),
+			);
+			const goal = await goalStore.current();
+			if (!goal) throw new Error("goal missing");
+			let release: (() => void) | undefined;
+			let markStarted: (() => void) | undefined;
+			const gate = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const started = new Promise<void>((resolve) => {
+				markStarted = resolve;
+			});
+			const acceptance = new GoalAcceptance((options) => {
+				const verifier = new GoalVerifier(options);
+				const run = verifier.run.bind(verifier);
+				verifier.run = async (command, signal, onOutput) => {
+					const result = await run(command, signal, onOutput);
+					markStarted?.();
+					await gate;
+					return result;
+				};
+				return verifier;
+			});
+			acceptance.approve(goal, "true");
+			const checking = acceptance.check(goalStore, goal, cwd);
+			await started;
+			if (mutation === "contract") {
+				acceptance.approve(goal, "false");
+			} else {
+				const command =
+					mutation === "advance-round"
+						? { kind: "advance-round" as const, ref: goal.ref }
+						: {
+								kind: "edit" as const,
+								ref: goal.ref,
+								...(mutation === "objective" ? { objective: "Ship B" } : { maxRounds: 4 }),
+							};
+				await goalStore.transition(command, nextDurableGoalTimestamp(goal));
+			}
+			if (!release) throw new Error("verifier gate missing");
+			release();
+
+			await expect(checking).rejects.toThrow(/goal changed while its acceptance check ran/);
+			expect((await goalStore.current())?.evidence).toEqual([]);
+		}
 	});
 
 	it("approves a dynamic shell check now that command redaction is removed", async () => {
@@ -490,7 +562,9 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		await h.goal(`verify ${command}`);
 		const before = await store(cwd).current();
 		await h.settle();
-		const receiptId = (h.entries.at(-1)?.data as { receiptId: string }).receiptId;
+		const latestEntry = h.entries.at(-1);
+		if (!latestEntry) throw new Error("goal verification entry missing");
+		const receiptId = (latestEntry.data as { receiptId: string }).receiptId;
 		return { cwd, h, before, receiptId };
 	}
 
@@ -532,7 +606,9 @@ describe("spec 094 acceptance diagnostics in the repair follow-up", () => {
 		const goal = await store(cwd).current();
 		expect(goal?.status).toBe("active");
 		expect(goal?.evidence).toEqual([]);
-		expect((h.entries.at(-1)?.data as { passed: boolean }).passed).toBe(false);
+		const latestEntry = h.entries.at(-1);
+		if (!latestEntry) throw new Error("goal verification entry missing");
+		expect((latestEntry.data as { passed: boolean }).passed).toBe(false);
 		expect(h.messages[0].match(/<\/acceptance-diagnostic>/g)).toHaveLength(1);
 		expect(h.messages[0].endsWith("</acceptance-diagnostic>")).toBe(true);
 		await h.goal("");

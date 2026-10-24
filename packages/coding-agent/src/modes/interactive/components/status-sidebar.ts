@@ -7,19 +7,20 @@ import { loadMcpInventory, type McpServerEntry } from "../../../core/mcp-invento
 import {
 	type CodexUsageSnapshot,
 	getConfiguredSubscriptionUsageProviders,
-	getSubscriptionUsageRevision,
 	getSubscriptionUsageSource,
 	loadSubscriptionUsage,
 	parseCodexUsageSnapshot,
 	type SubscriptionUsageSnapshot,
 	type SubscriptionUsageWindow,
 } from "../../../core/provider-usage.ts";
+import { SubscriptionUsageReader } from "../../../core/subscription-usage-reader.ts";
 
 export { parseCodexUsageSnapshot };
 
 import { singleLineDisplayText } from "../../../utils/display-text.ts";
 import { readControlPlaneSignals } from "../control-plane-signals.ts";
 import { buildControlPlaneViewModel } from "../control-plane-view-model.ts";
+import { interactiveSubscriptionUsageReader } from "../interactive-subscription-usage.ts";
 import { type ThemeColor, theme } from "../theme/theme.ts";
 import { boxBottom, boxTextLine, boxTop, meterBar, sidebarRule } from "./control-panel-box.ts";
 import { classifyMcpStability } from "./control-panel-runtime-status.ts";
@@ -82,6 +83,8 @@ type StatusSidebarOptions = Readonly<{
 	fetchSubscriptionUsage?: SubscriptionUsageFetcher;
 	/** Compatibility for callers that injected the original Codex-only fetcher. */
 	fetchCodexUsage?: CodexUsageFetcher;
+	/** Shared with other UI consumers; an internal reader is created when omitted. */
+	usageReader?: SubscriptionUsageReader;
 }>;
 
 /**
@@ -98,7 +101,7 @@ export class StatusSidebarComponent implements Component {
 	private getAutoCompactEnabled: () => boolean;
 	private getTerminalRows: () => number;
 	private requestRender: () => void;
-	private fetchSubscriptionUsage: SubscriptionUsageFetcher;
+	private usageReader: SubscriptionUsageReader;
 
 	// --- living elements: rolling CPU sparkline + cached MCP/usage data ---
 	private cpuHistory: number[] = [];
@@ -107,12 +110,7 @@ export class StatusSidebarComponent implements Component {
 	private lastMcpProbeAt = 0;
 	private lastMcpReconnectAt = 0;
 	private mcpProbeInFlight = false;
-	private subscriptionUsage = new Map<string, SubscriptionUsageSnapshot>();
-	private subscriptionUsageSession: AgentSession | undefined;
 	private subscriptionUsageProviders: readonly string[] = [];
-	private subscriptionUsageFetchedAt = new Map<string, number>();
-	private subscriptionUsageInFlight = new Map<string, AgentSession>();
-	private subscriptionUsageRevision = new Map<string, number>();
 
 	constructor(
 		getSession: () => AgentSession,
@@ -127,7 +125,7 @@ export class StatusSidebarComponent implements Component {
 		this.getTerminalRows = getTerminalRows;
 		this.requestRender = options.requestRender ?? (() => {});
 		const legacyFetcher = options.fetchCodexUsage;
-		this.fetchSubscriptionUsage =
+		const fetchSubscriptionUsage =
 			options.fetchSubscriptionUsage ??
 			(legacyFetcher
 				? async (session, provider) =>
@@ -135,6 +133,11 @@ export class StatusSidebarComponent implements Component {
 							? codexSubscriptionSnapshot(await legacyFetcher(session))
 							: loadSubscriptionUsage(session, undefined, provider)
 				: (session, provider) => loadSubscriptionUsage(session, undefined, provider));
+		this.usageReader =
+			options.usageReader ??
+			(options.fetchSubscriptionUsage || legacyFetcher
+				? new SubscriptionUsageReader(getSession, fetchSubscriptionUsage, this.requestRender)
+				: interactiveSubscriptionUsageReader(getSession(), this.requestRender));
 	}
 
 	invalidate(): void {
@@ -146,7 +149,7 @@ export class StatusSidebarComponent implements Component {
 		const session = this.getSession();
 		const state = session.state;
 		this.refreshMcpHealth(session);
-		this.refreshSubscriptionUsage(session);
+		this.refreshSubscriptionUsage();
 		// Read once per frame: the same view model the control rail projects, so no status is computed here.
 		const vm = buildControlPlaneViewModel(
 			readControlPlaneSignals(session, this.footerData, state.model?.contextWindow ?? 0),
@@ -271,63 +274,9 @@ export class StatusSidebarComponent implements Component {
 		return lines;
 	}
 
-	private refreshSubscriptionUsage(session: AgentSession): void {
-		if (this.subscriptionUsageSession !== session) {
-			this.subscriptionUsage.clear();
-			this.subscriptionUsageFetchedAt.clear();
-			this.subscriptionUsageInFlight.clear();
-			this.subscriptionUsageRevision.clear();
-			this.subscriptionUsageSession = session;
-		}
-
-		const providers = getConfiguredSubscriptionUsageProviders(session);
-		this.subscriptionUsageProviders = providers;
-		const configured = new Set(providers);
-		for (const provider of this.subscriptionUsage.keys()) {
-			if (!configured.has(provider)) {
-				this.subscriptionUsage.delete(provider);
-				this.subscriptionUsageFetchedAt.delete(provider);
-				this.subscriptionUsageRevision.delete(provider);
-			}
-		}
-
-		const now = Date.now();
-		for (const provider of providers) {
-			const source = getSubscriptionUsageSource(provider);
-			const revision = getSubscriptionUsageRevision(provider);
-			const revisionChanged = revision !== (this.subscriptionUsageRevision.get(provider) ?? 0);
-			if (
-				!source ||
-				this.subscriptionUsageInFlight.has(provider) ||
-				(!revisionChanged && now - (this.subscriptionUsageFetchedAt.get(provider) ?? 0) < source.ttlMs)
-			) {
-				continue;
-			}
-			this.subscriptionUsageFetchedAt.set(provider, now);
-			this.subscriptionUsageRevision.set(provider, revision);
-			this.subscriptionUsageInFlight.set(provider, session);
-			void this.fetchSubscriptionUsage(session, provider)
-				.then((snapshot) => {
-					if (snapshot && this.getSession() === session && this.subscriptionUsageProviders.includes(provider)) {
-						this.subscriptionUsage.set(provider, snapshot);
-					}
-				})
-				.catch(() => {
-					if (this.getSession() === session && this.subscriptionUsageProviders.includes(provider)) {
-						this.subscriptionUsage.set(provider, {
-							label: source.label,
-							windows: [],
-							message: "usage unavailable",
-						});
-					}
-				})
-				.finally(() => {
-					if (this.subscriptionUsageInFlight.get(provider) === session) {
-						this.subscriptionUsageInFlight.delete(provider);
-					}
-					this.requestRender();
-				});
-		}
+	private refreshSubscriptionUsage(): void {
+		this.subscriptionUsageProviders = getConfiguredSubscriptionUsageProviders(this.getSession());
+		for (const provider of this.subscriptionUsageProviders) void this.usageReader.refresh(provider);
 	}
 
 	private subscriptionUsageSection(width: number): string[] {
@@ -335,7 +284,7 @@ export class StatusSidebarComponent implements Component {
 		const lines = [railRule(width, "USAGE", theme.fg("muted", String(this.subscriptionUsageProviders.length)))];
 		for (const provider of this.subscriptionUsageProviders) {
 			const source = getSubscriptionUsageSource(provider);
-			const snapshot = this.subscriptionUsage.get(provider);
+			const snapshot = this.usageReader.snapshot(provider);
 			const label = snapshot?.label ?? source?.label;
 			if (!label) continue;
 			const activeEndpoint =
@@ -343,7 +292,7 @@ export class StatusSidebarComponent implements Component {
 					? singleLineDisplayText(formatEndpointForFooter(this.getSession().state.model?.baseUrl) ?? "")
 					: undefined;
 			if (!snapshot) {
-				if (this.subscriptionUsageInFlight.has(provider)) {
+				if (this.usageReader.hasInFlight(provider)) {
 					lines.push(boxTextLine(width, `${theme.fg("text", label)} ${theme.fg("dim", "loading…")}`));
 				}
 				continue;

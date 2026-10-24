@@ -8,6 +8,7 @@
  */
 import { createHash } from "node:crypto";
 import {
+	computeDurableGoalGeneration,
 	DurableGoalError,
 	type DurableGoalSnapshot,
 	freshDurableGoalEvidence,
@@ -134,6 +135,7 @@ export class GoalAcceptance {
 		onOutput?: (data: Buffer) => void,
 	): Promise<GoalCheckOutcome> {
 		const key = goalKeyOf(goal);
+		const generation = computeDurableGoalGeneration(goal);
 		const contract = this.contracts.get(key);
 		const command = contract?.command;
 		if (contract === undefined || command === undefined) {
@@ -150,7 +152,14 @@ export class GoalAcceptance {
 			}
 			if (!result.passed) return { command, result, goal };
 			const latest = await store.current();
-			if (!latest || goalKeyOf(latest) !== key) {
+			const currentContract = this.contracts.get(key);
+			if (
+				!latest ||
+				goalKeyOf(latest) !== key ||
+				computeDurableGoalGeneration(latest) !== generation ||
+				currentContract?.revision !== contract.revision ||
+				currentContract.digest !== contract.digest
+			) {
 				throw new DurableGoalError("stale-ref", "the goal changed while its acceptance check ran");
 			}
 			// The check ran inside this generation. A wall clock that stepped back while it
@@ -205,12 +214,20 @@ export class GoalAcceptance {
 			})
 			.reverse();
 		if (candidates.length === 0) return "no passing acceptance receipt in this goal generation";
-		const current = captureGoalWorkspace(cwd).sha256;
+		const current = captureGoalWorkspace(cwd);
+		if (current.completeness !== "complete") return `workspace scope is incomplete (${current.completeness})`;
 		const verifier = this.verifierFor(cwd, key);
 		for (const { evidence, trusted } of candidates) {
-			if (trusted.workspace.sha256 === current && verifier.receiptMatches(evidence.id, evidence.digest)) {
+			if (
+				trusted.workspace.completeness === "complete" &&
+				trusted.workspace.sha256 === current.sha256 &&
+				verifier.receiptMatches(evidence.id, evidence.digest)
+			) {
 				return undefined;
 			}
+		}
+		if (candidates.some(({ trusted }) => trusted.workspace.completeness !== "complete")) {
+			return "workspace scope is incomplete in the acceptance receipt";
 		}
 		return "the workspace changed after the acceptance check passed";
 	}

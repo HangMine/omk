@@ -15,14 +15,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseResponsesUsage } from "../../ai/src/providers/openai-responses-usage.ts";
 import { wrapBudgetStream } from "../src/core/budget-stream.ts";
 import {
+	buildSuggestionContext,
 	planSuggestion,
 	type RecordedMainRequest,
 	requestNextSuggestion,
 	type SuggestionPlan,
+	suggestionEffectiveMaxTokens,
+	suggestionMaxTokens,
 } from "../src/core/next-suggestion.ts";
 import {
 	cappedSuggestionOptions,
 	DEFAULT_SUGGESTION_BUDGET,
+	estimateSuggestionCostUsd,
 	isSuggestionCapsEnabled,
 	type SuggestionBudget,
 	suggestionBudgetFromEnv,
@@ -179,6 +183,25 @@ describe("spec 103 §2.1: independent caps (caps flag on)", () => {
 		expect(reason(plan(record(anthropic), 2000, { budget: BUDGET }))).toBe("request");
 	});
 
+	it("charges admission against the provider's effective output ceiling", () => {
+		const priced = {
+			...anthropic,
+			maxTokens: 100_000,
+			cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+		};
+		const options: SimpleStreamOptions = { reasoning: "high", cacheRetention: "short" };
+		const r = record(priced, options);
+		const context = buildSuggestionContext(r, assistant("Done."));
+		const baseCost = estimateSuggestionCostUsd(priced, context, suggestionMaxTokens(priced, options));
+		const effectiveCost = estimateSuggestionCostUsd(priced, context, suggestionEffectiveMaxTokens(priced, options));
+		expect(suggestionEffectiveMaxTokens(priced, options)).toBe(16384 + 128);
+		expect(effectiveCost).toBeGreaterThan(baseCost);
+
+		expect(reason(plan(r, 2000, { budget: { ...BUDGET, maxCostUsd: (baseCost + effectiveCost) / 2 } }))).toBe(
+			"over_cost_cap",
+		);
+	});
+
 	it("maxReasoning inherit keeps the options object; a lower cap only lowers", () => {
 		const options: SimpleStreamOptions = { reasoning: "high" };
 		expect(cappedSuggestionOptions(options, BUDGET)).toBe(options);
@@ -310,6 +333,67 @@ describe("spec 103 §2.2: usage settlement", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	it("joins an identical in-flight request and settles generation once", async () => {
+		const settled: SuggestionSettlement[] = [];
+		let suggestionCalls = 0;
+		let release: (() => void) | undefined;
+		const pendingResult = new Promise<AssistantMessage>((resolve) => {
+			release = () => resolve(assistant("Run tests next.", { usage: usage(7, 3, 0.002) }));
+		});
+		const { session, emit } = fakeSession(((_m: unknown, c: Context) => {
+			if (c.messages.length > 1) suggestionCalls++;
+			return {
+				result: () =>
+					c.messages.length > 1 ? pendingResult : Promise.resolve(assistant("Done.", { timestamp: Date.now() })),
+			};
+		}) as unknown as StreamFn);
+		const c = installNextSuggestions(session as unknown as SuggestionSessionPort, editor(), "base", {
+			env: { OMK_NEXT_SUGGESTIONS: "1" },
+			quotaUsage: async () => "no_quota",
+			settle: (s) => settled.push(s as SuggestionSettlement),
+		})!;
+		await mainTurn(session, emit);
+		const first = c.onSettled("completed");
+		const second = c.onSettled("completed");
+		await vi.waitFor(() => expect(suggestionCalls).toBe(1));
+		release?.();
+		await Promise.all([first, second]);
+		expect(c.suggestion).toBe("Run tests next.");
+		expect(settled).toHaveLength(1);
+		c.dispose();
+	});
+
+	it("serves the current candidate without another provider call or generation settlement", async () => {
+		const settled: SuggestionSettlement[] = [];
+		let suggestionCalls = 0;
+		let quotaReads = 0;
+		const { session, emit } = fakeSession(((_m: unknown, c: Context) => {
+			if (c.messages.length > 1) suggestionCalls++;
+			return {
+				result: async () =>
+					c.messages.length > 1
+						? assistant("Run tests next.", { usage: usage(7, 3, 0.002) })
+						: assistant("Done.", { timestamp: Date.now() }),
+			};
+		}) as unknown as StreamFn);
+		const c = installNextSuggestions(session as unknown as SuggestionSessionPort, editor(), "base", {
+			env: { OMK_NEXT_SUGGESTIONS: "1" },
+			quotaUsage: async () => {
+				quotaReads++;
+				return "no_quota";
+			},
+			settle: (s) => settled.push(s as SuggestionSettlement),
+		})!;
+		await mainTurn(session, emit);
+		await c.onSettled("completed");
+		await c.onSettled("completed");
+		expect(c.suggestion).toBe("Run tests next.");
+		expect(suggestionCalls).toBe(1);
+		expect(quotaReads).toBe(1);
+		expect(settled).toHaveLength(1);
+		c.dispose();
 	});
 
 	it("suggestion records are excluded from turns, durations and usageCoverage but kept in cost totals", () => {
@@ -447,7 +531,8 @@ describe("spec 103 §2.2: usage settlement", () => {
 		await mainTurn(session, emit);
 		const pending = c.onSettled("completed");
 		await vi.waitFor(() => expect((c as unknown as { pending?: unknown }).pending).toBeDefined());
-		ed.onBeforeInput?.("x");
+		if (!ed.onBeforeInput) throw new Error("suggestion key handler missing");
+		ed.onBeforeInput("x");
 		await pending;
 		c.dispose();
 		expect(c.suggestion).toBeUndefined();
@@ -462,7 +547,7 @@ describe("spec 103 §2.2: usage settlement", () => {
 				return out;
 			}),
 		);
-		expect(summary.byPurpose?.suggestion.cancelledCostUsd).toBe(0.003);
+		expect(summary.byPurpose?.suggestion?.cancelledCostUsd).toBe(0.003);
 	});
 
 	it("missing usage is missing coverage, never 0", () => {

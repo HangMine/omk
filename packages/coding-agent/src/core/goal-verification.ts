@@ -110,22 +110,23 @@ function goalWorkspaceScope(cwd: string): {
 	readonly scope: WorkspaceScope;
 	readonly completeness: SessionScopeCompleteness;
 } {
-	const report = resolveSessionWorkspaceScopeReport(cwd, { maxPaths: GOAL_SCOPE_MAX_PATHS, fresh: true });
-	const excluded = OMK_OWNED_STATE_DIRS.map((dir) =>
-		relative(report.scope.root, canonicalPath(join(cwd, ".omk", dir)))
-			.split(sep)
-			.join("/"),
-	).filter((path) => path.length > 0 && !path.startsWith(".."));
-	if (excluded.length === 0) return report;
-	return {
-		scope: {
-			root: report.scope.root,
-			artifactPaths: report.scope.artifactPaths.filter(
-				(path) => !excluded.some((dir) => path === dir || path.startsWith(`${dir}/`)),
-			),
+	let excludedRoot: string | undefined;
+	let excluded: readonly string[] = [];
+	return resolveSessionWorkspaceScopeReport(cwd, {
+		maxPaths: GOAL_SCOPE_MAX_PATHS,
+		fresh: true,
+		excludePath: (path, root) => {
+			if (root !== excludedRoot) {
+				excludedRoot = root;
+				excluded = OMK_OWNED_STATE_DIRS.map((dir) =>
+					relative(root, canonicalPath(join(cwd, ".omk", dir)))
+						.split(sep)
+						.join("/"),
+				).filter((dir) => dir.length > 0 && !dir.startsWith(".."));
+			}
+			return excluded.some((dir) => path === dir || path.startsWith(`${dir}/`));
 		},
-		completeness: report.completeness,
-	};
+	});
 }
 
 /** Capture the goal-relevant workspace state now, bypassing the session scope cache. */

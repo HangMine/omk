@@ -15,17 +15,7 @@
  * session log, compaction input, or the next main request.
  */
 import type { StreamFn } from "omk-agent-core";
-import type {
-	Api,
-	AssistantMessage,
-	Context,
-	Model,
-	SimpleStreamOptions,
-	ThinkingBudgets,
-	Usage,
-	UserMessage,
-} from "omk-ai";
-import { addsThinkingBudgetToMaxTokens, DEFAULT_THINKING_BUDGETS } from "omk-ai";
+import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions, Usage, UserMessage } from "omk-ai";
 import { linkAbortSignals } from "./abort-link.ts";
 import {
 	cappedSuggestionOptions,
@@ -33,7 +23,10 @@ import {
 	estimateSuggestionCostUsd,
 	type SuggestionBudget,
 } from "./next-suggestion-budget.ts";
+import { suggestionEffectiveMaxTokens, suggestionMaxTokens } from "./next-suggestion-options.ts";
 import { tagRequestPurpose } from "./request-purpose.ts";
+
+export { SUGGESTION_MAX_TOKENS, suggestionEffectiveMaxTokens, suggestionMaxTokens } from "./next-suggestion-options.ts";
 
 export const NEXT_SUGGESTIONS_ENV = "OMK_NEXT_SUGGESTIONS";
 /** PREREG: skip when ≥ 90% of the active quota window is used. */
@@ -43,22 +36,6 @@ export const SHORT_CACHE_TTL_MS = 5 * 60_000;
 /** Cache considered cold this long after the last main request with `long` retention. */
 export const LONG_CACHE_TTL_MS = 60 * 60_000;
 export const MAX_SUGGESTION_CHARS = 200;
-/** The suggestion request differs from the main request only in this output cap. */
-export const SUGGESTION_MAX_TOKENS = 128;
-/**
- * Output cap for the suggestion request. Reasoning is never disabled (that
- * would change the request bytes); the final provider cap is the thinking
- * budget + 128 with reasoning on and 128 with reasoning off. Providers that
- * already add the budget to an explicit cap (`adjustMaxTokensForThinking`)
- * get 128 only, so the budget is not counted twice.
- */
-export function suggestionMaxTokens(model: Model<Api>, options: SimpleStreamOptions | undefined): number {
-	const level = options?.reasoning;
-	if (!level || addsThinkingBudgetToMaxTokens(model)) return SUGGESTION_MAX_TOKENS;
-	const key: keyof ThinkingBudgets = level === "xhigh" || level === "max" || level === "ultra" ? "high" : level;
-	const budget = options?.thinkingBudgets?.[key] ?? DEFAULT_THINKING_BUDGETS[key];
-	return budget + SUGGESTION_MAX_TOKENS;
-}
 /** The quota check is abandoned (and the suggestion skipped) after this long. */
 export const USAGE_CHECK_TIMEOUT_MS = 2_000;
 
@@ -99,6 +76,11 @@ export class MainRequestRecorder {
 			this.last = { model, context, options, atMs: this.now() };
 			return inner(model, context, options);
 		};
+		// Preserve source-owned identity brands used by mandatory credential checks.
+		for (const key of Object.getOwnPropertySymbols(inner)) {
+			const descriptor = Object.getOwnPropertyDescriptor(inner, key);
+			if (descriptor) Object.defineProperty(wrapped, key, descriptor);
+		}
 		return wrapped;
 	}
 
@@ -198,7 +180,7 @@ export function planSuggestion(input: SuggestionPlanInput): SuggestionPlan {
 	const estimatedCostUsd = estimateSuggestionCostUsd(
 		record.model,
 		context,
-		suggestionMaxTokens(record.model, options),
+		suggestionEffectiveMaxTokens(record.model, options),
 	);
 	if (!(estimatedCostUsd <= budget.maxCostUsd)) {
 		return { kind: "skip", reason: "over_cost_cap", costCap: { estimatedCostUsd, maxCostUsd: budget.maxCostUsd } };
