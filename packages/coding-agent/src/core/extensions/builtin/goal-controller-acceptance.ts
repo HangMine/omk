@@ -6,13 +6,13 @@ import {
 	goalOutputRecallEnabled,
 	type OutputArtifact,
 	OutputArtifactWriter,
-	outputRecallFollowUp,
 	summarizeArtifact,
 } from "../../goal-output-recall.ts";
 import { RecallAccessTracker } from "../../goal-output-recall-access.ts";
 import * as recallEvidence from "../../goal-output-recall-evidence.ts";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../types.ts";
 import { evaluateCommandGate, getAssumeYesConfirmPolicies } from "./command-safety-gate.ts";
+import { repairFollowUp } from "./goal-acceptance-repair.ts";
 import { type GoalAcceptanceTestHooks, GoalTaskFacts } from "./goal-acceptance-task-facts.ts";
 import { parseRequiredToolsDeclaration } from "./goal-controller-required-tools.ts";
 import { displayCommand, displayError, failureText, receiptLabel, renderGoal } from "./goal-controller-text.ts";
@@ -178,14 +178,9 @@ export class GoalAcceptanceFlow {
 			{ kind: "advance-round", ref: outcome.goal.ref },
 			nextDurableGoalTimestamp(outcome.goal),
 		);
-		this.recallAccess.start(outcome.artifact);
-		const head = `Acceptance check \`${displayCommand(outcome.command)}\` ${failureText(result)} (${receiptLabel(result)})`;
-		this.continueGoal(
-			advanced,
-			outcome.artifact === undefined
-				? `\n\n${head}. Run it to see the output, fix the cause, and end your turn when it passes.`
-				: `\n\n${outputRecallFollowUp(head, result.outputTail, outcome.artifact)}`,
-		);
+		const { detail, recall } = repairFollowUp(outcome, outcome.artifact);
+		this.recallAccess.start(recall);
+		this.continueGoal(advanced, detail);
 	}
 
 	private async run(
