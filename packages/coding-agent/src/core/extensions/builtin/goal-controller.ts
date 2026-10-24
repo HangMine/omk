@@ -16,7 +16,7 @@ import { deleteGoalRecallFiles, goalOutputRecallEnabled, outputRecallDir } from 
 import { rewriteRecallLinksInMessages } from "../../goal-output-recall-links.ts";
 import { goalStateDirectory } from "../../goal-verification.ts";
 import type { ExtensionAPI } from "../types.ts";
-import { GoalAutonomy, parseGoalBudget } from "./goal-autonomy.ts";
+import { GoalAutonomy } from "./goal-autonomy.ts";
 import { GoalAcceptanceFlow, type GoalAcceptanceTestHooks } from "./goal-controller-acceptance.ts";
 import { GoalRequiredTools } from "./goal-controller-required-tools.ts";
 import { checkpointPayload, continuationSeam, renderGoal, unavailableWorkspaceCode } from "./goal-controller-text.ts";
@@ -86,7 +86,10 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 
 	function continueGoal(advanced: DurableGoalSnapshot, detail: string): void {
 		// AU2: a continuation of a revoked round is dropped, even one from a settle already in flight.
-		if (autonomy?.isRevoked(advanced)) return;
+		if (autonomy?.isRevoked(advanced)) {
+			autonomy.rejectContinuation(advanced);
+			return;
+		}
 		const seam = continuationSeam(advanced, trustedCheckpointDigests);
 		// The run that just settled still owns the session, so queue behind it.
 		omk.sendUserMessage(
@@ -117,16 +120,8 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 					return;
 				}
 				const existing = await store.current();
-				if (autonomy !== undefined && (text === "budget" || text.startsWith("budget "))) {
-					if (!existing || existing.status === "completed" || existing.status === "cleared") {
-						throw new DurableGoalError("store-missing", "no open durable goal to budget");
-					}
-					const rest = text.slice("budget".length).trim();
-					const line =
-						rest.length === 0 ? autonomy.describe(existing) : autonomy.setBudget(existing, parseGoalBudget(rest));
-					ctx.ui.notify(renderGoal(existing, line), "info");
-					return;
-				}
+				// Spec 119 (flag on only): `/goal budget`, user-set only.
+				if (autonomy?.budgetCommand(text, existing, ctx)) return;
 				if (text === "verify" || text.startsWith("verify ")) {
 					await flow.verify(text, existing, store, ctx);
 					return;
@@ -259,6 +254,11 @@ export default function goalController(omk: ExtensionAPI, options: GoalControlle
 		} catch (error) {
 			// A command can change the goal while the turn settles; report it rather than fail the turn.
 			if (!(error instanceof DurableGoalError)) throw error;
+			// AU2: a steer paused the goal while this settle ran; its continuation is refused, and counted.
+			if (autonomy?.isRevoked(current)) {
+				autonomy.rejectContinuation(current);
+				return;
+			}
 			ctx.ui.notify(error.message, "error");
 		}
 	});

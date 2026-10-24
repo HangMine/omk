@@ -10,12 +10,14 @@ import type { DurableGoalStore } from "../../durable-goal-store.ts";
 import type { GoalAcceptance } from "../../goal-acceptance.ts";
 import type { GoalAutonomyBudget, GoalAutonomyInput, GoalAutonomyStopReason } from "../../goal-continuation.ts";
 import type { ExtensionAPI, ExtensionContext } from "../types.ts";
+import { renderGoal } from "./goal-controller-text.ts";
 
 export const GOAL_AUTONOMY_ENTRY = {
 	budget: "goal_autonomy_budget",
 	stop: "goal_autonomy_stop",
 	revoke: "goal_autonomy_revoke",
 	resume: "goal_autonomy_resume",
+	rejected: "goal_autonomy_continuation_rejected",
 } as const;
 
 /** AU4: only these tools' aborted or timed-out calls make a round's outcome unknown. */
@@ -133,6 +135,18 @@ export class GoalAutonomy {
 		return this.describe(goal);
 	}
 
+	/** `/goal budget …`; `false` when `text` is another subcommand. */
+	budgetCommand(text: string, existing: DurableGoalSnapshot | null, ctx: Pick<ExtensionContext, "ui">): boolean {
+		if (text !== "budget" && !text.startsWith("budget ")) return false;
+		if (!existing || existing.status === "completed" || existing.status === "cleared") {
+			throw new DurableGoalError("store-missing", "no open durable goal to budget");
+		}
+		const rest = text.slice("budget".length).trim();
+		const line = rest.length === 0 ? this.describe(existing) : this.setBudget(existing, parseGoalBudget(rest));
+		ctx.ui.notify(renderGoal(existing, line), "info");
+		return true;
+	}
+
 	describe(goal: DurableGoalSnapshot): string {
 		const spend = this.spend.get(goalAutonomyKey(goal));
 		if (spend === undefined) return "budget: none (set with /goal budget <usd|-> [<deadline ISO>])";
@@ -226,6 +240,19 @@ export class GoalAutonomy {
 		});
 		await store.transition({ kind: "pause", ref: current.ref }, nextDurableGoalTimestamp(current));
 		ctx.ui.notify("goal paused by your steer; /goal resume continues it", "info");
+	}
+
+	/** Continuations refused after a revoke, process-wide; numbers only. */
+	rejectedContinuations = 0;
+
+	/** AU2: a refused late continuation is counted and logged with numbers only (no text, no ids). */
+	rejectContinuation(goal: DurableGoalSnapshot): void {
+		this.rejectedContinuations += 1;
+		this.omk.appendEntry(GOAL_AUTONOMY_ENTRY.rejected, {
+			round: goal.completedRounds,
+			revision: goal.ref.revision,
+			count: this.rejectedContinuations,
+		});
 	}
 
 	isRevoked(goal: DurableGoalSnapshot): boolean {

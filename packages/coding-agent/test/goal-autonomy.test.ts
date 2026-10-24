@@ -211,6 +211,10 @@ describe("AU2: explicit steer", () => {
 		await settling;
 		expect(h.messages).toEqual([]);
 		expect((await store(cwd).current())?.status).toBe("paused");
+		const rejected = h.entries.filter((e) => e.customType === "goal_autonomy_continuation_rejected");
+		expect(rejected).toHaveLength(1);
+		expect(Object.values(rejected[0].data as object).every((v) => typeof v === "number")).toBe(true);
+		expect(rejected[0].data).toMatchObject({ count: 1 });
 	});
 });
 

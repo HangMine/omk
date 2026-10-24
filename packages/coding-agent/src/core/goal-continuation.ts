@@ -1,3 +1,4 @@
+import type { ImageContent } from "omk-ai";
 import type { DurableGoalStatus } from "./durable-goal.ts";
 
 /** Spec 119: strict `=== "1"`; any other value is off. */
@@ -66,4 +67,29 @@ export function decideGoalContinuation(input: GoalContinuationInput): GoalContin
 	}
 	if (input.completedRounds >= input.maxRounds) return { continue: false, reason: "round-limit" };
 	return { continue: true, reason: "active-goal" };
+}
+
+/**
+ * Spec 119: with the flag on, `AgentSession.steer()` (RPC `steer`) emits the existing `input` event as an
+ * explicit steer. Flag off: no event, text and images unchanged. `undefined` = an extension handled it.
+ */
+export async function goalAutonomySteerInput(
+	runner: {
+		hasHandlers(event: "input"): boolean;
+		emitInput(
+			text: string,
+			images: ImageContent[] | undefined,
+			source: "rpc",
+			streamingBehavior: "steer",
+		): Promise<
+			{ action: "continue" } | { action: "transform"; text: string; images?: ImageContent[] } | { action: "handled" }
+		>;
+	},
+	text: string,
+	images: ImageContent[] | undefined,
+): Promise<{ readonly text: string; readonly images: ImageContent[] | undefined } | undefined> {
+	if (!goalAutonomyEnabled() || !runner.hasHandlers("input")) return { text, images };
+	const result = await runner.emitInput(text, images, "rpc", "steer");
+	if (result.action === "handled") return undefined;
+	return result.action === "transform" ? { text: result.text, images: result.images ?? images } : { text, images };
 }

@@ -148,4 +148,55 @@ describe("spec 119 through a live AgentSession", () => {
 		]);
 		expect((await store(h).current())?.completedRounds).toBe(8);
 	});
+
+	it("AU2: an RPC steer() pauses the goal through the input hook; no late continuation of the revoked round", async () => {
+		vi.stubEnv("OMK_GOAL_AUTONOMY", "1");
+		const h = await make(true);
+		await h.session.prompt("/goal Fix the file");
+		await h.session.prompt("/goal verify sleep 3; false");
+		let answered = false;
+		h.setResponses([
+			() => {
+				answered = true;
+				return fauxAssistantMessage("tried");
+			},
+			fauxAssistantMessage("answers the steer"),
+		]);
+		const run = h.session.prompt("go");
+		// The settled run's acceptance check is sleeping; the RPC steer lands while it runs.
+		await vi.waitFor(() => expect(answered).toBe(true), { timeout: 10_000, interval: 20 });
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		await h.session.steer("stop, change direction");
+		await run;
+		await idle(h);
+		await vi.waitFor(
+			() => {
+				const types = (h.sessionManager.getEntries() as Array<{ type: string; customType?: string }>)
+					.filter((e) => e.type === "custom")
+					.map((e) => e.customType);
+				expect(types).toContain("goal_autonomy_revoke");
+			},
+			{ timeout: 10_000, interval: 50 },
+		);
+		expect((await store(h).current())?.status).toBe("paused");
+		expect(getUserTexts(h).filter((t) => t.startsWith("Continue the active goal"))).toEqual([]);
+	});
+
+	it("G0: flag off, an RPC steer() does not pause the goal", async () => {
+		const h = await make(true);
+		await store(h).create(
+			createDurableGoal({ id: "session", objective: "Fix", maxRounds: 8, now: new Date().toISOString() }),
+		);
+		h.setResponses([
+			async () => {
+				await h.session.steer("change");
+				return fauxAssistantMessage("first");
+			},
+			...Array.from({ length: 10 }, () => fauxAssistantMessage("ok")),
+		]);
+		await h.session.prompt("go");
+		await idle(h);
+		expect((await store(h).current())?.status).toBe("active");
+		expect(JSON.stringify(h.sessionManager.getEntries())).not.toContain("goal_autonomy");
+	});
 });
