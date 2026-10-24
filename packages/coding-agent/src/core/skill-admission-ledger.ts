@@ -1,12 +1,14 @@
 /**
- * Spec 106 A1: session skill admission ledger (flag `OMK_SKILL_ADMISSION`, default off).
+ * Spec 106 A1: session skill admission ledger (flag `OMK_SKILL_ADMISSION`, default on; `0`/`false`/`off` opts out).
  *
  * The host decides which skill bodies reach the model; the model only proposes. One slot = one unique
  * skill body (`skillId` + sha256 digest) actually delivered in this session, capped at {@link SKILL_ADMISSION_CAP}.
  * State is persisted as versioned `skill_admission` session records and rebuilt from them on resume,
  * compaction and model switch; no path resets the count to 0.
  */
+
 import { createHash } from "node:crypto";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 
 export const SKILL_ADMISSION_CAP = 10;
 export const SKILL_ADMISSION_ENTRY_TYPE = "skill_admission";
@@ -35,8 +37,8 @@ export type SkillAdmissionDecision =
 	| { readonly ok: false; readonly reason: "cap" | "legacy_over_cap" | "unknown_record" };
 
 export function isSkillAdmissionEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	const value = env.OMK_SKILL_ADMISSION?.trim().toLowerCase();
-	return value === "1" || value === "true" || value === "on";
+	// Default on; only `0`/`false`/`off` opt out.
+	return isDefaultOnEnvFlag(env.OMK_SKILL_ADMISSION);
 }
 
 export function skillBodyDigest(body: string): string {
