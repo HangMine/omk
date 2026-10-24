@@ -249,9 +249,9 @@ describe("spec 091 stage 1: next suggestions in a session", () => {
 	it("fails closed when the quota check times out, without delaying the main turn", async () => {
 		const h = harness(tempCwd());
 		const plans = planRecorder(h, () => new Promise<never>(() => {}), { usageTimeoutMs: 30 });
-		const started = Date.now();
+		const started = performance.now();
 		await h.session.prompt("first");
-		expect(Date.now() - started).toBeLessThan(1000);
+		expect(performance.now() - started).toBeLessThan(1000);
 		await vi.waitFor(() => expect(plans).toEqual(["usage_unavailable"]));
 		expect(h.calls()).toBe(1);
 	});
