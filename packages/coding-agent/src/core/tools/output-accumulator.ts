@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registerEvidenceArtifact } from "../evidence-lifecycle.ts";
+import { registerEvidenceArtifact, TOOL_OUTPUT_LOG_CONSUMERS } from "../evidence-lifecycle.ts";
 import { HeadCapture, headTailTruncation } from "./output-head-tail.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, type TruncationResult, truncateTail } from "./truncate.ts";
 
@@ -160,7 +160,12 @@ export class OutputAccumulator {
 			stream.once("finish", onFinish);
 			stream.end();
 		});
-		if (this.tempFilePath) registerEvidenceArtifact({ producer: "tool-output-log", path: this.tempFilePath });
+		if (this.tempFilePath)
+			registerEvidenceArtifact({
+				producer: "tool-output-log",
+				path: this.tempFilePath,
+				requiredConsumers: TOOL_OUTPUT_LOG_CONSUMERS,
+			});
 	}
 
 	getLastLineBytes(): number {
