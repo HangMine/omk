@@ -70,7 +70,15 @@ describe.skipIf(process.platform === "win32")("bash RTK output-only filter", () 
 		expect(exec.mock.calls[0][0]).toBe(command);
 	});
 
-	it("does nothing by default", async () => {
+	it("default on: unset env filters through rtk like 1", async () => {
+		vi.stubEnv("OMK_RTK_OUTPUT", undefined);
+		installFilter("throw new Error('must not execute')");
+		const { bash } = tool();
+		const result = await bash.execute("call", { command });
+		expect(result.details).toMatchObject({ outputFilter: { name: "rtk" } });
+	});
+
+	it("does nothing with OMK_RTK_OUTPUT=0", async () => {
 		vi.stubEnv("OMK_RTK_OUTPUT", "0");
 		installFilter("throw new Error('must not execute')");
 		const { bash } = tool();
