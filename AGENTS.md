@@ -145,6 +145,34 @@ pauses the goal and only `/goal resume` restarts it. Stop reasons are custom ent
 `omk.goal.v1` schema is unchanged. With the flag explicitly off (`OMK_GOAL_AUTONOMY=0`), session output is
 byte-identical to the pre-default-on baseline (G0). No A/B result exists yet, so make no performance claims.
 
+## Default-on harness flags
+
+These `OMK_*` feature flags are on by default (unset, or any value other than the opt-outs). Set one to `0`,
+`false` or `off` (trimmed, case-insensitive) to restore the earlier behavior. This mirrors
+`packages/coding-agent/README.md`; details are in `packages/coding-agent/docs/environment-variables.md`.
+
+| Flag | Default | Disable |
+|---|---|---|
+| `OMK_EDIT_DIAGNOSTICS` | on | `OMK_EDIT_DIAGNOSTICS=0` |
+| `OMK_EXEC_TRUNCATE_MIDDLE` | on | `OMK_EXEC_TRUNCATE_MIDDLE=0` |
+| `OMK_JSON_SESSION_INFO` | on (adds `omk_session_info` lines to `--mode json`) | `OMK_JSON_SESSION_INFO=0` |
+| `OMK_GOAL_AUTONOMY` | on | `OMK_GOAL_AUTONOMY=0` |
+| `OMK_SKILL_ADMISSION` | on | `OMK_SKILL_ADMISSION=0` |
+| `OMK_SKILL_AUTO_LOAD` | on (subagent workers set `0`) | `OMK_SKILL_AUTO_LOAD=0` |
+| `OMK_EVIDENCE_LIFECYCLE` | conditional delete of verified goal-recall files only; `observe` deletes nothing | `OMK_EVIDENCE_LIFECYCLE=0` |
+| `OMK_ADAPTIVE_EFFORT` | on (cost; subagent workers set `0`) | `OMK_ADAPTIVE_EFFORT=0` |
+| `OMK_DOMAIN_ROUTING` | on (cost/routing) | `OMK_DOMAIN_ROUTING=0` |
+| `OMK_GOAL_OUTPUT_RECALL` | on | `OMK_GOAL_OUTPUT_RECALL=0` |
+| `OMK_LANE_READY_QUEUE` | on | `OMK_LANE_READY_QUEUE=0` |
+| `OMK_LANE_FAILURE_SCOPE` | on | `OMK_LANE_FAILURE_SCOPE=0` |
+| `OMK_RTK_OUTPUT` | on (raw output when `rtk` is missing) | `OMK_RTK_OUTPUT=0` |
+| `OMK_SESSION_CONTROL` | on; unset never fails startup, an explicit `1` is required | `OMK_SESSION_CONTROL=0` |
+| `OMK_VERIFIED_MEMORY` | on (needs Context Budget V2) | `OMK_VERIFIED_MEMORY=0` |
+| `OMK_RESPONSE_REASONING_CAP` | on (cost) | `OMK_RESPONSE_REASONING_CAP=0` |
+| `OMK_PREFIX_BOUNDARY` | on (prompt cache) | `OMK_PREFIX_BOUNDARY=0` |
+
+G0 (`test/suite/g0-session-hash.ts`) must match main with all of them set to `0`.
+
 ## Git and safety
 
 - Multiple sessions may share this working tree. Stage only files you changed, by explicit
