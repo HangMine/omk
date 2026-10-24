@@ -1,6 +1,8 @@
 # OMK
 
-Provider-neutral terminal coding agent with optional multi-agent orchestration, scoped tools, replayable sessions, and evidence-backed verification.
+An open-source multi-agent coding CLI for your terminal: switch models in one session and finish a goal only when your test passes.
+
+OMK is a lightweight, MIT-licensed AI coding agent written in TypeScript, with optional multi-agent orchestration, scoped tools, replayable sessions, and evidence-backed verification. It is a standalone CLI, so it can serve as an open-source alternative to a single-provider agent such as Claude Code.
 
 OMK supports interactive terminal use, non-interactive output, RPC integration, and an embeddable TypeScript SDK. It works with API-key and subscription providers without making one provider the control plane.
 
@@ -23,6 +25,14 @@ npx --ignore-scripts open-multi-agent-kit
 ```
 
 The published package name remains `open-multi-agent-kit`; the command is `omk`.
+
+Or install the standalone binary, which needs no Node.js (macOS, Linux):
+
+```bash
+curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+```
+
+The script checks the download against `SHA256SUMS` and installs to `~/.omk/bin`. Windows builds are on the [releases page](https://github.com/dmae97/omk/releases/latest).
 
 ## Quick Start
 
