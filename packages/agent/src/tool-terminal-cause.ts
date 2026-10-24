@@ -18,9 +18,10 @@ export function toolTerminalCauseOf(error: unknown): ToolTerminalCause | undefin
 	return error instanceof ToolTerminalError ? error.terminalCause : undefined;
 }
 
-/** Mirrors coding-agent `goalAutonomyEnabled()` (strict `=== "1"`); the agent package cannot import it. */
+/** Mirrors coding-agent `goalAutonomyEnabled()` (default on; `0`/`false`/`off` opt out); the agent package cannot import it. */
 export function toolTerminalCauseRecordingEnabled(): boolean {
-	return process.env.OMK_GOAL_AUTONOMY === "1";
+	const value = process.env.OMK_GOAL_AUTONOMY?.trim().toLowerCase();
+	return value !== "0" && value !== "false" && value !== "off";
 }
 
 const MAX_CAUSES = 1024;

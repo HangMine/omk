@@ -65,6 +65,7 @@ beforeEach(() => {
 	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", undefined);
 	vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", undefined);
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
+	vi.stubEnv("OMK_GOAL_AUTONOMY", "0"); // pre-119 controller path; autonomy is default on
 });
 
 afterEach(() => {

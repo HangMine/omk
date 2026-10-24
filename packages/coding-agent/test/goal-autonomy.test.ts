@@ -147,7 +147,7 @@ afterEach(() => {
 });
 
 describe("G0: flag off is main", () => {
-	it.each([undefined, "0", "true"])(
+	it.each(["0", "false", "off"])(
 		"OMK_GOAL_AUTONOMY=%s registers no input handler and keeps budget as goal text",
 		async (value) => {
 			vi.stubEnv("OMK_GOAL_AUTONOMY", value as string);

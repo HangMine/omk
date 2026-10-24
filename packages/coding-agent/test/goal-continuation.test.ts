@@ -7,9 +7,21 @@ const ok: GoalAutonomyInput = { spentUsd: 0, lastSideEffect: "ok", scopeChanged:
 afterEach(() => vi.unstubAllEnvs());
 
 describe("decideGoalContinuation (spec 119)", () => {
-	it.each([undefined, "0", "true", "yes", " 1"])("G0: OMK_GOAL_AUTONOMY=%s ignores autonomy fields", (value) => {
-		if (value !== undefined) vi.stubEnv("OMK_GOAL_AUTONOMY", value);
+	it.each(["unset", "", "1", "true", "yes"])("default on: OMK_GOAL_AUTONOMY=%s applies autonomy stops", (value) => {
+		if (value !== "unset") vi.stubEnv("OMK_GOAL_AUTONOMY", value);
 		else vi.stubEnv("OMK_GOAL_AUTONOMY", undefined as unknown as string);
+		const stops: GoalAutonomyInput = {
+			budget: { maxCostUsd: 0.01, deadlineIso: "2000-01-01T00:00:00.000Z" },
+			spentUsd: undefined,
+			lastSideEffect: "unknown",
+			scopeChanged: true,
+			nowMs: Date.now(),
+		};
+		expect(decideGoalContinuation({ ...base, autonomy: stops })).not.toEqual(decideGoalContinuation(base));
+	});
+
+	it.each(["0", "false", "off", "OFF", " 0 "])("G0: OMK_GOAL_AUTONOMY=%s ignores autonomy fields", (value) => {
+		vi.stubEnv("OMK_GOAL_AUTONOMY", value);
 		const stops: GoalAutonomyInput = {
 			budget: { maxCostUsd: 0.01, deadlineIso: "2000-01-01T00:00:00.000Z" },
 			spentUsd: undefined,

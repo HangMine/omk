@@ -102,6 +102,7 @@ function recallPath(message: string): string {
 beforeEach(() => {
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
 	vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", undefined);
+	vi.stubEnv("OMK_GOAL_AUTONOMY", "0"); // spec 098 wiring under the pre-119 controller; autonomy is default on
 });
 
 afterEach(() => {

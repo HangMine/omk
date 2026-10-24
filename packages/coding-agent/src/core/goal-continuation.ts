@@ -1,9 +1,10 @@
 import type { ImageContent } from "omk-ai";
 import type { DurableGoalStatus } from "./durable-goal.ts";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 
-/** Spec 119: strict `=== "1"`; any other value is off. */
+/** Spec 119: default on; only `0`/`false`/`off` (case-insensitive, trimmed) opt out. */
 export function goalAutonomyEnabled(): boolean {
-	return process.env.OMK_GOAL_AUTONOMY === "1";
+	return isDefaultOnEnvFlag(process.env.OMK_GOAL_AUTONOMY);
 }
 
 /** Spec 119: the autonomy round cap; the model cannot raise it. */

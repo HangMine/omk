@@ -28,7 +28,11 @@ function toolResults(h: Harness): Array<{ toolCallId: string; details?: { omk?: 
 
 describe("spec 119 through a live AgentSession", () => {
 	const harnesses: Harness[] = [];
-	beforeEach(() => vi.stubEnv("OMK_BASH_SANDBOX", "off"));
+	beforeEach(() => {
+		vi.stubEnv("OMK_BASH_SANDBOX", "off");
+		// Default on since flags-default-on: G0 arms opt out explicitly; ON arms stub "1".
+		vi.stubEnv("OMK_GOAL_AUTONOMY", "0");
+	});
 	afterEach(() => {
 		vi.unstubAllEnvs();
 		while (harnesses.length > 0) harnesses.pop()?.cleanup();
