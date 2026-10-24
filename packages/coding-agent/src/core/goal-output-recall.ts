@@ -9,6 +9,7 @@
  * hold secrets the check printed, verbatim. Files live under `<cwd>/.omk/goals/recall/` (0700 dir, 0600
  * files, a `*` .gitignore) so the `read` tool's workspace/loadout policy can open them.
  */
+
 import { createHash, randomBytes } from "node:crypto";
 import {
 	chmodSync,
@@ -25,6 +26,7 @@ import {
 	writeSync,
 } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import {
 	evidenceLifecycleDeleteEnabled,
 	evidenceLifecycleObserveEnabled,
@@ -48,7 +50,7 @@ const MAX_ATTEMPTS = 100;
  * secrets verbatim; see the module header and spec 098 §2a.
  */
 export function goalOutputRecallEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	return env.OMK_GOAL_OUTPUT_RECALL === "1";
+	return isDefaultOnEnvFlag(env.OMK_GOAL_OUTPUT_RECALL);
 }
 
 /** What a session entry may record about an artifact: a digest and counts, never output text. */
