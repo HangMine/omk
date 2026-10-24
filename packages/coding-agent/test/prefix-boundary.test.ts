@@ -150,9 +150,11 @@ const cachedMarkerPresent = (name: string, sent: Sent) =>
 describe("spec 102 resolver", () => {
 	const plan = { prompt: `${STABLE}${TAIL_A}`, cacheBoundary: STABLE.length };
 
-	it("reads OMK_PREFIX_BOUNDARY, default off", () => {
-		expect(isPrefixBoundaryEnabled({})).toBe(false);
+	it("reads OMK_PREFIX_BOUNDARY, default on; 0/false/off opt out", () => {
+		expect(isPrefixBoundaryEnabled({})).toBe(true);
 		expect(isPrefixBoundaryEnabled({ OMK_PREFIX_BOUNDARY: "0" })).toBe(false);
+		expect(isPrefixBoundaryEnabled({ OMK_PREFIX_BOUNDARY: "false" })).toBe(false);
+		expect(isPrefixBoundaryEnabled({ OMK_PREFIX_BOUNDARY: " OFF " })).toBe(false);
 		expect(isPrefixBoundaryEnabled({ OMK_PREFIX_BOUNDARY: "1" })).toBe(true);
 		expect(isPrefixBoundaryEnabled({ OMK_PREFIX_BOUNDARY: "true" })).toBe(true);
 	});

@@ -1,3 +1,4 @@
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 /**
  * Spec 052: whether a system prompt changed by `before_agent_start` handlers
  * keeps the planned cache boundary. Text appended after the whole planned
@@ -37,10 +38,9 @@ export interface SystemPromptCacheOptions {
 	readonly prefixBoundary?: boolean;
 }
 
-const ENABLED_VALUES = new Set(["1", "true", "on", "yes"]);
-
+/** Default on; `0`/`false`/`off` opt out. */
 export function isPrefixBoundaryEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	return ENABLED_VALUES.has((env.OMK_PREFIX_BOUNDARY ?? "").trim().toLowerCase());
+	return isDefaultOnEnvFlag(env.OMK_PREFIX_BOUNDARY);
 }
 
 /** True when `boundary` falls between a high and a low surrogate of `text`. */
