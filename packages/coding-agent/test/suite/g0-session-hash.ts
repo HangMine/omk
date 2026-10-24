@@ -1,16 +1,16 @@
 /**
- * Spec 119 G0 byte check. Runs one fixed faux-model scenario (/goal setup, one bash tool call that times
- * out, the goal loop to its round limit) with a fixed clock, seeded randomness and counter ids, then prints
- * sha256 of the session JSONL and of the provider request contexts. Imports only modules that exist on main
+ * Spec 119 G0 byte check. Runs one fixed faux-model scenario (an edit abort, a write abort, one RPC
+ * AgentSession.steer(), /goal setup, one bash tool call that times out, the goal loop to its round limit)
+ * with a fixed clock, seeded randomness and counter ids, then prints sha256 of the session JSONL and of the provider request contexts. Imports only modules that exist on main
  * (a4bfeb5a97), so the same file runs on main and on a branch; with OMK_GOAL_AUTONOMY unset both must match.
  *
  *   cd packages/coding-agent && OMK_BASH_SANDBOX=off npx tsx test/suite/g0-session-hash.ts
  */
 
 /**
- * Spec 119 G0 byte check. Runs one fixed faux-model scenario (/goal setup, one bash tool call that times
- * out, the goal loop to its round limit) with a fixed clock, seeded randomness and counter ids, then prints
- * sha256 of the session JSONL and of the provider request contexts. Imports only modules that exist on main
+ * Spec 119 G0 byte check. Runs one fixed faux-model scenario (an edit abort, a write abort, one RPC
+ * AgentSession.steer(), /goal setup, one bash tool call that times out, the goal loop to its round limit)
+ * with a fixed clock, seeded randomness and counter ids, then prints sha256 of the session JSONL and of the provider request contexts. Imports only modules that exist on main
  * (a4bfeb5a97), so the same file runs on main and on a branch; with OMK_GOAL_AUTONOMY unset both must match.
  *
  *   cd packages/coding-agent && OMK_BASH_SANDBOX=off npx tsx test/suite/g0-session-hash.ts
@@ -65,12 +65,37 @@ Object.defineProperty(globalThis.crypto, "getRandomValues", {
 const { fauxAssistantMessage, fauxToolCall } = await import("omk-ai");
 const { default: goalController } = await import("../../src/core/extensions/builtin/goal-controller.ts");
 const { createBashTool } = await import("../../src/core/tools/bash.ts");
+const { createEditTool } = await import("../../src/core/tools/edit.ts");
+const { createWriteTool } = await import("../../src/core/tools/write.ts");
 const { createHarness } = await import("./harness.ts");
 
 const requests: string[] = [];
+// In-memory file operations that abort the run mid-call (after the tool started), so edit and write each
+// hit their own abort check with no filesystem or timing dependence.
+const abortRun = (): void => {
+	void harness.session.abort();
+};
+const files = new Map<string, string>([["/g0/notes.txt", "draft\n"]]);
+const editTool = createEditTool("/g0", {
+	operations: {
+		access: async () => abortRun(),
+		readFile: async (path) => Buffer.from(files.get(path) ?? ""),
+		writeFile: async (path, content) => {
+			files.set(path, content);
+		},
+	},
+});
+const writeTool = createWriteTool("/g0", {
+	operations: {
+		mkdir: async () => abortRun(),
+		writeFile: async (path, content) => {
+			files.set(path, content);
+		},
+	},
+});
 const harness = await createHarness({
 	persistSession: true,
-	tools: [createBashTool("/tmp")],
+	tools: [createBashTool("/tmp"), editTool, writeTool],
 	extensionFactories: [goalController],
 });
 // The faux provider has no wire payload; the request it receives is the full provider Context
@@ -93,6 +118,44 @@ async function idle(): Promise<void> {
 }
 
 try {
+	// 1. edit abort, 2. write abort (each ends its run), 3. one RPC steer() mid-run.
+	harness.setResponses(
+		[
+			fauxAssistantMessage(
+				fauxToolCall(
+					"edit",
+					{ path: "notes.txt", edits: [{ oldText: "draft", newText: "final" }] },
+					{ id: "g0-edit-1" },
+				),
+				{ stopReason: "toolUse" },
+			),
+		].map(recorded),
+	);
+	await harness.session.prompt("edit the notes").catch(() => undefined);
+	await idle();
+	harness.setResponses(
+		[
+			fauxAssistantMessage(
+				fauxToolCall("write", { path: "out/report.txt", content: "report" }, { id: "g0-write-1" }),
+				{
+					stopReason: "toolUse",
+				},
+			),
+		].map(recorded),
+	);
+	await harness.session.prompt("write the report").catch(() => undefined);
+	await idle();
+	harness.setResponses([
+		async (context: unknown) => {
+			requests.push(JSON.stringify(context));
+			await harness.session.steer("RPC steer: keep it short");
+			return fauxAssistantMessage("noted");
+		},
+		recorded(fauxAssistantMessage("short it is")),
+	]);
+	await harness.session.prompt("summarize");
+	await idle();
+
 	await harness.session.prompt("/goal Write the report");
 	harness.setResponses(
 		[
