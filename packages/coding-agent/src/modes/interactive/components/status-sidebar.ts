@@ -101,7 +101,8 @@ export class StatusSidebarComponent implements Component {
 	private getAutoCompactEnabled: () => boolean;
 	private getTerminalRows: () => number;
 	private requestRender: () => void;
-	private usageReader: SubscriptionUsageReader;
+	/** Caller-owned or fetcher-specific reader; undefined means the shared per-session reader. */
+	private readonly ownUsageReader: SubscriptionUsageReader | undefined;
 
 	// --- living elements: rolling CPU sparkline + cached MCP/usage data ---
 	private cpuHistory: number[] = [];
@@ -133,11 +134,16 @@ export class StatusSidebarComponent implements Component {
 							? codexSubscriptionSnapshot(await legacyFetcher(session))
 							: loadSubscriptionUsage(session, undefined, provider)
 				: (session, provider) => loadSubscriptionUsage(session, undefined, provider));
-		this.usageReader =
+		this.ownUsageReader =
 			options.usageReader ??
 			(options.fetchSubscriptionUsage || legacyFetcher
 				? new SubscriptionUsageReader(getSession, fetchSubscriptionUsage, this.requestRender)
-				: interactiveSubscriptionUsageReader(getSession(), this.requestRender));
+				: undefined);
+	}
+
+	/** The shared reader belongs to one AgentSession, and /new or resume replaces it: resolve it now. */
+	private get usageReader(): SubscriptionUsageReader {
+		return this.ownUsageReader ?? interactiveSubscriptionUsageReader(this.getSession(), this.requestRender);
 	}
 
 	invalidate(): void {
