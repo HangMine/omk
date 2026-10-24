@@ -14,7 +14,8 @@
 </p>
 
 <p align="center">
-  A terminal coding agent with model switching and explicit, test-backed goals.
+  An open-source multi-agent coding CLI for your terminal: switch models in one
+  session and finish a goal only when your test passes.
 </p>
 
 <p align="center">
@@ -37,9 +38,11 @@
 
 ---
 
-A lightweight, MIT-licensed coding agent for your terminal. Switch models in
-one session, add subagents when you need them, and mark a goal done only when
-your own check passes.
+OMK is a lightweight, MIT-licensed AI coding agent for your terminal, written in
+TypeScript. Switch models in one session, add subagents when you need them, and
+mark a goal done only when your own check passes. It is a standalone CLI, so it
+can serve as an open-source alternative to a single-provider agent such as
+Claude Code.
 
 Requires Node.js 22.19 or newer:
 
@@ -496,6 +499,22 @@ published CLI includes a generated `npm-shrinkwrap.json`. Read
 change.
 
 ## FAQ
+
+### What is OMK?
+
+OMK (Open Multi-Agent Kit) is an open-source coding agent CLI for the terminal.
+It reads files, edits code, and runs commands in your repository. You can switch
+models inside one session, add subagents when a task needs them, and use
+`/goal verify` so a goal only counts as done when your chosen check passes. It
+is MIT-licensed and written in TypeScript.
+
+### How do I install OMK?
+
+With Node.js 22.19 or newer, run
+`npm install -g open-multi-agent-kit --ignore-scripts`, then `omk` in your
+project. Without Node.js, use the standalone installer on macOS or Linux:
+`curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh`.
+See [Quick start](#quick-start).
 
 ### Why use OMK instead of Claude Code?
 
