@@ -64,3 +64,10 @@ G0–G13 of `spec.md` §4 plus EV12 above, all 100% on deterministic tests befor
 2. `presentBytesByProducer` ships in the mapping PR; only with flag `observe`/`delete`; flag off has no field and no computation.
 3. `bash-spill`: no call site in `src`, excluded from D3; dead-code removal is a separate later PR.
 4. Executor results in RPC/interactive always hold `user-visible`, even with `excludeFromContext`. When unsure, fail closed (no delete).
+
+## 9. Consumer names (Tech Lead, 2026-10-24 KST)
+
+- `tool-result-commit`: the tool result that contains or references the artifact has been committed to the session/context.
+- `turn-settled`: the turn that produced or read the artifact has settled, with no further tool reads pending.
+- `bash-executor-log` needs no consumer: it is always pinned `user-visible` (§8 decision 4).
+- The mapping PR only maps; recording these consumers as consumed is wired in the PR that enables delete.

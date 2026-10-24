@@ -2,7 +2,24 @@
 export type EvidenceProducer = "goal-recall" | "read-spill" | "bash-spill" | "tool-output-log" | "bash-executor-log";
 
 /** `unknown`: no producer/consumer mapping exists yet, so nothing may be deleted on its behalf (D2 gap). */
-export type EvidenceHoldReason = "goal-active" | "awaiting-consumer" | "retry" | "recovery" | "unknown";
+/** `user-visible` (spec 118 D3 decision 4): the path was surfaced to the user; never auto-deleted. */
+export type EvidenceHoldReason =
+	| "goal-active"
+	| "awaiting-consumer"
+	| "retry"
+	| "recovery"
+	| "user-visible"
+	| "unknown";
+
+/**
+ * Spec 118 D3 decision 1: producer -> required consumers (observe only; nothing consumes or deletes yet).
+ * A spill / tool-bash log is needed until its tool result is committed and the turn that read it settled.
+ * `bash-spill` has no call site in `src` and is deliberately left unmapped (decision 3).
+ */
+export const SPILL_CONSUMERS = ["tool-result-commit", "turn-settled"] as const;
+export const TOOL_OUTPUT_LOG_CONSUMERS = ["tool-result-commit", "turn-settled"] as const;
+/** Executor output is pinned `user-visible` instead (decision 4); it waits on no model consumer. */
+export const EXECUTOR_LOG_CONSUMERS = [] as const;
 
 export type EvidenceLifecycleMode = "off" | "observe" | "delete";
 
@@ -34,6 +51,8 @@ export interface EvidenceLifecycleReport {
 	readonly registered: number;
 	readonly present: number;
 	readonly presentBytes: number;
+	/** Spec 118 D3 primary: bytes still present per producer (only computed when the flag is on). */
+	readonly presentBytesByProducer: Readonly<Partial<Record<EvidenceProducer, number>>>;
 	readonly removedByExistingPolicy: number;
 	readonly byProducer: Readonly<Partial<Record<EvidenceProducer, number>>>;
 	readonly holdReasons: Readonly<Partial<Record<EvidenceHoldReason, number>>>;
