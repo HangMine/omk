@@ -27,9 +27,10 @@ Integration points: `goal-continuation.ts` (`decideGoalContinuation`), `extensio
 
 ## 3. Measurable success criterion
 
-- **Primary: false-completion rate** (goal reported `completed`, fails independent grading), paired per task. Non-inferiority per spec 106 §5: pass iff one-sided 95% upper bound of FC(autonomy) − FC(baseline) < δ (δ = +5pp placeholder, pending 인호).
-- Secondary (report-only): user confirmation turns per completed goal; verified completions; stop reasons histogram.
-- A drop in confirmations with any rise in false completion ⇒ fail.
+- **Verdict (first A/B):** spec 116 gates (pass rate ≥ base − 3pp; cost ≤ 1.10× base; wall ≤ 1.25× base) **plus** deterministic G0, AU1–AU4, G5–G7 at 100%. No δ in the pass criteria.
+- **False-completion rate — report-only, not a verdict.** Definition: goal reported `completed` (done) but hidden tests fail, graded independently of omk's own acceptance checks; paired per task, both denominators reported. A non-inferiority bar (spec 106 §5) is only set from this result, before any second measurement.
+- Also report-only: user confirmation turns per completed goal; verified completions; stop reasons histogram.
+- Agent Researcher first counts outcome-unknown cases in free flag-off logs; spec and code work do not wait on that number.
 
 ## 4. Gates (deterministic, 100% before any paid run)
 
@@ -55,8 +56,8 @@ Integration points: `goal-continuation.ts` (`decideGoalContinuation`), `extensio
 ## 6. A/B plan
 
 - Arms: base = flag unset with `/goal` + approved check; treatment = `OMK_GOAL_AUTONOMY=1`. One pinned main SHA, same tasks/model/provider/effort/tools/budget, paired.
-- Free first: deterministic gates + count eligible tasks (approved check, ≥1 failing round) from existing run logs; pilot re-estimates p_disc before freezing n (spec 106 estimate ≈250 paired tasks at p_disc 0.10, δ 5pp).
-- Extra gates as spec 116: cost ≤ 1.10× base, wall ≤ 1.25× base.
+- Free first: deterministic gates + count eligible tasks (approved check, ≥1 failing round) from existing run logs; need ≥ 3 eligible tasks, else do not run.
+- Verdict = §3 (spec 116 gates + deterministic gates). False completion is reported, not gated.
 - **No paid run until 인호 posts a $ cap.**
 
 ## 7. Risks
@@ -64,7 +65,7 @@ Integration points: `goal-continuation.ts` (`decideGoalContinuation`), `extensio
 - Runaway loops / cost: mitigated by round cap + budget + deadline, all user-set.
 - Repeated side effects: outcome-unknown stop; command-safety unchanged.
 - Silent scope drift: scope pin on revision + command sha.
-- False completion rise: primary metric; any rise beyond δ fails.
+- False completion rise: reported every run; sets the bar for the next measurement.
 - Steer race with an in-flight settle: revoke record checked in `continueGoal()` (test AU2).
 
 ## 8. Rollback
@@ -73,7 +74,7 @@ Unset the flag: controller behaves as main. New custom entries are ignored when 
 
 ## 9. Open questions (Tech Lead)
 
-1. δ = +5pp and the paid $ cap — still pending 인호; OK to land code with gates only?
+1. Paid $ cap pending 인호. (δ removed per Tech Lead 2026-10-24 KST: false completion is report-only in the first A/B.)
 2. Budget source: `/goal budget` subcommand only, or also env (`OMK_GOAL_BUDGET_USD`)? Cost from session usage — include subagent lanes?
 3. Intent classifier (goal from explicit execution request): split to a later spec as proposed?
 4. Outcome-unknown: is "aborted/timeout of `bash`/`edit`/`write`" the right definition, or use command-safety's mutating classification?
