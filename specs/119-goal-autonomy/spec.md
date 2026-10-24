@@ -17,17 +17,17 @@ Scope of this file: spec only; no code, no deps, no CHANGELOG.
 
 Flag: **`OMK_GOAL_AUTONOMY=1`** (strict `=== "1"`; any other value ⇒ off). Unset ⇒ behavior byte-identical to main (test-pinned, G0). No YOLO; `command-safety` / `command-safety-parser` unchanged; `maxRounds` default 8, not raisable by the model.
 
-1. **Stop policy** — extend `decideGoalContinuation()` input with optional `budget` (`{ maxCostUsd?, deadlineIso? }`, from `/goal budget …` or env, never model-set) and `lastSideEffect: "ok" | "unknown"`. New reasons `budget-limit`, `deadline`, `outcome-unknown`. Flag off ⇒ fields ignored, reasons unreachable. Each stop moves the goal to `blocked` via existing `store.transition` with a typed reason, appended as a `goal_autonomy_stop` custom entry (`{reason, round, revision}`; no prompt text).
-2. **Outcome-unknown** — a tool result marked aborted/timeout for a mutating tool (`bash`, `edit`, `write`) in the settled turn sets `lastSideEffect="unknown"` ⇒ stop, never auto-continue that round (AU4).
-3. **Steer/cancel revocation (AU2)** — on user input while a goal is active, record `goal_autonomy_revoke {round}`; `continueGoal()` refuses a continuation whose round ≤ revoked round until the user resumes (`/goal resume`). Cancel ⇒ `paused`.
+1. **Stop policy** — extend `decideGoalContinuation()` input with optional `budget` (`{ maxCostUsd?, deadlineIso? }`, set **only** by the user via `/goal budget …`; never env, never model-set) and `lastSideEffect: "ok" | "unknown"`. New reasons `budget-limit`, `deadline`, `outcome-unknown`, `scope-changed`. Cost includes subagent lanes. A call with unknown cost is never counted as 0; if remaining budget cannot be determined ⇒ stop with `budget-limit` (fail closed). Flag off ⇒ fields ignored, reasons unreachable. Each stop moves the goal to `blocked` via existing `store.transition` and is recorded as a `goal_autonomy_stop` custom entry (`{reason, round, revision}`; no prompt text). A stop is a normal end, so `omk.goal.v1` is unchanged and `DurableGoalErrorCode` is not used. An unknown stop reason when reading entries ⇒ fail closed (treat as stopped, no auto-continue).
+2. **Outcome-unknown** — an aborted or timed-out `bash`, `edit` or `write` call in the settled turn sets `lastSideEffect="unknown"` ⇒ stop, never auto-continue that round (AU4). Explicitly not the `command-safety` mutating list.
+3. **Steer (AU2)** — applies only to an explicit user steer. A steer while a goal is active sets the goal to `paused`, drops the pending continuation and records `goal_autonomy_revoke {round}`; `continueGoal()` refuses any continuation of a round ≤ the revoked round. The goal resumes only on explicit user `/goal resume`.
 4. **Scope pin (AU3)** — approval stores `{contractRevision, commandSha256}` (sha only). If `checkIdentity()` revision differs from the pinned one at settle, the loop stops with `scope-changed` and asks re-approval; no reuse of the old approval.
-5. **Opt-in goal creation** — out of the first PR. Only explicit `/goal`. Intent classifier is a separate follow-up behind the same flag after metrics (Q3).
+5. **Opt-in goal creation** — out of scope. Only explicit `/goal`. The intent classifier is a separate spec (confirmed, Tech Lead 2026-10-24).
 
 Integration points: `goal-continuation.ts` (`decideGoalContinuation`), `extensions/builtin/goal-controller.ts` (`agent_settled`, `continueGoal`, `/goal` command: `budget` subcommand, `input` handler), `goal-controller-acceptance.ts` (`settle`, `block`), `goal-acceptance.ts` (`checkIdentity`), `durable-goal.ts` (no schema change; reasons go in custom entries), `extensions/builtin/harness-factories.ts` (unchanged; goal controller already registered via `OMK_GOAL_CONTROLLER`).
 
 ## 3. Measurable success criterion
 
-- **Verdict (first A/B):** spec 116 gates (pass rate ≥ base − 3pp; cost ≤ 1.10× base; wall ≤ 1.25× base) **plus** deterministic G0, AU1–AU4, G5–G7 at 100%. No δ in the pass criteria.
+- **Verdict (first A/B):** spec 116 gates (pass rate ≥ base − 3pp; cost ≤ 1.10× base; wall ≤ 1.25× base) **plus** deterministic G0, AU1–AU4, G5–G8 at 100%. No δ in the pass criteria.
 - **False-completion rate — report-only, not a verdict.** Definition: goal reported `completed` (done) but hidden tests fail, graded independently of omk's own acceptance checks; paired per task, both denominators reported. A non-inferiority bar (spec 106 §5) is only set from this result, before any second measurement.
 - Also report-only: user confirmation turns per completed goal; verified completions; stop reasons histogram.
 - Agent Researcher first counts outcome-unknown cases in free flag-off logs; spec and code work do not wait on that number.
@@ -38,18 +38,19 @@ Integration points: `goal-continuation.ts` (`decideGoalContinuation`), `extensio
 |---|---|
 | G0 | flag unset / `0` / `true`: first request, session entries and goal transitions byte-identical to main (golden) |
 | AU1 | approved check fail → repair → pass completes without extra confirmation, within `maxRounds` |
-| AU2 | steer, cancel, permission revoke mid-goal ⇒ no later continuation of revoked round; late result not accepted |
+| AU2 | explicit user steer mid-goal ⇒ goal `paused`, pending continuation dropped, no late continuation of the revoked round; resumes only on `/goal resume` |
 | AU3 | command / revision / target change ⇒ `scope-changed` stop, old approval not reused |
-| AU4 | round, deadline, cost limit, outcome-unknown ⇒ exact stop reason; 0 auto-retries of a mutating call with unknown outcome |
+| AU4 | round, deadline, cost limit (incl. subagent lanes), outcome-unknown ⇒ exact stop reason; unknown-cost call never counted as 0, undeterminable remaining budget ⇒ `budget-limit`; 0 auto-retries of a `bash`/`edit`/`write` call with unknown outcome |
 | G5 | model cannot raise `maxRounds` or budget (tool/prompt paths) |
 | G6 | `goal_autonomy_*` entries contain no prompt/command text (sha256 only) |
 | G7 | no new dependency (Library Scout diff on package/lock) |
+| G8 | resume: after a stop or steer, only explicit `/goal resume` continues; continuation uses the current revision; unknown stop reason in a `goal_autonomy_stop` entry ⇒ fail closed (no auto-continue) |
 
 ## 5. Test plan
 
 - `test/goal-continuation.test.ts`: new reasons, flag-off ignores fields.
-- `test/goal-autonomy.test.ts` (faux model, realistic usage): AU1–AU4, G5, G6.
-- `test/suite/goal-autonomy-session.test.ts`: real `AgentSession` loop incl. steer mid-goal and cancel.
+- `test/goal-autonomy.test.ts` (faux model, realistic usage): AU1–AU4, G5, G6, G8 (resume, unknown stop reason fail-closed, unknown-cost fail-closed, subagent-lane cost).
+- `test/suite/goal-autonomy-session.test.ts`: real `AgentSession` loop incl. explicit steer mid-goal ⇒ `paused`, then `/goal resume`.
 - G0 golden: extend existing goal-controller tests for unset flag. Existing goal/recall/evidence (spec 098/118) suites unchanged.
 - Targeted runs + `test/suite` + `npm run check`.
 
@@ -75,8 +76,4 @@ Unset the flag: controller behaves as main. New custom entries are ignored when 
 ## 9. Open questions (Tech Lead)
 
 1. Paid $ cap pending 인호. (δ removed per Tech Lead 2026-10-24 KST: false completion is report-only in the first A/B.)
-2. Budget source: `/goal budget` subcommand only, or also env (`OMK_GOAL_BUDGET_USD`)? Cost from session usage — include subagent lanes?
-3. Intent classifier (goal from explicit execution request): split to a later spec as proposed?
-4. Outcome-unknown: is "aborted/timeout of `bash`/`edit`/`write`" the right definition, or use command-safety's mutating classification?
-5. AU2: should steer pause the goal (`paused`) or only drop the pending continuation and keep `active`?
-6. Stop reasons as custom entries vs. new `DurableGoalErrorCode` values (schema `omk.goal.v1` unchanged in this proposal)?
+2–6. Resolved (Tech Lead 2026-10-24): budget only via `/goal budget`, cost includes subagent lanes, unknown cost fails closed; intent classifier is a separate spec; outcome-unknown = aborted/timed-out `bash`/`edit`/`write` (not the command-safety list); explicit steer ⇒ `paused` + pending continuation dropped, resume only on explicit user resume; stop reasons stay custom entries, `omk.goal.v1` unchanged, `DurableGoalErrorCode` not used.
