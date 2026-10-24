@@ -116,6 +116,27 @@ describe("spec 118 D3 decision 2: presentBytesByProducer", () => {
 		expect(JSON.stringify(report)).not.toContain(RAW);
 	});
 
+	it("no double counting: every path under one producer, registered once, per-path bytes sum to the totals", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "observe");
+		spill("read");
+		await toolLog();
+		await executorLog();
+		await executorLog();
+		const records = listEvidenceArtifacts();
+		expect(records).toHaveLength(4);
+		const producersOf = new Map<string, Set<string>>();
+		for (const r of records)
+			producersOf.set(r.pathSha256, (producersOf.get(r.pathSha256) ?? new Set()).add(r.producer));
+		expect([...producersOf.values()].filter((set) => set.size > 1)).toEqual([]);
+		expect(producersOf.size).toBe(records.length);
+		expect(records.map((r) => r.artifactId)).toEqual(["ev-1", "ev-2", "ev-3", "ev-4"]);
+		const report = evidenceLifecycleReport();
+		const sums: Record<string, number> = {};
+		for (const r of records) sums[r.producer] = (sums[r.producer] ?? 0) + r.bytes;
+		expect(sums).toEqual(report.presentBytesByProducer);
+		expect(records.reduce((a, r) => a + r.bytes, 0)).toBe(report.presentBytes);
+	});
+
 	it("flag off: nothing is registered and no evidence_lifecycle entry (so no field) is written", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
