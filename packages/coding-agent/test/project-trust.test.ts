@@ -30,6 +30,7 @@ import {
 	TRUST_PROJECT_ENV,
 	workerProjectTrustEnv,
 } from "../src/core/project-trust.ts";
+import { forgetProjectTrustDecision } from "../src/core/project-trust-store.ts";
 import { type Settings, SettingsManager } from "../src/core/settings-manager.ts";
 
 let root: string;
@@ -631,5 +632,26 @@ describe("workerProjectTrustEnv (decision 2)", () => {
 				home,
 			}),
 		).toBe("0");
+	});
+});
+
+describe("project trust store lock", () => {
+	it("waits the full lock timeout even when the wall clock jumps forward", () => {
+		const lock = `${projectTrustStorePath(home)}.lock`;
+		mkdirSync(lock, { recursive: true });
+		// A future mtime keeps the mtime-based stale check out of this test, so only the wait deadline is measured.
+		const future = new Date(Date.now() + 60_000);
+		utimesSync(lock, future, future);
+		// One 5s forward step after the first read, like the WSL2 jumps.
+		const real = Date.now.bind(Date);
+		let calls = 0;
+		const clock = vi.spyOn(Date, "now").mockImplementation(() => real() + (calls++ > 0 ? 5000 : 0));
+		const started = performance.now();
+		try {
+			forgetProjectTrustDecision(project, home);
+		} finally {
+			clock.mockRestore();
+		}
+		expect(performance.now() - started).toBeGreaterThanOrEqual(1500);
 	});
 });

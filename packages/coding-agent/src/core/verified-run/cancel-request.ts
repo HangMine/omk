@@ -145,9 +145,9 @@ export async function cancelVerifiedRun(
 	if (inspectSessionOwnerLeaseSync(lease).status === "absent")
 		return Object.freeze({ runId, outcome: "not_running", requestId: null });
 	const { requestId } = requestRunCancel(runPath);
-	const deadline = Date.now() + options.waitMs;
+	const deadline = performance.now() + options.waitMs;
 	while (inspectSessionOwnerLeaseSync(lease).status !== "absent") {
-		if (Date.now() >= deadline) return Object.freeze({ runId, outcome: "pending", requestId });
+		if (performance.now() >= deadline) return Object.freeze({ runId, outcome: "pending", requestId });
 		await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 100));
 	}
 	const outcome = withdrawRunCancelRequest(runPath, requestId) ? "not_observed" : "observed";

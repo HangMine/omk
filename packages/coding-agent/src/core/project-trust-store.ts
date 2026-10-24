@@ -75,7 +75,8 @@ function sleepSync(ms: number): void {
 
 /** Take the lock directory; break it when stale; give up (unlocked write) after LOCK_WAIT_MS. */
 function acquireLock(lock: string): boolean {
-	const deadline = Date.now() + LOCK_WAIT_MS;
+	// Monotonic wait; the stale check below compares with mtime, so it stays on the wall clock.
+	const deadline = performance.now() + LOCK_WAIT_MS;
 	for (;;) {
 		try {
 			mkdirSync(lock, { mode: 0o700 });
@@ -91,7 +92,7 @@ function acquireLock(lock: string): boolean {
 		} catch {
 			continue; // released between mkdir and stat
 		}
-		if (Date.now() >= deadline) return false;
+		if (performance.now() >= deadline) return false;
 		sleepSync(25);
 	}
 }
