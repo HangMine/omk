@@ -181,12 +181,11 @@ describe("spec 118 D3 decision 4: executor pinned user-visible", () => {
 		expect(listEvidenceArtifacts().map((r) => r.holds)).toEqual([["user-visible"]]);
 	});
 
-	it("there is no way to unpin: updates and consumers keep the hold", async () => {
+	it("the pin comes from the executor helper, not the registry: each executor log is pinned", async () => {
 		const path = await executorLog();
-		registerEvidenceArtifact({ producer: "bash-executor-log", path, requiredConsumers: [] }); // re-register w/o flag
-		const [record] = listEvidenceArtifacts();
-		// A second registration without the pin is a new record; real producers always pass the pin.
-		expect(record.holds).toEqual([]);
+		// A bare registry call without the pin is not pinned; only the executor helper adds it.
+		registerEvidenceArtifact({ producer: "bash-executor-log", path, requiredConsumers: [] });
+		expect(listEvidenceArtifacts().at(-1)?.holds).toEqual([]);
 		await executorLog();
 		expect(listEvidenceArtifacts().at(-1)?.holds).toEqual(["user-visible"]);
 	});
