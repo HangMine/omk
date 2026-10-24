@@ -32,7 +32,7 @@ async function runArm(
 	flag: "1" | "shadow" | undefined,
 ): Promise<{ first: string; toolResult: string; toolDetails: string; calls: number }> {
 	if (flag) process.env.OMK_EDIT_DIAGNOSTICS = flag;
-	else delete process.env.OMK_EDIT_DIAGNOSTICS;
+	else process.env.OMK_EDIT_DIAGNOSTICS = "0";
 	const harness = await createHarness();
 	harnesses.push(harness);
 	const dir = harness.tempDir;
@@ -124,7 +124,7 @@ describe("spec 107 checkerRan per session (pre-registration)", () => {
 		logDir = mkdtempSync(join(tmpdir(), "omk-edit-diag-session-"));
 		process.env.OMK_RUN_LOG_DIR = logDir;
 		if (flag) process.env.OMK_EDIT_DIAGNOSTICS = flag;
-		else delete process.env.OMK_EDIT_DIAGNOSTICS;
+		else process.env.OMK_EDIT_DIAGNOSTICS = "0";
 		const harness = await createHarness();
 		harnesses.push(harness);
 		writeFileSync(join(harness.tempDir, "a.ts"), "export const x: number = 1;\n");
@@ -179,7 +179,7 @@ describe("spec 107 checkerRan per session (pre-registration)", () => {
 			logDir = mkdtempSync(join(tmpdir(), "omk-edit-diag-session-"));
 			process.env.OMK_RUN_LOG_DIR = logDir;
 			if (flag) process.env.OMK_EDIT_DIAGNOSTICS = flag;
-			else delete process.env.OMK_EDIT_DIAGNOSTICS;
+			else process.env.OMK_EDIT_DIAGNOSTICS = "0";
 			const harness = await createHarness();
 			harnesses.push(harness);
 			harness.setResponses([fauxAssistantMessage("done")]);

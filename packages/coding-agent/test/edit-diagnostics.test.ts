@@ -116,7 +116,7 @@ afterEach(() => {
 
 describe("flag off: byte-identical", () => {
 	it("edit and write results equal the pre-feature shape and never call the checker", async () => {
-		for (const value of [undefined, "0", "true", ""]) {
+		for (const value of ["0", "false", "off", "OFF"]) {
 			if (value === undefined) delete process.env.OMK_EDIT_DIAGNOSTICS;
 			else process.env.OMK_EDIT_DIAGNOSTICS = value;
 			const calls = fake([{ lines: [err("a.ts", 1, "boom")] }, { lines: [err("a.ts", 1, "new")] }]);
@@ -330,7 +330,7 @@ describe("flag on", () => {
 		aborter.abort();
 		await expect(pending).rejects.toThrow("Operation aborted");
 		expect(spawned.kills).toBe(1);
-		delete process.env.OMK_EDIT_DIAGNOSTICS;
+		process.env.OMK_EDIT_DIAGNOSTICS = "0";
 		const next = await createEditToolDefinition(root).execute(
 			"t",
 			{ path: "a.ts", edits: [{ oldText: "2", newText: "4" }] },
@@ -402,7 +402,7 @@ describe("shadow mode (Tech Lead ruling 1)", () => {
 		const results = () => [{ lines: [] }, { lines: [err("a.ts", 1, "brand new error")] }];
 		const arms: Record<string, { edit: string; write: string; calls: number }> = {};
 		for (const mode of ["off", "shadow"] as const) {
-			if (mode === "off") delete process.env.OMK_EDIT_DIAGNOSTICS;
+			if (mode === "off") process.env.OMK_EDIT_DIAGNOSTICS = "0";
 			else process.env.OMK_EDIT_DIAGNOSTICS = "shadow";
 			writeFileSync(join(root, "a.ts"), "const x = 1;\n");
 			writeFileSync(join(root, "b.ts"), "let y = 1;\n");
@@ -503,7 +503,7 @@ describe("checkerRan and checker versions (spec 107 pre-registration)", () => {
 	});
 
 	it("OFF: no session state, no session/checkers lines", async () => {
-		delete process.env.OMK_EDIT_DIAGNOSTICS;
+		process.env.OMK_EDIT_DIAGNOSTICS = "0";
 		fake([]);
 		await edit("a.ts", "1", "2");
 		expect(flushEditDiagnosticsSession()).toBeUndefined();

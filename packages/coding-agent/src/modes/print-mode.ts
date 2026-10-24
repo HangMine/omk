@@ -56,7 +56,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 	let overflowRecoveryFailure: string | undefined;
 	let renderedTermination: SessionTermination | undefined;
 	const signalCleanupHandlers: Array<() => void> = [];
-	// Spec 112: only json mode with OMK_JSON_SESSION_INFO=1 creates an emitter; otherwise nothing changes.
+	// Spec 112: only json mode with OMK_JSON_SESSION_INFO on (default; `0`/`false`/`off` opts out) creates an emitter; otherwise nothing changes.
 	const sessionInfo: JsonSessionInfoEmitter | undefined =
 		mode === "json" && jsonSessionInfoEnabled() ? createJsonSessionInfoEmitter(writeRawStdout) : undefined;
 

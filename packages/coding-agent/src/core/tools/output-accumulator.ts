@@ -12,7 +12,7 @@ export interface OutputAccumulatorOptions {
 	tempFilePrefix?: string;
 	/**
 	 * Spec 113: show head + marker + tail instead of tail only when a limit is passed
-	 * (bash passes `process.env.OMK_EXEC_TRUNCATE_MIDDLE === "1"`). Default off.
+	 * (bash passes `OMK_EXEC_TRUNCATE_MIDDLE` default-on, `0`/`false`/`off` opts out).
 	 */
 	headTail?: boolean;
 }

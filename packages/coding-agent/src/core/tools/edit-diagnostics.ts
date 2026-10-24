@@ -1,5 +1,5 @@
 /**
- * Spec 107: new-only diagnostics after edit/write (`OMK_EDIT_DIAGNOSTICS=1`, default off).
+ * Spec 107: new-only diagnostics after edit/write (`OMK_EDIT_DIAGNOSTICS`, default on; `0`/`false`/`off` opts out).
  *
  * Idea credited to SWE-agent's `windowed_edit_linting` (MIT) and Aider's auto-lint
  * (Apache-2.0). No code is copied. Unlike SWE-agent this variant is report-only: the
@@ -10,9 +10,11 @@
  * report only errors that are new vs the baseline. Timeouts, skips and stale files
  * append nothing to the tool text; they go to `details` and the run log only.
  */
+
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
+import { isEnvFlagOptOut } from "../env-flag.ts";
 import { appendRunLog } from "../run-log.ts";
 import {
 	type CollectFileDiagnostics,
@@ -51,14 +53,13 @@ import type { EditDiagnosticsMode } from "./edit-diagnostics-session.ts";
 export type { EditDiagnosticsMode };
 
 /**
- * `1` = on (report to the model), `shadow` = run the checker but write results only to
- * the run log (model-facing output byte-identical to off), anything else = off.
+ * Default on (incl. unset). `shadow` = checker runs, results only to the run log (model output
+ * byte-identical to off); `0`/`false`/`off` = off.
  */
 export function editDiagnosticsMode(env: NodeJS.ProcessEnv = process.env): EditDiagnosticsMode {
 	const raw = env[EDIT_DIAGNOSTICS_ENV];
-	if (raw === "1") return "on";
 	if (raw === "shadow") return "shadow";
-	return "off";
+	return isEnvFlagOptOut(raw) ? "off" : "on";
 }
 
 /** True when the checker runs at all (on or shadow). */

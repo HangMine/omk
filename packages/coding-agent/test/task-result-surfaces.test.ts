@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "../src/core/event-bus.ts";
 import { GoalAcceptanceFlow } from "../src/core/extensions/builtin/goal-controller-acceptance.ts";
 import type { GoalAcceptance } from "../src/core/goal-acceptance.ts";
@@ -10,6 +10,16 @@ import { formatTaskResultLine } from "../src/core/task-result-format.ts";
 import { runPrintMode } from "../src/modes/print-mode.ts";
 import { serializeJsonLine } from "../src/modes/rpc/jsonl.ts";
 import { createAssistantMessage, createRuntimeHost } from "./print-mode-fixtures.ts";
+
+// Pins the pre-default-on output shape: explicitly opt out of the default-on flag(s).
+const saved_OMK_JSON_SESSION_INFO = process.env.OMK_JSON_SESSION_INFO;
+beforeAll(() => {
+	process.env.OMK_JSON_SESSION_INFO = "0";
+});
+afterAll(() => {
+	if (saved_OMK_JSON_SESSION_INFO === undefined) delete process.env.OMK_JSON_SESSION_INFO;
+	else process.env.OMK_JSON_SESSION_INFO = saved_OMK_JSON_SESSION_INFO;
+});
 
 const printIo = vi.hoisted(() => ({ output: [] as string[] }));
 vi.mock("../src/core/output-guard.js", () => ({

@@ -1,8 +1,18 @@
 import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { type BashOperations, createBashTool } from "../src/core/tools/bash.ts";
+
+// Pins the pre-default-on output shape: explicitly opt out of the default-on flag(s).
+const saved_OMK_EXEC_TRUNCATE_MIDDLE = process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+beforeAll(() => {
+	process.env.OMK_EXEC_TRUNCATE_MIDDLE = "0";
+});
+afterAll(() => {
+	if (saved_OMK_EXEC_TRUNCATE_MIDDLE === undefined) delete process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+	else process.env.OMK_EXEC_TRUNCATE_MIDDLE = saved_OMK_EXEC_TRUNCATE_MIDDLE;
+});
 
 let dir: string;
 const artifacts = new Set<string>();

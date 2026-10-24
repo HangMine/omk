@@ -37,7 +37,7 @@ beforeEach(() => {
 	vi.stubEnv("OMK_RUN_LOG_DIR", "");
 	vi.stubEnv("OMK_RUN_LOG_ROLE", "");
 	vi.stubEnv("OMK_RUN_LOG_PARENT_SESSION", "");
-	vi.stubEnv("OMK_EXEC_TRUNCATE_MIDDLE", "");
+	vi.stubEnv("OMK_EXEC_TRUNCATE_MIDDLE", "0");
 });
 afterEach(() => {
 	vi.unstubAllEnvs();
@@ -102,7 +102,7 @@ describe("bash-output run log", () => {
 	});
 
 	it("tool result and definition are identical with and without the run log", async () => {
-		for (const middle of ["", "1"]) {
+		for (const middle of ["0", "1"]) {
 			vi.stubEnv("OMK_EXEC_TRUNCATE_MIDDLE", middle);
 			vi.stubEnv("OMK_RUN_LOG_DIR", "");
 			const off = [await run(SMALL), await run(BIG)].map(normalize);
