@@ -1,5 +1,5 @@
 /**
- * Spec 112: `OMK_JSON_SESSION_INFO=1` writes `omk_session_info` lines into the `--mode json` stream.
+ * Spec 112: `OMK_JSON_SESSION_INFO` (default on; `0`/`false`/`off` opts out) writes `omk_session_info` lines into the `--mode json` stream.
  * Real AgentSession + faux provider + real print mode; stdout is captured through the output guard.
  */
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -181,17 +181,26 @@ function stable(value: unknown): unknown {
 }
 
 describe("spec 112 OMK_JSON_SESSION_INFO", () => {
-	it("flag parsing: only exactly '1' is on", () => {
-		for (const value of [undefined, "", "0", "true", " 1", "yes"])
+	it("flag parsing: default on; only 0/false/off (case-insensitive, trimmed) opt out", () => {
+		for (const value of ["0", "false", "off", "OFF", " False ", " 0"])
 			expect(jsonSessionInfoEnabled({ [JSON_SESSION_INFO_ENV]: value })).toBe(false);
-		expect(jsonSessionInfoEnabled({ [JSON_SESSION_INFO_ENV]: "1" })).toBe(true);
+		for (const value of [undefined, "", "1", "true", "yes"])
+			expect(jsonSessionInfoEnabled({ [JSON_SESSION_INFO_ENV]: value })).toBe(true);
+	});
+
+	it("default on: unset flag writes the session-info line like flag=1", async () => {
+		const unset = await run({ flag: undefined });
+		const on = await run({ flag: "1" });
+		expect(infoLines(unset)).toHaveLength(1);
+		expect(unset.lines.map((line) => line.type)).toEqual(on.lines.map((line) => line.type));
+		expect(Object.keys(infoLines(unset)[0] as object).sort()).toEqual(Object.keys(infoLines(on)[0] as object).sort());
 	});
 
 	it("criterion 1: flag off returns the inner stream itself and writes no session-info line", async () => {
 		const inner: StreamFn = streamSimple;
-		expect(createJsonSessionInfoStreamFn(inner, {})).toBe(inner);
-		expect(createJsonSessionInfoStreamFn(inner, { [JSON_SESSION_INFO_ENV]: "true" })).toBe(inner);
-		const off = await run({ flag: undefined });
+		expect(createJsonSessionInfoStreamFn(inner, { [JSON_SESSION_INFO_ENV]: "0" })).toBe(inner);
+		expect(createJsonSessionInfoStreamFn(inner, { [JSON_SESSION_INFO_ENV]: "false" })).toBe(inner);
+		const off = await run({ flag: "off" });
 		const zero = await run({ flag: "0" });
 		expect(off.exitCode).toBe(0);
 		expect(infoLines(off)).toEqual([]);
@@ -200,7 +209,7 @@ describe("spec 112 OMK_JSON_SESSION_INFO", () => {
 	});
 
 	it("criterion 1/3: flag on only adds lines; the other stdout lines and provider requests equal flag off", async () => {
-		const off = await run({ flag: undefined });
+		const off = await run({ flag: "0" });
 		const on = await run({ flag: "1" });
 		expect(stable(on.lines.filter((line) => line.type !== "omk_session_info"))).toEqual(stable(off.lines));
 		expect(on.requests).toHaveLength(1);
@@ -319,7 +328,7 @@ describe("spec 112 OMK_JSON_SESSION_INFO", () => {
 	});
 
 	it("criterion 4: run-log lines are identical with the flag on and off (modulo time and pid)", async () => {
-		const off = await run({ flag: undefined, messages: ["again"] });
+		const off = await run({ flag: "0", messages: ["again"] });
 		const on = await run({ flag: "1", messages: ["again"] });
 		expect(on.runLog).toHaveLength(2);
 		// Each harness has its own temp cwd inside the system prompt, so systemHash and the faux

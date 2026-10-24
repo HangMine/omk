@@ -140,6 +140,7 @@ async function create(cwd: string, maxRounds: number, objective = "Ship v2"): Pr
 beforeEach(() => {
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
 	vi.stubEnv("OMK_GOAL_AUTONOMY", "1");
+	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // characterizes the pre-106 path; lifecycle defaults on
 });
 afterEach(() => {
 	vi.unstubAllEnvs();
@@ -147,7 +148,7 @@ afterEach(() => {
 });
 
 describe("G0: flag off is main", () => {
-	it.each([undefined, "0", "true"])(
+	it.each(["0", "false", "off"])(
 		"OMK_GOAL_AUTONOMY=%s registers no input handler and keeps budget as goal text",
 		async (value) => {
 			vi.stubEnv("OMK_GOAL_AUTONOMY", value as string);

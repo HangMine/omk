@@ -314,6 +314,31 @@ describe("spec 113: OMK_EXEC_TRUNCATE_MIDDLE", () => {
 		expect(descOn).toContain("truncated to last 2000 lines or 50KB");
 	});
 
+	it("14b. default on: unset/empty shows head+tail; 0/false/off restore tail-only", async () => {
+		const big = lines(5000);
+		const exec = vi.fn<BashOperations["exec"]>(async (_c, _cwd, { onData }) => {
+			onData(Buffer.from(big));
+			return { exitCode: 0 };
+		});
+		const bash = createBashTool(process.cwd(), { operations: { exec } });
+		const call = async () => {
+			const r = await bash.execute("call", { command: "seq 5000" });
+			const text = r.content[0].type === "text" ? r.content[0].text : "";
+			const path = text.match(/Full output: ([^\]\n]+)/)?.[1];
+			if (path) artifacts.add(path);
+			return text;
+		};
+		vi.unstubAllEnvs();
+		delete process.env.OMK_EXEC_TRUNCATE_MIDDLE;
+		expect(await call()).toContain("[... omitted ");
+		vi.stubEnv("OMK_EXEC_TRUNCATE_MIDDLE", "");
+		expect(await call()).toContain("[... omitted ");
+		for (const flag of ["0", "false", "off"]) {
+			vi.stubEnv("OMK_EXEC_TRUNCATE_MIDDLE", flag);
+			expect(await call()).not.toContain("[... omitted ");
+		}
+	});
+
 	it("15. memory: 50MB streamed keeps retained text <= head budget + 4 x maxBytes", () => {
 		const acc = new OutputAccumulator({ headTail: true });
 		const block = Buffer.from(lines(1000, (i) => `${i}${"r".repeat(60)}`));

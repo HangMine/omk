@@ -13,9 +13,11 @@ import {
 const d = (s: string) => skillBodyDigest(s);
 
 describe("spec 106 A1 skill admission ledger", () => {
-	it("flag parsing is default off", () => {
-		expect(isSkillAdmissionEnabled({})).toBe(false);
+	it("flag parsing is default on; 0/false/off opt out", () => {
+		expect(isSkillAdmissionEnabled({})).toBe(true);
 		expect(isSkillAdmissionEnabled({ OMK_SKILL_ADMISSION: "0" })).toBe(false);
+		expect(isSkillAdmissionEnabled({ OMK_SKILL_ADMISSION: " FALSE " })).toBe(false);
+		expect(isSkillAdmissionEnabled({ OMK_SKILL_ADMISSION: "off" })).toBe(false);
 		expect(isSkillAdmissionEnabled({ OMK_SKILL_ADMISSION: "1" })).toBe(true);
 	});
 

@@ -1,5 +1,5 @@
 /**
- * Spec 118 D2: recall delete-after-use, behind `OMK_EVIDENCE_LIFECYCLE=delete` (default off).
+ * Spec 118 D2: recall delete-after-use, default on (`OMK_EVIDENCE_LIFECYCLE` unset, `1` or `delete`; `observe` or `0` keep files).
  *
  * Only `goal-recall` artifacts are deletable, and only when every required consumer ACKed (a settled
  * re-run, never a read), the re-run verified a pass, no hold or reader lease remains, and the goal was not
@@ -65,6 +65,12 @@ function verifyPath(record: MutableRecord): string | undefined {
 	const path = record.path as string;
 	const dir = dirname(resolve(path));
 	if (!dir.endsWith(`${sep}.omk${sep}goals${sep}recall`) || !RECALL_NAME.test(basename(path))) return "outside";
+	// `.omk`, `goals` and `recall` must be real directories: a symlinked one could point outside the workspace.
+	try {
+		for (const d of [dir, dirname(dir), dirname(dirname(dir))]) if (lstatSync(d).isSymbolicLink()) return "outside";
+	} catch {
+		return "missing";
+	}
 	try {
 		const stat = lstatSync(path);
 		if (stat.isSymbolicLink()) return "symlink";

@@ -1,5 +1,6 @@
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
@@ -103,8 +104,15 @@ afterEach(() => {
 });
 
 describe("spec 118 flag", () => {
-	it("delete implies observe; unknown values fail closed to off (G13)", () => {
-		for (const value of ["Delete", "1", "true", "delete ", ""]) {
+	it("delete implies observe; unset, 1 and delete select delete; unknown values are observe, never delete (G13)", () => {
+		for (const value of [undefined, "1", "delete"]) {
+			expect(evidenceLifecycleMode({ OMK_EVIDENCE_LIFECYCLE: value })).toBe("delete");
+		}
+		for (const value of ["Delete", "true", "delete ", ""]) {
+			expect(evidenceLifecycleMode({ OMK_EVIDENCE_LIFECYCLE: value })).toBe("observe");
+			expect(evidenceLifecycleDeleteEnabled({ OMK_EVIDENCE_LIFECYCLE: value })).toBe(false);
+		}
+		for (const value of ["0", "false", "off", " Off "]) {
 			expect(evidenceLifecycleMode({ OMK_EVIDENCE_LIFECYCLE: value })).toBe("off");
 			expect(evidenceLifecycleObserveEnabled({ OMK_EVIDENCE_LIFECYCLE: value })).toBe(false);
 		}
@@ -114,8 +122,11 @@ describe("spec 118 flag", () => {
 		expect(evidenceLifecycleDeleteEnabled({ OMK_EVIDENCE_LIFECYCLE: "delete" })).toBe(true);
 	});
 
-	it("unknown value: a passing recheck deletes nothing and writes no sidecar", () => {
-		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "Delete");
+	it.each([
+		["unknown value", "Delete"],
+		["observe", "observe"],
+	])("%s: a passing recheck deletes nothing and writes no sidecar", (_n, value) => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", value);
 		const cwd = tempCwd();
 		const artifact = recall(cwd, "g");
 		observeRecallRecheck("g", true);
@@ -291,6 +302,17 @@ describe("spec 118 D2 path safety (G5)", () => {
 		observeRecallRecheck("g", true);
 		expect(readFileSync(target, "utf8")).toBe("keep");
 		expect(recordOf(1)?.deleteReason).toBe("symlink");
+	});
+
+	it("recall dir symlinked outside the workspace ⇒ 0 deletes; outside file untouched", () => {
+		const cwd = tempCwd();
+		const outside = tempCwd();
+		mkdirSync(join(cwd, ".omk", "goals"), { recursive: true });
+		symlinkSync(outside, join(cwd, ".omk", "goals", "recall"));
+		recall(cwd, "g");
+		observeRecallRecheck("g", true);
+		expect(readdirSync(outside).filter((n) => n.endsWith(".log"))).toHaveLength(1);
+		expect(recordOf(1)?.deleteReason).toBe("outside");
 	});
 
 	it("another session's artifact id is not found from this session", () => {

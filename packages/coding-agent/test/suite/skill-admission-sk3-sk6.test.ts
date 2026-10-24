@@ -70,6 +70,7 @@ function ledger(harness: Harness) {
 
 describe("spec 106 SK3: model read of SKILL.md", () => {
 	it("flag off: SKILL.md reads return the file unchanged and write no ledger entries", async () => {
+		vi.stubEnv("OMK_SKILL_ADMISSION", "0");
 		const { harness, skills } = await setup(12);
 		for (const skill of skills) expect(await modelReads(harness, skill.filePath)).toContain(`body of ${skill.name}`);
 		expect(ledger(harness)).toHaveLength(0);
@@ -122,6 +123,7 @@ describe("spec 106 SK3: model read of SKILL.md", () => {
 
 describe("spec 106 SK6: worker skill hand-off", () => {
 	it("flag off: no decision, no ledger write (caller keeps its legacy args)", async () => {
+		vi.stubEnv("OMK_SKILL_ADMISSION", "0");
 		const { harness, skills } = await setup(3);
 		expect(admitWorkerSkills(harness.sessionManager, skills)).toBeUndefined();
 		expect(ledger(harness)).toHaveLength(0);

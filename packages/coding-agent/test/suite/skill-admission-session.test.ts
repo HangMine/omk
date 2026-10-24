@@ -57,6 +57,7 @@ function admissionEntries(sm: SessionManager) {
 
 describe("spec 106 A1 session skill admission", () => {
 	it("flag off: explicit skills expand as before and no admission entries are written", async () => {
+		vi.stubEnv("OMK_SKILL_ADMISSION", "0");
 		const { harness } = await harnessWithSkills(12);
 		for (let i = 0; i < 12; i++) {
 			harness.setResponses([fauxAssistantMessage("ok")]);
@@ -119,6 +120,7 @@ describe("spec 106 A1 session skill admission", () => {
 	});
 
 	it("SK7: a session without ledger records but more than 10 delivered bodies refuses new admissions", async () => {
+		vi.stubEnv("OMK_SKILL_ADMISSION", "0");
 		const { harness } = await harnessWithSkills(12);
 		for (let i = 0; i < 11; i++) {
 			harness.setResponses([fauxAssistantMessage("ok")]);

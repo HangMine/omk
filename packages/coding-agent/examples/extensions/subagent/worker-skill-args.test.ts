@@ -50,6 +50,7 @@ function fixture() {
 
 describe("spec 106 SK6 worker skill args", () => {
 	it("flag off: args identical to legacy with enforceCapabilities on and off, no ledger writes", () => {
+		vi.stubEnv("OMK_SKILL_ADMISSION", "0");
 		const { catalog, validated, entries, admit } = fixture();
 		expect(workerSkillArgs(validated, () => catalog, true, admit)).toEqual({
 			args: buildEnforcementArgs(validated, catalog),

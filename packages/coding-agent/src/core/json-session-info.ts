@@ -9,14 +9,16 @@
  * With the flag off (anything but exactly "1") no sink is installed and
  * {@link createJsonSessionInfoStreamFn} returns its inner stream itself.
  */
+
 import type { StreamFn } from "omk-agent-core";
 import type { Context } from "omk-ai";
 import { serializePromptTools, systemHash, toolsHash } from "omk-ai/prompt-hash";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 
 export const JSON_SESSION_INFO_ENV = "OMK_JSON_SESSION_INFO";
 
 export function jsonSessionInfoEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	return env[JSON_SESSION_INFO_ENV] === "1";
+	return isDefaultOnEnvFlag(env[JSON_SESSION_INFO_ENV]);
 }
 
 export type JsonSessionInfoContext = Pick<Context, "systemPrompt" | "tools">;

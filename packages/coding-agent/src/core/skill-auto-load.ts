@@ -1,5 +1,5 @@
 /**
- * Spec 117: skill auto-load (`OMK_SKILL_AUTO_LOAD`, default off; requires `OMK_SKILL_ADMISSION=1`) and the
+ * Spec 117: skill auto-load (`OMK_SKILL_AUTO_LOAD`, default on, `0`/`false`/`off` opts out; requires skill admission, also default on) and the
  * always-on observe log `<OMK_RUN_LOG_DIR>/skill-autoload.jsonl`.
  *
  * Candidates come from the existing selector ranking (`selectSkills`, `SKILL_STRONG_THRESHOLD`); only strong
@@ -8,6 +8,7 @@
  * Flag off and run log off: returns before any work. Log lines hold hashes, booleans and numbers only.
  */
 import { resolve } from "node:path";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import { RUN_LOG_DIR_ENV, type RunLogRecord } from "./run-log.ts";
 import { isSkillAdmissionEnabled, SKILL_ADMISSION_ENTRY_TYPE, skillBodyDigest } from "./skill-admission-ledger.ts";
 import { admitSkillBody, readSkillFileBody, type SkillAdmissionStore } from "./skill-admission-session.ts";
@@ -31,20 +32,21 @@ export type { AutoLoadStore } from "./skill-autoload-observe.ts";
 let warned = false;
 
 export function skillAutoLoadFlag(env: NodeJS.ProcessEnv = process.env): boolean {
-	const value = env[SKILL_AUTO_LOAD_ENV]?.trim().toLowerCase();
-	return value === "1" || value === "true" || value === "on";
+	return isDefaultOnEnvFlag(env[SKILL_AUTO_LOAD_ENV]);
 }
 
-/** On only with `OMK_SKILL_ADMISSION=1`; the flag alone does nothing and warns once per process. */
+/** On only with skill admission on; with admission opted out it stays off and warns once, only if the flag was set explicitly. */
 export function skillAutoLoadActive(
 	env: NodeJS.ProcessEnv = process.env,
 	warn: (line: string) => void = (line) => process.stderr.write(line),
 ): boolean {
 	if (!skillAutoLoadFlag(env)) return false;
 	if (isSkillAdmissionEnabled(env)) return true;
-	if (!warned) {
+	if (!warned && env[SKILL_AUTO_LOAD_ENV] !== undefined) {
 		warned = true;
-		warn(`[omk] ${SKILL_AUTO_LOAD_ENV} needs OMK_SKILL_ADMISSION=1; skill auto-load stays off.\n`);
+		warn(
+			`[omk] ${SKILL_AUTO_LOAD_ENV} needs skill admission (OMK_SKILL_ADMISSION is opted out); skill auto-load stays off.\n`,
+		);
 	}
 	return false;
 }

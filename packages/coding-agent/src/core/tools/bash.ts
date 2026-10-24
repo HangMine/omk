@@ -3,6 +3,7 @@ import { type Static, Type } from "typebox";
 import { getShellEnv } from "../../utils/shell.ts";
 import { DEFAULT_BUILTIN_TOOL_TIMEOUTS } from "../agent-tool-settings.ts";
 import { classifyShellCommand } from "../command-safety.ts";
+import { isDefaultOnEnvFlag } from "../env-flag.ts";
 import { isCommandSafetyDisabled } from "../extensions/builtin/command-safety-gate.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 import { assertLoadoutAccess, type LoadoutAccessGuard } from "../loadout-access-policy.ts";
@@ -148,7 +149,7 @@ export function createBashToolDefinition(
 			// Spec 113: read per call; default off (byte-identical to tail-only output).
 			const output = new OutputAccumulator({
 				tempFilePrefix: "omk-bash",
-				headTail: process.env.OMK_EXEC_TRUNCATE_MIDDLE === "1",
+				headTail: isDefaultOnEnvFlag(process.env.OMK_EXEC_TRUNCATE_MIDDLE),
 			});
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;

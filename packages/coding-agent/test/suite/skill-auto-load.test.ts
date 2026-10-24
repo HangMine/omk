@@ -95,7 +95,11 @@ describe("spec 117 flag gating", () => {
 		const { pdf, other } = fixture();
 		const store = new Store();
 		const warn: string[] = [];
-		for (const env of [{}, { OMK_SKILL_ADMISSION: "1" }]) {
+		for (const env of [
+			{ OMK_SKILL_AUTO_LOAD: "0" },
+			{ OMK_SKILL_AUTO_LOAD: "off", OMK_SKILL_ADMISSION: "1" },
+			{ OMK_SKILL_ADMISSION: "0" },
+		]) {
 			expect(autoLoadSkills({ store, skills: [pdf, other], query: QUERY, env, warn: (l) => warn.push(l) })).toBe(
 				undefined,
 			);
@@ -108,12 +112,22 @@ describe("spec 117 flag gating", () => {
 		const { pdf } = fixture();
 		const warn: string[] = [];
 		for (const store of [new Store(), new Store()]) {
-			const env = { OMK_SKILL_AUTO_LOAD: "1" };
+			const env = { OMK_SKILL_AUTO_LOAD: "1", OMK_SKILL_ADMISSION: "0" };
 			expect(autoLoadSkills({ store, skills: [pdf], query: QUERY, env, warn: (l) => warn.push(l) })).toBe(undefined);
 			expect(store.entries).toHaveLength(0);
 		}
 		expect(warn).toHaveLength(1);
 		expect(skillAutoLoadActive(ON)).toBe(true);
+	});
+
+	it("default on: unset env loads the strong candidate; 0/false/off opt out", () => {
+		const { pdf, other } = fixture();
+		expect(autoLoadSkills({ store: new Store(), skills: [pdf, other], query: QUERY, env: {} })).toContain(
+			"PDF-BODY-SECRET",
+		);
+		for (const v of ["0", "false", "OFF"]) {
+			expect(skillAutoLoadActive({ OMK_SKILL_AUTO_LOAD: v })).toBe(false);
+		}
 	});
 });
 
@@ -223,7 +237,7 @@ describe("spec 117 delivery and workers", () => {
 	it("body goes in a prompt-skills message; system prompt options unchanged; defaults not loaded", async () => {
 		const { pdf, other } = fixture();
 		const store = new Store();
-		const off = await new PromptSkillFreeze(() => store).turn(input([pdf, other], {}));
+		const off = await new PromptSkillFreeze(() => store).turn(input([pdf, other], { OMK_SKILL_AUTO_LOAD: "0" }));
 		const on = await new PromptSkillFreeze(() => store).turn(input([pdf, other], ON));
 		expect(off.messages).toHaveLength(0);
 		expect(on.options).toEqual(off.options);
@@ -234,8 +248,8 @@ describe("spec 117 delivery and workers", () => {
 
 	it("AL7: worker env forces auto-load off and suggest off", () => {
 		const env = subagentWorkerEnv({ ...ON, OMK_SKILL_SEARCH_SUGGEST: "1" });
-		expect(env.OMK_SKILL_AUTO_LOAD).toBeUndefined();
-		expect("OMK_SKILL_AUTO_LOAD" in subagentWorkerEnv({})).toBe(false);
+		expect(env.OMK_SKILL_AUTO_LOAD).toBe("0");
+		expect(subagentWorkerEnv({}).OMK_SKILL_AUTO_LOAD).toBe("0");
 		expect(env.OMK_SKILL_SEARCH_SUGGEST).toBe("0");
 		expect(skillAutoLoadActive(env)).toBe(false);
 	});
@@ -246,7 +260,12 @@ describe("spec 117 skill-autoload.jsonl", () => {
 		const { root, pdf, other } = fixture();
 		const log = tmp();
 		const store = new Store();
-		autoLoadSkills({ store, skills: [pdf, other], query: QUERY, env: { OMK_RUN_LOG_DIR: log } });
+		autoLoadSkills({
+			store,
+			skills: [pdf, other],
+			query: QUERY,
+			env: { OMK_RUN_LOG_DIR: log, OMK_SKILL_AUTO_LOAD: "0", OMK_SKILL_ADMISSION: "0" },
+		});
 		const lines = readLog(log);
 		expect(lines).toHaveLength(1);
 		const line = lines[0] as Record<string, unknown>;

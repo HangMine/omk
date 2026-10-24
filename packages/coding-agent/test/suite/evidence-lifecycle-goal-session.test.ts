@@ -169,7 +169,7 @@ describe("spec 106 D1 evidence attribution through a live session", () => {
 	});
 
 	it("flag off: the AsyncLocalStorage is never constructed or entered and no entry is written", async () => {
-		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", undefined);
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // default is observe; flag-off cases opt out explicitly
 		const harness = await goalHarness();
 		await runGoalSession(harness);
 		await harness.session.executeBash("true");

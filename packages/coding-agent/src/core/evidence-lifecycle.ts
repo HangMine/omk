@@ -1,5 +1,5 @@
 /**
- * Spec 106 D1: evidence lifecycle, observe-only (`OMK_EVIDENCE_LIFECYCLE=observe`, default off).
+ * Spec 106 D1: evidence lifecycle, observe-only (`OMK_EVIDENCE_LIFECYCLE`, default `observe`; `0`/`false`/`off` opts out).
  *
  * Registers artifacts that omk producers write (goal recall, read/bash spill, tool-bash log, executor
  * `fullOutputPath`) and reports, per artifact, its producer, required consumers, consumed/verified/retry/
