@@ -63,6 +63,7 @@ interface H {
 	messages: string[];
 	notifications: string[];
 	context: { idle: boolean; pending: boolean };
+	onNotify?: (message: string) => void;
 }
 
 const roots: string[] = [];
@@ -98,12 +99,18 @@ function harness(cwd: string): H {
 		cwd,
 		signal: undefined,
 		hasUI: false,
-		ui: { notify: (message: string) => notifications.push(message), confirm: async () => false },
+		ui: {
+			notify: (message: string) => {
+				notifications.push(message);
+				h.onNotify?.(message);
+			},
+			confirm: async () => false,
+		},
 		isIdle: () => context.idle,
 		hasPendingMessages: () => context.pending,
 		sessionManager: { getEntries: () => entries },
 	} as unknown as ExtensionCommandContext;
-	return {
+	const h: H = {
 		goal: async (args) => commands.get("goal")?.handler(args, ctx),
 		settle: async (settled = [assistant(0.0123)]) => {
 			await (handlers.get("agent_settled") as (e: never, c: never) => Promise<void>)(
@@ -122,6 +129,7 @@ function harness(cwd: string): H {
 		notifications,
 		context,
 	};
+	return h;
 }
 
 const store = (cwd: string) => new DurableGoalStore(join(cwd, ".omk", "goals", "current.json"));
@@ -204,10 +212,19 @@ describe("AU2: explicit steer", () => {
 		const h = harness(cwd);
 		await h.goal("Ship v2");
 		await h.goal("verify grep -q v1 app.txt");
-		await h.goal("verify grep -q v9 app.txt");
-		// The check runs during settle; the steer lands while it runs.
+		// At settle the check waits on a gate (under .git, outside the workspace), so the steer
+		// deterministically lands while it runs.
+		await h.goal("verify [ ! -f .git/hold ] || until [ -f .git/gate ]; do sleep 0.01; done; grep -q v9 app.txt");
+		writeFileSync(join(cwd, ".git", "hold"), "");
+		const checkStarted = new Promise<void>((resolve) => {
+			h.onNotify = (message) => {
+				if (message.startsWith("goal: running acceptance check")) resolve();
+			};
+		});
 		const settling = h.settle();
+		await checkStarted;
 		await h.input("change of plan", "steer");
+		writeFileSync(join(cwd, ".git", "gate"), "");
 		await settling;
 		expect(h.messages).toEqual([]);
 		expect((await store(cwd).current())?.status).toBe("paused");
