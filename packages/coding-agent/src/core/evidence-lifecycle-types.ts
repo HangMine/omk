@@ -25,12 +25,14 @@ export const EXECUTOR_LOG_CONSUMERS = [] as const;
 export type EvidenceLifecycleMode = "off" | "observe" | "delete";
 
 /**
- * Default `observe` (records only, deletes nothing). `0`/`false`/`off` (trimmed, case-insensitive) opt out.
- * Only the exact string `delete` deletes; any other value (unset, typo, `Delete`, `1`) is `observe`, never delete.
+ * Default `delete` (spec 118 conditional delete-after-use of verified goal-recall files only).
+ * Unset, `1` or exactly `delete` select delete; exactly `observe` records only; `0`/`false`/`off` (trimmed,
+ * case-insensitive) opt out. Any other value (typo, `Delete`, `true`) is `observe`, never delete.
+ * Revert this one function (and its tests) to go back to an `observe` default.
  */
 export function evidenceLifecycleMode(env: NodeJS.ProcessEnv = process.env): EvidenceLifecycleMode {
 	const value = env.OMK_EVIDENCE_LIFECYCLE;
-	if (value === "delete") return "delete";
+	if (value === undefined || value === "1" || value === "delete") return "delete";
 	if (isEnvFlagOptOut(value)) return "off";
 	return "observe";
 }

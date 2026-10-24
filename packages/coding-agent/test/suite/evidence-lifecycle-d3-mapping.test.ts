@@ -4,7 +4,7 @@
  * executor output is always pinned `user-visible` (excludeFromContext included). Nothing is deleted.
  */
 import { existsSync, rmSync } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { fauxAssistantMessage } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeBashWithOperations } from "../../src/core/bash-executor.ts";
@@ -223,5 +223,20 @@ describe("spec 118 D3 decision 4: executor pinned user-visible", () => {
 		expect(result.truncated).toBe(true);
 		const records = listEvidenceArtifacts(harness.sessionManager.getSessionId());
 		expect(records.map((r) => [r.producer, r.holds])).toEqual([["bash-executor-log", ["user-visible"]]]);
+	});
+});
+
+describe("default config (OMK_EVIDENCE_LIFECYCLE unset = delete): executor log is never deleted", () => {
+	beforeEach(() => vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", undefined));
+
+	it("omk-bash-*.log stays pinned user-visible and survives a direct delete", async () => {
+		const path = await executorLog();
+		expect(basename(path)).toMatch(/^omk-bash-[0-9a-f]+\.log$/);
+		const [record] = listEvidenceArtifacts();
+		expect(record).toMatchObject({ producer: "bash-executor-log", userVisible: true, holds: ["user-visible"] });
+		expect(deleteEvidenceArtifact(record.artifactId)).toMatchObject({ deleted: false });
+		expect(existsSync(path)).toBe(true);
+		expect(listEvidenceArtifacts()[0]).toMatchObject({ status: "present", holds: ["user-visible"] });
+		expect(evidenceLifecycleReport().deletes).toBe(0);
 	});
 });

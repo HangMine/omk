@@ -364,8 +364,8 @@ describe("spec 106 EV11 recall path reuse", () => {
 		expect(logs().every((n) => n.startsWith("acceptance-a-1-0-1-"))).toBe(true);
 	});
 
-	it("spec 118 G0: unset and observe write no counter sidecar or deletion log; a pass deletes nothing", () => {
-		for (const flag of [undefined, "observe"]) {
+	it("spec 118 G0: 0 and observe write no counter sidecar or deletion log; a pass deletes nothing", () => {
+		for (const flag of ["0", "observe"]) {
 			vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", flag);
 			const cwd = tempRoot("omk-g0-");
 			const artifact = recall(cwd, "g");
