@@ -117,6 +117,8 @@ OMK warns from the third repeated identical tool call and blocks the sixth. It a
 
 These harness features are on by default; set the variable to `0`, `false` or `off` to restore the earlier behavior: `OMK_EDIT_DIAGNOSTICS`, `OMK_EXEC_TRUNCATE_MIDDLE`, `OMK_JSON_SESSION_INFO` (adds `omk_session_info` lines to `--mode json`), `OMK_GOAL_AUTONOMY`, `OMK_SKILL_ADMISSION`, `OMK_SKILL_AUTO_LOAD` and `OMK_EVIDENCE_LIFECYCLE` (default conditional delete of verified goal-recall files only; `observe` deletes nothing). See [environment variables](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/environment-variables.md).
 
+Also on by default, with the same opt-out: `OMK_ADAPTIVE_EFFORT`.
+
 See [Usage](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/usage.md) and [Keybindings](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/keybindings.md) for the complete interactive reference.
 
 ### Repository Understanding

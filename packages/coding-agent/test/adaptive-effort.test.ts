@@ -426,7 +426,7 @@ function startMockServer(bodies: string[]): Promise<Server> {
 	return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
 }
 
-describe("flag off is main (spec 037 R2.1)", () => {
+describe("flag off is main (spec 037 R2.1; default on, 0/false/off opt out)", () => {
 	let server: Server;
 	let bodies: string[];
 	let loads: number;
@@ -484,19 +484,20 @@ describe("flag off is main (spec 037 R2.1)", () => {
 		return [...bodies];
 	}
 
-	it("sends byte-identical requests with the flag unset, 0 or anything but 1, and never loads the module", async () => {
-		const unset = await run(undefined);
-		expect(unset).toHaveLength(3);
-		expect(unset[0]).toContain('"reasoning_effort":"xhigh"');
-		for (const value of ["0", "true", " 1"]) expect(await run(value)).toEqual(unset);
+	it("sends byte-identical requests with 0, false or off, and never loads the module", async () => {
+		const off = await run("0");
+		expect(off).toHaveLength(3);
+		expect(off[0]).toContain('"reasoning_effort":"xhigh"');
+		for (const value of ["false", " OFF "]) expect(await run(value)).toEqual(off);
 		expect(loads).toBe(0);
 	});
 
-	it("control: with OMK_ADAPTIVE_EFFORT=1 the module loads and the low group sends high", async () => {
+	it("default on (unset) and 1: the module loads and the low group sends high", async () => {
+		const off = await run("0");
 		const unset = await run(undefined);
-		const on = await run("1");
 		expect(loads).toBe(1);
-		expect(on[0]).toContain('"reasoning_effort":"high"');
-		expect(on[0].replace('"reasoning_effort":"high"', '"reasoning_effort":"xhigh"')).toBe(unset[0]);
+		expect(unset[0]).toContain('"reasoning_effort":"high"');
+		expect(unset[0].replace('"reasoning_effort":"high"', '"reasoning_effort":"xhigh"')).toBe(off[0]);
+		expect(await run("1")).toEqual(unset);
 	});
 });

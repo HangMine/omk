@@ -1,5 +1,5 @@
 /**
- * Adaptive reasoning effort per phase (spec 037), opt-in with `OMK_ADAPTIVE_EFFORT=1`.
+ * Adaptive reasoning effort per phase (spec 037), default on; `OMK_ADAPTIVE_EFFORT=0`/`false`/`off` opts out.
  *
  * Loaded lazily by `createSdkProviderStream` only when the flag is on; with it off this module
  * is never imported and requests are byte-identical to main.
