@@ -8,15 +8,17 @@
  * the symlink no longer blocks concurrent runs. Still run one at a time: harness.ts derives its temp dir from the
  * fixed clock and seeded randomness, so concurrent runs collide on the session lease, and that dir (under
  * os.tmpdir(), i.e. TMPDIR) is in the hashed bytes, so keep TMPDIR the same across compared runs.
+ * Run one G0 at a time with the same TMPDIR: concurrent runs collide on the harness session lease
+ * (SessionOwnerLeaseHeldError), and a different TMPDIR changes the hashed bytes.
  * PR G0 comparisons must run this same script on the main build too (copy it into the main checkout).
  *
  *   cd packages/coding-agent && OMK_BASH_SANDBOX=off npx tsx test/suite/g0-session-hash.ts
  */
 import nodeCrypto, { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
+import { createG0PackageDir } from "./g0-package-dir.ts";
 
 const FIXED_MS = Date.UTC(2026, 9, 24, 0, 0, 0);
 const RealDate = Date;
@@ -65,15 +67,12 @@ Object.defineProperty(globalThis.crypto, "getRandomValues", {
 // The system prompt links the package README/docs/examples via getPackageDir(), which checks OMK_PACKAGE_DIR first.
 // Point it at a per-run symlink and normalize its path to <pkg> before hashing.
 const packageRoot = resolve(import.meta.dirname, "../..");
-const linkDir = mkdtempSync(join(tmpdir(), "omk-g0-"));
-const removeLinkDir = () => rmSync(linkDir, { recursive: true, force: true });
+// G0_PACKAGE_LINK_TARGET exists only to demonstrate the assert failing; never set it for real measurements.
+const { packageDir: fixedPackageDir, cleanup: removeLinkDir } = createG0PackageDir(
+	packageRoot,
+	process.env.G0_PACKAGE_LINK_TARGET || packageRoot,
+);
 process.on("exit", removeLinkDir);
-const fixedPackageDir = join(linkDir, "pkg");
-symlinkSync(packageRoot, fixedPackageDir, "dir");
-if (realpathSync(fixedPackageDir) !== realpathSync(packageRoot)) {
-	removeLinkDir();
-	throw new Error(`${fixedPackageDir} does not resolve to this checkout (${packageRoot})`);
-}
 process.env.OMK_PACKAGE_DIR = fixedPackageDir;
 
 const { fauxAssistantMessage, fauxToolCall } = await import("omk-ai");
