@@ -470,7 +470,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v1.5.7](.github/RELEASE_NOTES_v1.5.7.md)
+- [Release notes for v1.5.8](.github/RELEASE_NOTES_v1.5.8.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -561,6 +561,29 @@ On hold:
 
 <!-- releases:start -->
 
+## Release v1.5.8
+
+### Added
+
+- Goal autonomy behind `OMK_GOAL_AUTONOMY=1` (flag, default off). `/goal budget <usd|-> [<deadline ISO>|-]` sets a user-only cost and deadline budget that includes subagent lane cost; the goal stops with `budget-limit`, `deadline`, `outcome-unknown` or `scope-changed`, steering pauses it, and only `/goal resume` restarts it. Stop reasons are custom entries; the `omk.goal.v1` schema is unchanged (#266, #268).
+- Strong-only skill auto-load behind `OMK_SKILL_AUTO_LOAD` (flag, default off), with an observe-only `skill-autoload.jsonl` log (#262).
+- Evidence recall delete-after-use behind `OMK_EVIDENCE_LIFECYCLE=delete` (flag, default off; `observe` only records) (#263).
+
+With all new flags off, behavior is the same as 1.5.7.
+
+### Fixed
+
+- Evidence recall delete recovery can no longer fail `session_start` (#264).
+- `session_info` JSON test no longer flakes (#265).
+
+### Changed
+
+- Research count scripts for spec 117 and 119 on synthetic fixtures (#267), NaN/Infinity tolerance (#269), header comment fix (#271).
+- Spec 118 D3 measurement addendum, design only (#272).
+- `AGENTS.md` lists the goal autonomy flag.
+
+Release notes live in [RELEASE_NOTES_v1.5.8.md](.github/RELEASE_NOTES_v1.5.8.md).
+
 ## Release v1.5.7
 
 ### Added
@@ -610,26 +633,6 @@ With all four flags off, behavior is the same as 1.5.5.
 - The trademark notice moved out of `LICENSE`, so GitHub detects the MIT license. AdaptOrch logo files moved to `readmeasset/adaptorch/` with a `NOTICE` saying they are not MIT-licensed (#205).
 
 Release notes live in [RELEASE_NOTES_v1.5.6.md](.github/RELEASE_NOTES_v1.5.6.md).
-
-## Release v1.5.5
-
-### Behavior change (security)
-
-- Secret redaction no longer runs on text, log, session, run-journal and bash-output paths (d58ed90719). Secrets that appear in those values (for example API responses recorded by `ApiBroker`, compaction input, journal entries, verified-bash output) are now written to disk as-is. If you relied on omk to mask them, keep secrets out of tool output or clean those files yourself.
-
-### Changed
-
-- `VERIFIED_BASH_REDACTION_POLICY_ID` is now `omk-bash-combined-v2+raw-unredacted+utf8+capture-tail-128k+tail-64k`. The old id claimed `omk-sensitive-text-v1` redaction that no longer runs. Receipts already written with the old id are unchanged; code that compares against the old string must update.
-
-### Deprecated
-
-- `redactForModel` is still exported from the package root with its v1.5.4 behavior, but omk no longer calls it. It will be removed in 2.0.0.
-
-### Fixed
-
-- Next-task suggestions follow the editor on screen. An extension that swaps in its own editor at session start (for example `pi-powerline-footer`) left the gray suggestion on the hidden default editor, so it never appeared and Tab never inserted it.
-
-Release notes live in [RELEASE_NOTES_v1.5.5.md](.github/RELEASE_NOTES_v1.5.5.md).
 
 <!-- releases:end -->
 
