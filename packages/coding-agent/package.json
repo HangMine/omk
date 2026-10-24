@@ -1,7 +1,7 @@
 {
 	"name": "open-multi-agent-kit",
 	"version": "1.5.8",
-	"description": "Open-source TypeScript coding agent for the terminal. Switch models mid-session; finish goals only when your test passes.",
+	"description": "Open-source multi-agent coding CLI for the terminal (TypeScript, MIT). Switch models mid-session; finish goals only when your test passes.",
 	"type": "module",
 	"omkConfig": {
 		"name": "omk",
@@ -96,7 +96,11 @@
 		"typescript",
 		"mcp",
 		"local-llm",
-		"developer-tools"
+		"developer-tools",
+		"ai-coding-agent",
+		"claude-code-alternative",
+		"coding-agent-cli",
+		"open-source"
 	],
 	"author": "Mario Zechner",
 	"license": "MIT",
