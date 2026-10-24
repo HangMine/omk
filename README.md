@@ -115,9 +115,15 @@ omk
 
 Or run `npx --ignore-scripts open-multi-agent-kit` without a global install.
 
-<!-- TODO: a standalone binary installer (install.sh with SHA256SUMS) is planned,
-     but the latest release has no install.sh asset yet. Add it back here once
-     https://github.com/dmae97/omk/releases/latest/download/install.sh resolves. -->
+Or install the standalone binary, which needs no Node.js (macOS, Linux):
+
+```bash
+curl -fsSL https://github.com/dmae97/omk/releases/latest/download/install.sh | sh
+```
+
+The script checks the download against the release's `SHA256SUMS` and installs
+to `~/.omk/bin`; add that folder to your `PATH` as it tells you. Windows builds
+are attached to each [release](https://github.com/dmae97/omk/releases/latest).
 
 1. On a first run OMK opens `/login` for you: sign in with a subscription or an
    API key. An existing Claude Code or Codex CLI login can be reused with
