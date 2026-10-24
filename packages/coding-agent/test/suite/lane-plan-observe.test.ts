@@ -101,9 +101,9 @@ describe("lane-plan run log", () => {
 	});
 
 	it.each([
-		["", "", false, false],
-		["1", "", true, false],
-		["", "1", false, true],
+		["0", "0", false, false],
+		["1", "0", true, false],
+		["0", "1", false, true],
 		["1", "1", true, true],
 	])("writes exact fields (scope=%s queue=%s)", async (scope, queue, failureScope, readyQueue) => {
 		const d = freshDir();
@@ -143,9 +143,9 @@ describe("lane-plan run log", () => {
 	});
 
 	it.each([
-		["", ""],
-		["1", ""],
-		["", "1"],
+		["0", "0"],
+		["1", "0"],
+		["0", "1"],
 		["1", "1"],
 	])("scheduling is identical with and without the run log (scope=%s queue=%s)", async (scope, queue) => {
 		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", scope);

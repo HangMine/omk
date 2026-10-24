@@ -1,3 +1,4 @@
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import { appendRunLog } from "./run-log.ts";
 import type { LaneOutcome } from "./subagent-lane-contract.ts";
 import type { LaneFailureScope } from "./subagent-lane-failure-scope.ts";
@@ -6,7 +7,7 @@ import { laneGrantsConflict, type SubagentOrchestrationPlan } from "./subagent-o
 /**
  * Spec 106 DG2 — ready frontier for subagent lanes.
  *
- * Default off (`OMK_LANE_READY_QUEUE=1` enables; name from spec 106 §1). Off ⇒
+ * Default on (`OMK_LANE_READY_QUEUE=0`/`false`/`off` opts out; name from spec 106 §1). Off ⇒
  * the launcher keeps its batch loop and `Promise.all` barrier unchanged.
  *
  * On ⇒ a lane starts as soon as (in plan source order, at most `width` lanes
@@ -24,7 +25,7 @@ import { laneGrantsConflict, type SubagentOrchestrationPlan } from "./subagent-o
  * `blocked-dependency`.
  */
 export function laneReadyFrontierEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-	return env.OMK_LANE_READY_QUEUE === "1";
+	return isDefaultOnEnvFlag(env.OMK_LANE_READY_QUEUE);
 }
 
 export interface ReadyFrontierInput {

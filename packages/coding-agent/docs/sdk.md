@@ -30,14 +30,14 @@ omk sdk session send <id> "<message>" [--cwd <path>] [--session-dir <path>]
 ### Opt-in live control and project memory
 
 The transcript-only commands above are unchanged. Enroll an owned persisted POSIX
-session with `await session.startControl()` (CLI: `OMK_SESSION_CONTROL=1`), then use
+session with `await session.startControl()` (CLI: on by default; `OMK_SESSION_CONTROL=0` opts out), then use
 `sdk session send <id> "text" --live`, `status <id> --live`, or `abort <id> --live`.
 Live failures never fall back to transcript writes. See [Local live session
 control](sessions.md#local-live-session-control) for permissions, limits and cancellation semantics.
 
 `await session.rememberSource({ path, startLine, endLine, ttlMs? })` pins a bounded
 source quote. `await session.forgetMemory(id)` revokes it. Recall is separately
-opt-in with `OMK_VERIFIED_MEMORY=1` and Context Budget V2. It is transient tool-result
+on by default (`OMK_VERIFIED_MEMORY=0` opts out) when Context Budget V2 is on. It is transient tool-result
 data, not system/skill authority or automatic fact extraction. Inspect
 `session.memoryStatus`; see [Project source-quote memory](sessions.md#project-source-quote-memory).
 

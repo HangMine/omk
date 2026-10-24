@@ -102,7 +102,7 @@ function recallPath(message: string): string {
 beforeEach(() => {
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
 	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // spec 098 naming/caps under the pre-106 path; lifecycle defaults to observe
-	vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", undefined);
+	vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "0"); // default on; flag-off cases opt out
 	vi.stubEnv("OMK_GOAL_AUTONOMY", "0"); // spec 098 wiring under the pre-119 controller; autonomy is default on
 });
 
@@ -112,10 +112,12 @@ afterEach(() => {
 });
 
 describe("spec 098 flag", () => {
-	it("is off unless OMK_GOAL_OUTPUT_RECALL=1", () => {
-		expect(goalOutputRecallEnabled({})).toBe(false);
+	it("is default on; only 0/false/off opt out", () => {
+		expect(goalOutputRecallEnabled({})).toBe(true);
 		expect(goalOutputRecallEnabled({ OMK_GOAL_OUTPUT_RECALL: "0" })).toBe(false);
-		expect(goalOutputRecallEnabled({ OMK_GOAL_OUTPUT_RECALL: "true" })).toBe(false);
+		expect(goalOutputRecallEnabled({ OMK_GOAL_OUTPUT_RECALL: "false" })).toBe(false);
+		expect(goalOutputRecallEnabled({ OMK_GOAL_OUTPUT_RECALL: " OFF " })).toBe(false);
+		expect(goalOutputRecallEnabled({ OMK_GOAL_OUTPUT_RECALL: "true" })).toBe(true);
 		expect(goalOutputRecallEnabled({ OMK_GOAL_OUTPUT_RECALL: "1" })).toBe(true);
 	});
 });

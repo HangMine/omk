@@ -7,6 +7,7 @@
  * the reasoning-token or wall-time cap before it starts answering, and retries
  * it once at one lower reasoning effort. The retry is measured, not cut.
  */
+
 import type { StreamFn } from "omk-agent-core";
 import {
 	type AssistantMessage,
@@ -17,6 +18,7 @@ import {
 	type ThinkingLevel,
 	type Usage,
 } from "omk-ai";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import { getActiveRemainingBudget, type RemainingBudget } from "./remaining-budget.ts";
 import { logReasoningCapRetry, type ReasoningCapDetails } from "./response-reasoning-cap-run-log.ts";
 
@@ -63,7 +65,7 @@ function positiveNumber(value: string | undefined, fallback: number): number {
 export function resolveResponseReasoningCapConfig(
 	env: NodeJS.ProcessEnv = process.env,
 ): ResponseReasoningCapConfig | undefined {
-	if (env.OMK_RESPONSE_REASONING_CAP !== "1") return undefined;
+	if (!isDefaultOnEnvFlag(env.OMK_RESPONSE_REASONING_CAP)) return undefined;
 	return {
 		maxReasoningTokens: Math.floor(
 			positiveNumber(env.OMK_RESPONSE_REASONING_CAP_TOKENS, DEFAULT_RESPONSE_REASONING_CAP_TOKENS),

@@ -138,6 +138,7 @@ async function create(cwd: string, maxRounds: number, objective = "Ship v2"): Pr
 }
 
 beforeEach(() => {
+	vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "0"); // G0 compares against the pre-098 path
 	vi.stubEnv("OMK_BASH_SANDBOX", "off");
 	vi.stubEnv("OMK_GOAL_AUTONOMY", "1");
 	vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "0"); // characterizes the pre-106 path; lifecycle defaults on

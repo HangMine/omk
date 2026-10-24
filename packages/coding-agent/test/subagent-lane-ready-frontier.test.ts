@@ -1,5 +1,5 @@
 /**
- * Spec 106 DG2 — ready frontier (OMK_LANE_READY_QUEUE=1).
+ * Spec 106 DG2 — ready frontier (OMK_LANE_READY_QUEUE, default on; 0/false/off opt out).
  * Deterministic: lanes resolve only through manual deferreds; no wall clock.
  */
 
@@ -11,7 +11,7 @@ import type { CapabilityInventory, NamedResource } from "../src/core/loadouts.ts
 import type { ResourceAdmissionDecision } from "../src/core/resource-admission.ts";
 import type { LaneOutcome } from "../src/core/subagent-lane-contract.ts";
 import { launchSubagentLanes, type SubagentLaneContext } from "../src/core/subagent-lane-launcher.ts";
-import { LANE_FRONTIER_RUN_LOG } from "../src/core/subagent-lane-ready-frontier.ts";
+import { LANE_FRONTIER_RUN_LOG, laneReadyFrontierEnabled } from "../src/core/subagent-lane-ready-frontier.ts";
 import { buildSubagentOrchestrationPlan, type SubagentLaneSpec } from "../src/core/subagent-orchestration.ts";
 import { WorkloadPermitPool } from "../src/core/workload-permit-pool.ts";
 
@@ -121,7 +121,7 @@ afterEach(() => {
 
 describe("DG2 ready frontier", () => {
 	it("flag off (counterexample pinned): B waits for C's batch barrier", async () => {
-		vi.stubEnv("OMK_LANE_READY_QUEUE", "");
+		vi.stubEnv("OMK_LANE_READY_QUEUE", "0");
 		const run = controlled(twoBranches);
 		await run.finish("A");
 		expect(run.started).toEqual(["A", "C"]);
@@ -215,7 +215,7 @@ describe("DG2 ready frontier", () => {
 
 	it("frontier on, failure scope off: a failure stops new starts (legacy global block)", async () => {
 		vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
-		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+		vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "0");
 		const run = controlled(twoBranches);
 		await run.finish("A", "failed");
 		await run.finish("C");
@@ -284,7 +284,7 @@ describe("DG2 ready frontier", () => {
 	});
 
 	it("flag off: start order and outcomes snapshot identical to the batch loop", async () => {
-		vi.stubEnv("OMK_LANE_READY_QUEUE", "");
+		vi.stubEnv("OMK_LANE_READY_QUEUE", "0");
 		const lanes: SubagentLaneSpec[] = [
 			...twoBranches,
 			{ id: "E", role: "security", task: "E", dependsOn: ["B", "D"] },
@@ -521,7 +521,7 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 		try {
 			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
 			vi.stubEnv("OMK_LANE_READY_QUEUE", "1");
-			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "0");
 			const global = controlled(twoBranches);
 			await global.finish("A", "failed");
 			await global.finish("C");
@@ -562,7 +562,7 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 		const dir = mkdtempSync(join(tmpdir(), "omk-frontier-log-"));
 		try {
 			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
-			vi.stubEnv("OMK_LANE_READY_QUEUE", "");
+			vi.stubEnv("OMK_LANE_READY_QUEUE", "0");
 			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "1");
 			const failed = controlled(twoBranches);
 			await failed.finish("A", "failed");
@@ -605,7 +605,7 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 				spawnThreshold: 16,
 				maxParallelLanes: 2,
 			});
-			for (const frontier of ["1", ""]) {
+			for (const frontier of ["1", "0"]) {
 				vi.stubEnv("OMK_LANE_READY_QUEUE", frontier);
 				const controller = new AbortController();
 				const finishers: (() => void)[] = [];
@@ -648,8 +648,8 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 		const dir = mkdtempSync(join(tmpdir(), "omk-frontier-log-"));
 		try {
 			vi.stubEnv("OMK_RUN_LOG_DIR", dir);
-			vi.stubEnv("OMK_LANE_READY_QUEUE", "");
-			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "");
+			vi.stubEnv("OMK_LANE_READY_QUEUE", "0");
+			vi.stubEnv("OMK_LANE_FAILURE_SCOPE", "0");
 			const failed = controlled(twoBranches);
 			await failed.finish("A", "failed");
 			await failed.finish("C");
@@ -659,5 +659,12 @@ describe("DG5/DG6 with frontier on, run-log covariate", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("OMK_LANE_READY_QUEUE default", () => {
+	it("is on when unset; 0/false/off opt out", () => {
+		expect(laneReadyFrontierEnabled({})).toBe(true);
+		for (const v of ["0", "false", "OFF"]) expect(laneReadyFrontierEnabled({ OMK_LANE_READY_QUEUE: v })).toBe(false);
 	});
 });

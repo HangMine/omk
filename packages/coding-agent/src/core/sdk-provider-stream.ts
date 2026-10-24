@@ -6,6 +6,7 @@ import {
 	snapshotModelContract,
 } from "omk-agent-core";
 import { type SimpleStreamOptions, streamSimple } from "omk-ai";
+import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import { createJsonSessionInfoStreamFn } from "./json-session-info.ts";
 import { createLlmCallRunLogStreamFn } from "./llm-call-run-log.ts";
 import type { ModelRegistry } from "./model-registry.ts";
@@ -39,7 +40,7 @@ export function createSdkProviderStream(runtime: SdkProviderRuntime): StreamFn {
 		),
 		resolveResponseReasoningCapConfig(),
 	);
-	return process.env.OMK_ADAPTIVE_EFFORT === "1" ? createLazyAdaptiveEffortStreamFn(capped) : capped;
+	return isDefaultOnEnvFlag(process.env.OMK_ADAPTIVE_EFFORT) ? createLazyAdaptiveEffortStreamFn(capped) : capped;
 }
 
 /**

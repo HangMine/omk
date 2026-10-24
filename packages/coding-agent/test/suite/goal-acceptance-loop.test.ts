@@ -47,6 +47,7 @@ describe("durable goal loop through a live session", () => {
 
 	beforeEach(() => {
 		vi.stubEnv("OMK_BASH_SANDBOX", "off");
+		vi.stubEnv("OMK_GOAL_OUTPUT_RECALL", "0"); // spec 098 (default on) forwards a diagnostic hint; this pins the no-forward path
 	});
 
 	afterEach(() => {
