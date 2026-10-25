@@ -229,10 +229,8 @@ function acquireLedgerLockSync(path: string): () => void {
 				throw error;
 			}
 			lastError = error;
-			const start = Date.now();
-			while (Date.now() - start < delayMs) {
-				// Busy-wait briefly; mirrors the auth-storage/settings-manager sync retry pattern.
-			}
+			// Sleep without spinning; the wait is monotonic, so a wall-clock step cannot stretch it.
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
 		}
 	}
 
