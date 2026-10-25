@@ -223,7 +223,8 @@ function acquireLedgerLockSync(path: string): () => void {
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
-			return lockfile.lockSync(path, { realpath: false });
+			// 30 s, not the 10 s default: staleness is mtime vs Date.now(), and WSL2 steps the wall clock by seconds.
+			return lockfile.lockSync(path, { realpath: false, stale: 30_000 });
 		} catch (error) {
 			if (errorCode(error) !== "ELOCKED" || attempt === maxAttempts) {
 				throw error;

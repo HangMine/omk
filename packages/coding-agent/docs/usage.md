@@ -296,7 +296,7 @@ omk session doctor --session <path|id> --repair --dry-run
 omk session doctor --session <path|id> --repair
 ```
 
-The doctor verifies the session's complete JSONL prefix, run journal, compaction envelopes/transactions, replay-evidence links, workspace, and provider/model binding. `--dry-run` plans repairs without writing. Repair mode rechecks file hashes under a lock before writing and only allows unambiguous missing tool results, exact trailing-fragment quarantine, unclosed-run crash recovery, and stale compaction abandonment. Duplicate/orphan tool results, duplicate IDs, broken hashes/chains, and changed preconditions are refused.
+The doctor verifies the session's complete JSONL prefix, run journal, compaction envelopes/transactions, replay-evidence links, workspace, and provider/model binding. `--dry-run` plans repairs without writing. Repair mode takes the session owner lease, so it refuses a session that is open in another OMK process (`session_in_use`). It rechecks file hashes under that lease before writing and only allows unambiguous missing tool results, exact trailing-fragment quarantine, unclosed-run crash recovery, and stale compaction abandonment. Duplicate/orphan tool results, duplicate IDs, broken hashes/chains, and changed preconditions are refused.
 
 Session and journal bytes after the final newline are copied byte-for-byte to a `.quarantine-*` file before the original is atomically rewritten to its valid complete prefix. Opening a session uses the same complete-prefix rule; `SessionManager.getQuarantineReport()` reports any startup quarantine.
 
